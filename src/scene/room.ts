@@ -45,13 +45,24 @@ function createFloor(size: RoomSize): THREE.Mesh {
   return floor;
 }
 
+/**
+ * 壁を作る。
+ *
+ * 壁だけは光の影響を受けない材質（MeshBasicMaterial）にしている。
+ * 光を受ける材質だと、壁の向きごとに当たる光の量が変わるため
+ * 指定した色より暗く、かつ 4 枚がばらばらの明るさになってしまう
+ * （実測で指定色の 65〜80%、隣り合う壁どうしで 36 階調の差）。
+ * 壁は部屋の色を決める面なので、指定した色がそのまま出るほうが扱いやすい。
+ */
 function createWall(direction: WallDirection, size: RoomSize): THREE.Mesh {
   const transform = getWallTransform(direction, size);
 
   const geometry = new THREE.PlaneGeometry(transform.planeWidth, size.height);
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshBasicMaterial({
     color: SCENE_COLORS.wall,
-    ...SURFACES.wall,
+    // トーンマッピングも通さない。通すと露出の分だけ暗くなり、
+    // 指定した色と描画結果がずれる
+    toneMapped: false,
     // 透過アニメーションのために最初から transparent を有効にしておく。
     // 途中で切り替えるとマテリアルの再コンパイルが走ってカクつく
     transparent: true,
@@ -61,8 +72,41 @@ function createWall(direction: WallDirection, size: RoomSize): THREE.Mesh {
   const wall = new THREE.Mesh(geometry, material);
   wall.position.set(...transform.position);
   wall.rotation.y = transform.rotationY;
-  wall.receiveShadow = true;
   wall.name = `wall-${direction}`;
 
+  // 光の影響をなくしたぶん、壁どうしの境目（部屋の角）と床際が見えなくなる。
+  // 輪郭線で補う。壁の子にしてあるので、壁と一緒に動く
+  wall.add(createWallEdges(geometry));
+
   return wall;
+}
+
+/**
+ * 壁の外周をなぞる線。
+ *
+ * 4 辺すべてを引くので、隣り合う壁との境目・床際・天井際が同時に出る。
+ * 角では隣の壁の線と重なるが、同じ位置なので見た目には 1 本に見える。
+ */
+function createWallEdges(wallGeometry: THREE.PlaneGeometry): THREE.LineSegments {
+  const material = new THREE.LineBasicMaterial({
+    color: SCENE_COLORS.wallEdge,
+    // 壁と同じ扱いにする。光もトーンマッピングも通さない
+    toneMapped: false,
+    transparent: true,
+    opacity: 1,
+  });
+
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(wallGeometry), material);
+  edges.name = 'edges';
+
+  // 壁とまったく同じ位置だと線が壁に埋もれてちらつくため、
+  // ごくわずかに部屋の内側へ浮かせる
+  edges.position.z = 0.002;
+
+  // さらに、外周をほんの少し内側へ縮める。
+  // 縮めないと角の縦線が隣の壁とちょうど同じ平面に乗ってしまい、
+  // どちらを手前に描くか定まらず線が途切れて見える
+  edges.scale.set(0.998, 0.998, 1);
+
+  return edges;
 }

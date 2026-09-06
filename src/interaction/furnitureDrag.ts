@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import type { CameraControls } from '@/interaction/cameraControls';
 import type { FurnitureLayer } from '@/scene/furniture';
-import { appState, selectFurniture, updateFurniture } from '@/core/appState';
+import { appState, clampInsideRoom, selectFurniture, updateFurniture } from '@/core/appState';
 
 /** この距離（ピクセル）以内で指を離したらドラッグではなくタップとみなす */
 const TAP_THRESHOLD_PX = 8;
@@ -78,15 +78,13 @@ export function createFurnitureDrag(
     if (!raycaster.ray.intersectPlane(floorPlane, hitPoint)) return;
 
     const next = hitPoint.add(grabOffset);
-    const { room } = appState.get();
+    const { room, furniture } = appState.get();
+    const item = furniture.find((f) => f.id === draggingId);
+    if (!item) return;
 
-    // 部屋の外に出ないよう、床の範囲に丸める
+    // 家具の大きさと向きを見て、壁からはみ出さない位置に丸める
     updateFurniture(draggingId, {
-      position: [
-        THREE.MathUtils.clamp(next.x, -room.width / 2, room.width / 2),
-        0,
-        THREE.MathUtils.clamp(next.z, -room.depth / 2, room.depth / 2),
-      ],
+      position: clampInsideRoom([next.x, 0, next.z], item.size, item.rotationY, room),
     });
   }
 

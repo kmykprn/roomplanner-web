@@ -11,6 +11,8 @@ export const THEME = {
 export const SCENE_COLORS = {
   floor: '#c8a882',
   wall: '#f0ece4',
+  /** 壁の輪郭線。壁どうしの境目と床際を示す */
+  wallEdge: '#cfcabf',
   selection: '#0a7ea4', // 選択中の家具の枠線
 } as const;
 
@@ -21,12 +23,13 @@ export const SCENE_COLORS = {
  * metalness は金属かどうか（布や木は 0）。
  * すべて同じ値にすると全部が同じプラスチックに見えるので、
  * 素材ごとに変えることが「リアルさ」に一番効く。
+ *
+ * 壁はここに含めない。光の影響を受けない材質を使っているため
+ * （理由は scene/room.ts の createWall を参照）。
  */
 export const SURFACES = {
   /** 木の床。わずかにつやを残すと環境光が映り込んで質感が出る */
   floor: { roughness: 0.55, metalness: 0 },
-  /** 塗り壁。ほぼ完全なつや消し */
-  wall: { roughness: 0.95, metalness: 0 },
   /** 家具の既定。布と木の中間くらい */
   furniture: { roughness: 0.7, metalness: 0 },
 } as const;
