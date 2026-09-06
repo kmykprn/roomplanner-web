@@ -13,3 +13,20 @@ export const SCENE_COLORS = {
   wall: '#f0ece4',
   selection: '#0a7ea4', // 選択中の家具の枠線
 } as const;
+
+/**
+ * 素材の質感。
+ *
+ * roughness は表面のざらつき（0 = 鏡、1 = 完全につや消し）、
+ * metalness は金属かどうか（布や木は 0）。
+ * すべて同じ値にすると全部が同じプラスチックに見えるので、
+ * 素材ごとに変えることが「リアルさ」に一番効く。
+ */
+export const SURFACES = {
+  /** 木の床。わずかにつやを残すと環境光が映り込んで質感が出る */
+  floor: { roughness: 0.55, metalness: 0 },
+  /** 塗り壁。ほぼ完全なつや消し */
+  wall: { roughness: 0.95, metalness: 0 },
+  /** 家具の既定。布と木の中間くらい */
+  furniture: { roughness: 0.7, metalness: 0 },
+} as const;

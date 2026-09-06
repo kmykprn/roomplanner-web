@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { THEME } from '@/config/theme';
 
 export interface Viewer {
@@ -25,10 +26,28 @@ export function createViewer(container: HTMLElement): Viewer {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // モバイルで 3x は重いので上限を 2 に
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  // 物理的に正しい明るさの範囲は 0〜1 に収まらないため、
+  // そのまま出すと明るい部分が白く潰れる。フィルムのように滑らかに圧縮する
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.85;
+
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(THEME.background);
+
+  // 環境光マップ（IBL）。
+  // 点光源だけだと影の側が真っ黒に落ちてプラスチックのように見えるが、
+  // 「周囲から回り込む光」を与えると一気に実物らしくなる。
+  // RoomEnvironment は three.js に同梱されたシンプルな室内環境なので、
+  // HDRI 画像を別途ダウンロードせずに済む
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  // 環境光をそのまま使うと全体が明るくなりすぎ、床や壁の色が白に飛んで
+  // 影のコントラストも失われる。主光源の陰影が残る強さまで落とす
+  scene.environmentIntensity = 0.4;
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
@@ -70,6 +89,7 @@ export function createViewer(container: HTMLElement): Viewer {
     dispose() {
       cancelAnimationFrame(animationId);
       resizeObserver.disconnect();
+      pmrem.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },

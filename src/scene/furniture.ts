@@ -10,8 +10,9 @@
  */
 
 import * as THREE from 'three';
-import type { PlacedFurniture } from '@/config/furniture';
-import { SCENE_COLORS } from '@/config/theme';
+import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
+import { SCENE_COLORS, SURFACES } from '@/config/theme';
+import { loadFurnitureModel } from '@/scene/modelLoader';
 
 export interface FurnitureLayer {
   group: THREE.Group;
@@ -64,7 +65,10 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   const [width, height, depth] = item.size;
 
   const geometry = new THREE.BoxGeometry(width, height, depth);
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: item.color }));
+  const mesh = new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({ color: item.color, ...SURFACES.furniture })
+  );
 
   // 底面基準にするため、ボックスの中心を高さの半分だけ持ち上げる
   mesh.position.y = height / 2;
@@ -84,7 +88,43 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   outline.visible = false;
   object.add(outline);
 
+  // GLB を持つ家具は、読み込めたら箱と差し替える。
+  // 読み込みを待たずに箱を先に見せるので、置いた瞬間の反応が遅くならない
+  const type = findFurnitureType(item.typeId);
+  if (type?.modelPath) {
+    replaceWithModel(object, mesh, type.modelPath, item.size);
+  }
+
   return object;
+}
+
+/**
+ * 仮の箱を GLB モデルに差し替える。
+ *
+ * レイキャストの対象は箱のまま（子として抱える）にしてある。
+ * 高ポリゴンのモデルに毎回光線を当てると重く、
+ * また凹凸のある形は指で狙いにくいため、当たり判定は箱のほうが具合がよい。
+ */
+function replaceWithModel(
+  object: THREE.Group,
+  placeholder: THREE.Mesh,
+  modelPath: string,
+  size: [number, number, number]
+): void {
+  loadFurnitureModel(modelPath, size)
+    .then((model) => {
+      // 読み込み中に家具が消されていたら、シーンに足さず捨てる
+      if (!object.parent) return;
+
+      placeholder.visible = false;
+      placeholder.castShadow = false;
+      placeholder.receiveShadow = false;
+      object.add(model);
+    })
+    .catch((error) => {
+      // 読み込めなくても箱のまま操作は続けられるので、落とさず記録に留める
+      console.error(`家具モデルの読み込みに失敗しました: ${modelPath}`, error);
+    });
 }
 
 /** GPU 上のメモリを解放する。消しっぱなしにすると使用量が増え続ける */

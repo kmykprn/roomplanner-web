@@ -43,6 +43,19 @@ export default defineConfig({
         // three.js を含むバンドルは既定の上限（2MB）を超えるため引き上げる。
         // ここが足りないとオフライン起動できなくなる
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            // GLB は 1 ファイルが数 MB あるため、事前キャッシュに含めると初回表示が遅くなる。
+            // 一度使ったものだけを保存し、2 回目以降とオフラインで効くようにする
+            urlPattern: /\.glb$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'furniture-models',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],
