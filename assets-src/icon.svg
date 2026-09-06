@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- アプリアイコン。部屋の間取り図に家具を置いた図。
+       マスク（丸・角丸）で切られても欠けないよう、図柄は中央 60% の安全領域に収めている -->
+  <rect width="512" height="512" fill="#0a7ea4"/>
+
+  <!-- 部屋の外周。右下を開けてドアを表現する -->
+  <path d="M146 152 H366 V360 H286"
+        fill="none" stroke="#ffffff" stroke-width="18"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M146 152 V360 H236"
+        fill="none" stroke="#ffffff" stroke-width="18"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g fill="#ffffff">
+    <!-- ベッド（左上の大きい家具） -->
+    <rect x="176" y="182" width="80" height="118" rx="10"/>
+    <!-- テーブル（右上の小さい家具） -->
+    <rect x="288" y="182" width="52" height="52" rx="10"/>
+    <!-- ソファ（右下の横長の家具） -->
+    <rect x="288" y="262" width="52" height="38" rx="10"/>
+  </g>
+</svg>
