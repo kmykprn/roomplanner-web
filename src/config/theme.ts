@@ -11,6 +11,8 @@ export const THEME = {
 export const SCENE_COLORS = {
   floor: '#c8a882',
   wall: '#f0ece4',
+  /** 壁の輪郭線。壁どうしの境目と床際を示す */
+  wallEdge: '#cfcabf',
   selection: '#0a7ea4', // 選択中の家具の枠線
 } as const;
 

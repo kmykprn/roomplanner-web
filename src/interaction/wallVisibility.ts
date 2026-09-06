@@ -21,8 +21,9 @@ const FADE_SPEED = 0.12;
 
 interface WallProbe {
   // 壁は光の影響を受けない材質を使っている（scene/room.ts 参照）。
-  // ここで必要なのは opacity だけなので、材質の種類は問わない
-  material: THREE.Material;
+  // ここで必要なのは opacity だけなので、材質の種類は問わない。
+  // 壁本体と輪郭線の 2 つを同時に薄くする
+  materials: THREE.Material[];
   position: THREE.Vector3;
   normal: THREE.Vector3;
 }
@@ -36,8 +37,13 @@ export function createWallVisibility(
   // 毎フレーム作り直さず最初に 1 度だけ用意する
   const probes: WallProbe[] = WALL_DIRECTIONS.map((direction) => {
     const transform = getWallTransform(direction, size);
+    const wall = walls[direction];
+    const edges = wall.getObjectByName('edges') as THREE.LineSegments | undefined;
+
     return {
-      material: walls[direction].material as THREE.Material,
+      materials: [wall.material as THREE.Material, edges?.material as THREE.Material].filter(
+        Boolean
+      ),
       position: new THREE.Vector3(...transform.position),
       normal: new THREE.Vector3(...transform.normal),
     };
@@ -51,7 +57,9 @@ export function createWallVisibility(
       const target = wallToCamera.dot(probe.normal) > 0 ? 1 : HIDDEN_OPACITY;
 
       // 一気に切り替えるとチラつくので、目標値へ少しずつ近づける
-      probe.material.opacity += (target - probe.material.opacity) * FADE_SPEED;
+      for (const material of probe.materials) {
+        material.opacity += (target - material.opacity) * FADE_SPEED;
+      }
     }
   };
 }
