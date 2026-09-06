@@ -29,6 +29,23 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
+
+  /*
+   * ダブルタップによる画面の拡大を止める。
+   * ボタンを続けて押すとブラウザが「ダブルタップ」とみなして拡大してしまうため。
+   * viewport の user-scalable=no は iOS Safari では無視されるので、こちらで指定する。
+   * manipulation はスクロールとタップは残したまま、ダブルタップ拡大だけを外す
+   */
+  touch-action: manipulation;
+
+  /*
+   * 長押しによる文字選択と、iOS の「コピー / 調べる」メニューを止める。
+   * 3D を操作しているつもりの長押しで画面全体が選択されてしまうため。
+   * 文字を選ばせたい要素が出てきたら、その要素だけ user-select: text で戻す
+   */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .header {
@@ -67,6 +84,17 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/*
+ * 押せるものにはすべてダブルタップ拡大の抑止を明示しておく。
+ * #app にも指定しているが、ブラウザによっては対象要素自身の指定でないと
+ * 効かないことがあるため、押される要素にも直接付ける
+ */
+.sheet__tab,
+.chip,
+.button {
+  touch-action: manipulation;
+}
+
 .sheet__tab {
   flex: 1;
   padding: 12px;
@@ -93,6 +121,8 @@ body {
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 4px;
+  /* 横スクロールは残したいので、縦横の指なぞりだけ許可する */
+  touch-action: pan-x;
 }
 
 .chip {
