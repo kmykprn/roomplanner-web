@@ -19,7 +19,7 @@ export function createLighting(size: RoomSize): THREE.Group {
 
   // 影の側が沈みすぎないよう、主光源の反対側から弱く当てる。
   // 影を作らないので描画コストはほぼ増えない
-  const fill = new THREE.DirectionalLight(0xdce6f0, 0.2);
+  const fill = new THREE.DirectionalLight(0xdce6f0, 0.5);
   fill.position.set(size.width, size.height, size.depth);
   group.add(fill);
 
@@ -28,7 +28,7 @@ export function createLighting(size: RoomSize): THREE.Group {
 
 /** 窓から差し込む想定の主光源。影を落とすのはこの 1 灯だけ */
 function createSunlight(size: RoomSize): THREE.DirectionalLight {
-  const sun = new THREE.DirectionalLight(0xfff4e6, 1.9);
+  const sun = new THREE.DirectionalLight(0xfff4e6, 2.6);
   // 左奥の上から当てる。
   // カメラの初期位置（右手前の上）と光源の向きが揃っていると、
   // それぞれの影が自分自身の真後ろに隠れて見えなくなるため、意図的にずらしている

@@ -30,7 +30,7 @@ export function createViewer(container: HTMLElement): Viewer {
   // 物理的に正しい明るさの範囲は 0〜1 に収まらないため、
   // そのまま出すと明るい部分が白く潰れる。フィルムのように滑らかに圧縮する
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.85;
+  renderer.toneMappingExposure = 1.15;
 
   container.appendChild(renderer.domElement);
 
@@ -45,9 +45,10 @@ export function createViewer(container: HTMLElement): Viewer {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  // 環境光をそのまま使うと全体が明るくなりすぎ、床や壁の色が白に飛んで
-  // 影のコントラストも失われる。主光源の陰影が残る強さまで落とす
-  scene.environmentIntensity = 0.4;
+  // 「周囲から回り込む光」の強さ。
+  // 低くすると影の側に光が回らず、濃い色の家具が黒く沈んでしまう。
+  // 部屋の中が実際の室内らしい明るさに見えるところまで上げている
+  scene.environmentIntensity = 1.0;
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 
