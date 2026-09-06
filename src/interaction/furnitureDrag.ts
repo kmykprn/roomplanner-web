@@ -6,6 +6,8 @@
  *   押した   → 指の下に家具があるか調べる。あればカメラ操作を止めて掴む
  *   動かした → 指の位置を床平面に投影し、その座標へ家具を動かす
  *   離した   → ほとんど動いていなければ「タップ」とみなして選択を切り替える
+ *
+ * いずれも 1 本目の指だけを見る。2 本目以降はカメラ操作に渡す。
  */
 
 import * as THREE from 'three';
@@ -65,6 +67,10 @@ export function createFurnitureDrag(
   }
 
   function onPointerMove(event: PointerEvent): void {
+    // 家具を動かすのは 1 本目の指だけ。
+    // これがないと、家具を掴んだまま 2 本目の指を置いたとき、
+    // カメラ操作のつもりの動きで家具のほうが動いてしまう
+    if (!event.isPrimary) return;
     if (!draggingId) return;
 
     toNdc(event);

@@ -1,0 +1,242 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Noto+Sans+JP:wght@400;500&family=M+PLUS+1+Code:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --accent: #0a7ea4;
+    --accent-soft: #e3f0f5;
+    --ink: #11181c;
+    --ink-2: #4c5b62;
+    --ink-3: #7a8b93;
+    --ground: #f2f5f6;
+    --surface: #ffffff;
+    --surface-2: #f7fafb;
+    --line: #d7e1e5;
+    --line-soft: #e6edf0;
+    --bug: #b03030;
+
+    --f-display: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", sans-serif;
+    --f-body: "Noto Sans JP", "Hiragino Sans", sans-serif;
+    --f-code: "M PLUS 1 Code", "SFMono-Regular", Consolas, monospace;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --accent: #57bcdb;
+      --accent-soft: #14313b;
+      --ink: #e4edf1;
+      --ink-2: #a3b4bc;
+      --ink-3: #74868f;
+      --ground: #0e1418;
+      --surface: #151d22;
+      --surface-2: #1b252b;
+      --line: #2b3940;
+      --line-soft: #222e34;
+      --bug: #ef8a8a;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --accent: #57bcdb;
+    --accent-soft: #14313b;
+    --ink: #e4edf1;
+    --ink-2: #a3b4bc;
+    --ink-3: #74868f;
+    --ground: #0e1418;
+    --surface: #151d22;
+    --surface-2: #1b252b;
+    --line: #2b3940;
+    --line-soft: #222e34;
+    --bug: #ef8a8a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 15px;
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 20px 88px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  .head { display: flex; flex-direction: column; gap: 10px; }
+
+  .eyebrow {
+    font-family: var(--f-code);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(1.55rem, 4vw, 2rem);
+    line-height: 1.35;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede { margin: 0; max-width: 60ch; color: var(--ink-2); font-size: 14.5px; }
+
+  .toolbar { display: flex; gap: 9px; flex-wrap: wrap; padding-top: 2px; }
+
+  button.ctl {
+    font-family: var(--f-code); font-size: 12px; font-weight: 500;
+    color: var(--accent); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 6px 13px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  button.ctl:hover { background: var(--accent-soft); border-color: var(--accent); }
+  button.ctl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- ファイル ---------- */
+
+  .file { display: flex; flex-direction: column; gap: 2px; }
+
+  .file__head {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 11px;
+    padding-bottom: 9px; border-bottom: 2px solid var(--line);
+    margin-bottom: 6px;
+  }
+  .file__path { font-family: var(--f-code); font-size: 13.5px; font-weight: 500; word-break: break-all; }
+  .file__lines { font-family: var(--f-code); font-size: 11.5px; color: var(--ink-3); }
+  .file__role { flex-basis: 100%; margin: 0; font-size: 13.5px; color: var(--ink-2); }
+
+  /* ---------- メソッド ---------- */
+
+  .m { padding: 13px 0 3px; }
+  .m + .m { border-top: 1px solid var(--line-soft); }
+
+  .m__name {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: 14.5px;
+    margin: 0 0 5px;
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    flex-wrap: wrap;
+  }
+  .m__sig {
+    font-family: var(--f-code);
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--ink-3);
+  }
+
+  .m ul {
+    margin: 0;
+    padding-left: 1.15em;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: 14px;
+  }
+  .m li::marker { color: var(--ink-3); }
+  .m li.stop { color: var(--ink-2); }
+  .m li.bug { color: var(--bug); }
+  .m li.bug b { font-weight: 500; }
+
+  /* ---------- コードの開閉 ---------- */
+
+  details.code { margin-top: 9px; }
+  details.code > summary {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--f-code); font-size: 11.5px; color: var(--ink-3);
+    cursor: pointer; list-style: none;
+    padding: 2px 8px 2px 5px;
+    border: 1px solid var(--line-soft); border-radius: 6px; width: fit-content;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  details.code > summary::-webkit-details-marker { display: none; }
+  details.code > summary::before { content: "▸"; font-size: 9px; transition: transform 0.15s; }
+  details.code[open] > summary::before { transform: rotate(90deg); }
+  details.code[open] > summary { color: var(--accent); }
+  details.code > summary:hover { color: var(--accent); border-color: var(--line); }
+  details.code > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  details.code pre {
+    margin: 7px 0 0; padding: 13px 15px;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft); border-radius: 8px;
+    overflow-x: auto;
+    font-family: var(--f-code); font-size: 12px; line-height: 1.65;
+    color: var(--ink-2); tab-size: 2;
+  }
+
+  .note {
+    font-size: 13.5px; color: var(--ink-2);
+    border-left: 2px solid var(--line);
+    padding: 2px 0 2px 13px;
+    margin: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="head">
+    <div class="eyebrow">__EYEBROW__</div>
+    <h1>__HEADING__</h1>
+    <p class="lede">__LEDE__</p>
+    <div class="toolbar">
+      <button class="ctl" id="open-all" type="button">すべてのコードを開く</button>
+      <button class="ctl" id="close-all" type="button">すべて閉じる</button>
+    </div>
+  </header>
+
+  <!-- ここから下を、ファイルごとの <section class="file"> で置き換える。
+       構造は下記のとおり。使わない要素は消してよい。 -->
+
+  <section class="file">
+    <div class="file__head">
+      <span class="file__path">src/example/file.ts</span>
+      <span class="file__lines">120 行</span>
+      <p class="file__role">このファイルが何を担うか、1 文で。</p>
+    </div>
+
+    <div class="m">
+      <p class="m__name">methodName<span class="m__sig">役割 / L44-65</span></p>
+      <ul>
+        <li class="stop">早期リターンの行は stop クラスを付ける（灰色になる）</li>
+        <li>通常の処理はそのまま li で書く</li>
+        <li class="bug"><b>［バグ］見出し</b> ── 問題のある行は bug クラス（赤字）</li>
+      </ul>
+      <details class="code"><summary>コードを見る（L44-65）</summary><pre><code>ここに実際のコード（&lt; と &amp; はエスケープする）</code></pre></details>
+      <p class="note" style="margin-top:11px">補足があればここに（縦線付きの小さな注記）</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  const codeBlocks = document.querySelectorAll('details.code');
+  document.getElementById('open-all').addEventListener('click', () => {
+    codeBlocks.forEach((d) => (d.open = true));
+  });
+  document.getElementById('close-all').addEventListener('click', () => {
+    codeBlocks.forEach((d) => (d.open = false));
+  });
+</script>
