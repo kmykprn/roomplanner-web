@@ -13,6 +13,7 @@ import {
   updateFurniture,
   selectFurniture,
   findFreePosition,
+  clampInsideRoom,
 } from '@/core/appState';
 
 type TabId = 'add' | 'manage';
@@ -111,16 +112,30 @@ export function createBottomSheet(container: HTMLElement): void {
     }
 
     wrapper.append(
-      createButton('⟲ 左に回す', () => {
-        updateFurniture(selected.id, { rotationY: selected.rotationY - ROTATION_STEP });
-      }),
-      createButton('⟳ 右に回す', () => {
-        updateFurniture(selected.id, { rotationY: selected.rotationY + ROTATION_STEP });
-      }),
+      createButton('⟲ 左に回す', () => rotate(selected.id, -ROTATION_STEP)),
+      createButton('⟳ 右に回す', () => rotate(selected.id, ROTATION_STEP)),
       createButton('削除', () => removeFurniture(selected.id), 'is-danger')
     );
 
     return wrapper;
+  }
+
+  /**
+   * 家具を回す。
+   *
+   * 回すと上から見た輪郭が広がるため、壁ぎわの家具はそのままだと壁を突き抜ける。
+   * 回転後の向きで位置を計算し直し、部屋の中へ押し戻す。
+   */
+  function rotate(id: string, step: number): void {
+    const { furniture, room } = appState.get();
+    const item = furniture.find((f) => f.id === id);
+    if (!item) return;
+
+    const rotationY = item.rotationY + step;
+    updateFurniture(id, {
+      rotationY,
+      position: clampInsideRoom(item.position, item.size, rotationY, room),
+    });
   }
 
   function createButton(label: string, onClick: () => void, modifier = ''): HTMLButtonElement {

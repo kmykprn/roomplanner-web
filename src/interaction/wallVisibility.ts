@@ -20,7 +20,9 @@ const HIDDEN_OPACITY = 0.05;
 const FADE_SPEED = 0.12;
 
 interface WallProbe {
-  material: THREE.MeshStandardMaterial;
+  // 壁は光の影響を受けない材質を使っている（scene/room.ts 参照）。
+  // ここで必要なのは opacity だけなので、材質の種類は問わない
+  material: THREE.Material;
   position: THREE.Vector3;
   normal: THREE.Vector3;
 }
@@ -35,7 +37,7 @@ export function createWallVisibility(
   const probes: WallProbe[] = WALL_DIRECTIONS.map((direction) => {
     const transform = getWallTransform(direction, size);
     return {
-      material: walls[direction].material as THREE.MeshStandardMaterial,
+      material: walls[direction].material as THREE.Material,
       position: new THREE.Vector3(...transform.position),
       normal: new THREE.Vector3(...transform.normal),
     };

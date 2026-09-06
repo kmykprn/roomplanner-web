@@ -45,13 +45,24 @@ function createFloor(size: RoomSize): THREE.Mesh {
   return floor;
 }
 
+/**
+ * 壁を作る。
+ *
+ * 壁だけは光の影響を受けない材質（MeshBasicMaterial）にしている。
+ * 光を受ける材質だと、壁の向きごとに当たる光の量が変わるため
+ * 指定した色より暗く、かつ 4 枚がばらばらの明るさになってしまう
+ * （実測で指定色の 65〜80%、隣り合う壁どうしで 36 階調の差）。
+ * 壁は部屋の色を決める面なので、指定した色がそのまま出るほうが扱いやすい。
+ */
 function createWall(direction: WallDirection, size: RoomSize): THREE.Mesh {
   const transform = getWallTransform(direction, size);
 
   const geometry = new THREE.PlaneGeometry(transform.planeWidth, size.height);
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshBasicMaterial({
     color: SCENE_COLORS.wall,
-    ...SURFACES.wall,
+    // トーンマッピングも通さない。通すと露出の分だけ暗くなり、
+    // 指定した色と描画結果がずれる
+    toneMapped: false,
     // 透過アニメーションのために最初から transparent を有効にしておく。
     // 途中で切り替えるとマテリアルの再コンパイルが走ってカクつく
     transparent: true,
@@ -61,7 +72,6 @@ function createWall(direction: WallDirection, size: RoomSize): THREE.Mesh {
   const wall = new THREE.Mesh(geometry, material);
   wall.position.set(...transform.position);
   wall.rotation.y = transform.rotationY;
-  wall.receiveShadow = true;
   wall.name = `wall-${direction}`;
 
   return wall;
