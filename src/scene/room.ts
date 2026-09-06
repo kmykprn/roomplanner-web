@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { WALL_DIRECTIONS, getWallTransform, type RoomSize, type WallDirection } from '@/config/room';
-import { SCENE_COLORS } from '@/config/theme';
+import { SCENE_COLORS, SURFACES } from '@/config/theme';
 
 export interface RoomObjects {
   group: THREE.Group;
@@ -34,7 +34,7 @@ export function createRoom(size: RoomSize): RoomObjects {
 
 function createFloor(size: RoomSize): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(size.width, size.depth);
-  const material = new THREE.MeshStandardMaterial({ color: SCENE_COLORS.floor });
+  const material = new THREE.MeshStandardMaterial({ color: SCENE_COLORS.floor, ...SURFACES.floor });
   const floor = new THREE.Mesh(geometry, material);
 
   // PlaneGeometry は既定で XY 平面（+Z 向き）なので、床にするため X 軸まわりに -90 度倒す
@@ -51,6 +51,7 @@ function createWall(direction: WallDirection, size: RoomSize): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(transform.planeWidth, size.height);
   const material = new THREE.MeshStandardMaterial({
     color: SCENE_COLORS.wall,
+    ...SURFACES.wall,
     // 透過アニメーションのために最初から transparent を有効にしておく。
     // 途中で切り替えるとマテリアルの再コンパイルが走ってカクつく
     transparent: true,

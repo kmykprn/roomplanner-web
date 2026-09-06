@@ -16,7 +16,7 @@ export interface FurnitureType {
 }
 
 export const FURNITURE_TYPES: FurnitureType[] = [
-  { id: 'chair', name: '椅子', color: '#debb9b', defaultSize: [0.5, 0.8, 0.5] },
+  { id: 'chair', name: '椅子', color: '#debb9b', defaultSize: [0.5, 0.8, 0.5], modelPath: 'models/chair.glb' },
   { id: 'table', name: 'テーブル', color: '#453122', defaultSize: [1.2, 0.8, 0.8] },
   { id: 'sofa', name: 'ソファ', color: '#c4c2c3', defaultSize: [2, 1, 0.9] },
   { id: 'bed', name: 'ベッド', color: '#e8dbd2', defaultSize: [1, 0.5, 2] },
