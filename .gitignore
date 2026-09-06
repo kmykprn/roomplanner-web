@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.vscode/
+# Capacitor（step 4 以降で追加される）
+ios/
+android/
