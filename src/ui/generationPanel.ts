@@ -9,6 +9,7 @@
 import { pickImage } from '@/platform/picker';
 import { getUid } from '@/platform/auth';
 import { EXPECTED_DURATION_SECONDS } from '@/config/api';
+import { createProgressRing } from '@/ui/progressRing';
 import {
   dismissError,
   generationState,
@@ -22,6 +23,12 @@ export function createGenerationPanel(): HTMLElement {
 
   const status = document.createElement('p');
   status.className = 'hint';
+
+  // 待っている間だけ出す。8分かかるので、動いていることが目で分かる必要がある
+  const ring = createProgressRing();
+  const progress = document.createElement('div');
+  progress.className = 'progress';
+  progress.append(ring.element, status);
 
   const startButton = document.createElement('button');
   startButton.className = 'button';
@@ -60,9 +67,16 @@ export function createGenerationPanel(): HTMLElement {
       render(generationState.get());
     });
 
-  panel.append(status, startButton, retryButton, identity);
+  panel.append(progress, startButton, retryButton, identity);
 
   function render(state: GenerationState): void {
+    // 待っている間だけ円を出す。それ以外は説明文だけで足りる
+    ring.setVisible(state.phase === 'waiting');
+    if (state.phase === 'waiting') {
+      const seconds = elapsedSeconds(state.startedAt);
+      ring.update(seconds / EXPECTED_DURATION_SECONDS, remaining(seconds));
+    }
+
     startButton.hidden = state.phase !== 'idle';
     // 認証できていないなら押しても必ず失敗する。押せなくしておく
     startButton.disabled = authFailed;
@@ -94,8 +108,14 @@ function describe(state: GenerationState): string {
       return `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`;
     case 'uploading':
       return '写真を送っています…';
-    case 'waiting':
-      return `作成中です（${elapsed(state.startedAt)}）。この画面を閉じても続きます`;
+    case 'waiting': {
+      const seconds = elapsedSeconds(state.startedAt);
+      const over = seconds > EXPECTED_DURATION_SECONDS;
+      // 見込みを超えたら、待ち時間の案内をやめて状況だけ伝える
+      return over
+        ? '思ったより時間がかかっています。この画面を閉じても続きます'
+        : 'モデルを作成中です。この画面を閉じても続きます';
+    }
     case 'placing':
       return 'できあがりました。部屋に置いています…';
     case 'failed':
@@ -103,9 +123,21 @@ function describe(state: GenerationState): string {
   }
 }
 
-/** 経過時間。8分待たせるので「動いていること」が分かる情報を出す */
-function elapsed(startedAt: number | null): string {
-  if (!startedAt) return '経過時間ふめい';
-  const seconds = Math.floor((Date.now() - startedAt) / 1000);
-  return `${Math.floor(seconds / 60)}分${String(seconds % 60).padStart(2, '0')}秒`;
+function elapsedSeconds(startedAt: number | null): number {
+  if (!startedAt) return 0;
+  return Math.floor((Date.now() - startedAt) / 1000);
+}
+
+/**
+ * 円の中央に出す残り時間。
+ *
+ * **これは見込みであって約束ではない。** 想定を超えたら数字を出すのをやめ、
+ * 「まもなく」に切り替える。減らない数字を見せ続けるより正直で、
+ * 「止まっているのでは」という不安も生みにくい
+ */
+function remaining(elapsedSec: number): string {
+  const left = EXPECTED_DURATION_SECONDS - elapsedSec;
+  if (left <= 0) return 'まもなく';
+  const minutes = Math.ceil(left / 60);
+  return `あと${minutes}分`;
 }

@@ -199,3 +199,48 @@ body {
   word-break: break-all;
   user-select: all;
 }
+
+/* 円形プログレスインジケーター。
+   表しているのは「経過 ÷ 想定8分」であって本当の進捗ではない（progressRing.ts 参照） */
+.ring {
+  flex: 0 0 auto;
+}
+
+/* 12時の位置から時計回りに増やす。SVG の円は3時から始まるので回しておく */
+.ring__track,
+.ring__value {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.ring__track {
+  stroke: var(--border);
+}
+
+.ring__value {
+  stroke: var(--primary);
+  stroke-linecap: round;
+  /* 1秒ごとに描き直すので、その間を滑らかに繋ぐ */
+  transition: stroke-dashoffset 0.9s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring__value {
+    transition: none;
+  }
+}
+
+.ring__label {
+  fill: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  /* 残り時間の数字が伸び縮みして中心がずれないようにする */
+  font-variant-numeric: tabular-nums;
+}
+
+/* 進行中の行。円と説明を横に並べる */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
