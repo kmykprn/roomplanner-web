@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
 import { SCENE_COLORS, SURFACES } from '@/config/theme';
 import { loadFurnitureModel } from '@/scene/modelLoader';
+import { resolveModelUrl } from '@/platform/modelCache';
 
 export interface FurnitureLayer {
   group: THREE.Group;
@@ -90,9 +91,17 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
 
   // GLB を持つ家具は、読み込めたら箱と差し替える。
   // 読み込みを待たずに箱を先に見せるので、置いた瞬間の反応が遅くならない
-  const type = findFurnitureType(item.typeId);
-  if (type?.modelPath) {
-    replaceWithModel(object, mesh, type.modelPath, item.size);
+  if (item.modelUrl) {
+    // 写真から生成した家具。端末に保存した中身を URL にしてから読む
+    resolveModelUrl(item.modelUrl).then((url) => {
+      if (url) replaceWithModel(object, mesh, url, item.size);
+      // 見つからなければ箱のまま。端末のデータが消された場合など
+    });
+  } else {
+    const type = findFurnitureType(item.typeId);
+    if (type?.modelPath) {
+      replaceWithModel(object, mesh, type.modelPath, item.size);
+    }
   }
 
   return object;
