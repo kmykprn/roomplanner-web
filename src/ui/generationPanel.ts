@@ -9,7 +9,7 @@
 import { pickImages } from '@/platform/picker';
 import { getUid } from '@/platform/auth';
 import { IS_CONFIGURED } from '@/config/api';
-import { EXPECTED_TOTAL_SECONDS, progressFor } from '@/core/progress';
+import { progressFor } from '@/core/progress';
 import { createProgressRing } from '@/ui/progressRing';
 import {
   dismissError,
@@ -19,13 +19,16 @@ import {
   type GenerationState,
 } from '@/core/generation';
 
+/** 何も作っていないときの案内。所要時間は工程の表示に任せる */
+const IDLE_MESSAGE = '家具の写真から3Dモデルを作ります';
+
 export function createGenerationPanel(): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'row';
 
   const status = document.createElement('p');
   status.className = 'hint';
-  status.textContent = `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_TOTAL_SECONDS / 60)}分）`;
+  status.textContent = IDLE_MESSAGE;
 
   const jobs = document.createElement('div');
   jobs.className = 'generation-jobs';
@@ -70,7 +73,7 @@ export function createGenerationPanel(): HTMLElement {
     status.textContent = authFailed
       ? authFailureMessage()
       : state.jobs.length === 0
-        ? `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_TOTAL_SECONDS / 60)}分）`
+        ? IDLE_MESSAGE
         : '';
     jobs.replaceChildren(...state.jobs.map(createJobStatus));
   }
@@ -153,12 +156,8 @@ function describe(job: GenerationJob): string {
       return '写真を送っています…';
     case 'queued':
       return '作成を受け付けました。開始まで少しお待ちください';
-    case 'running': {
-      const progress = progressFor(job.serverPhase, elapsedInPhase(job));
-      // その工程が実測より長引いているときは、そう言う。
-      // 円が止まって見える理由が分かるほうが、待つ側は不安にならない
-      return progress.label + (progress.isOverrunning ? '（思ったより時間がかかっています）' : '');
-    }
+    case 'running':
+      return progressFor(job.serverPhase, elapsedInPhase(job)).label;
     case 'placing':
       return 'できあがりました。部屋に置いています…';
     case 'failed':
