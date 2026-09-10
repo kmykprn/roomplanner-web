@@ -322,7 +322,6 @@ async function place(id: string, jobId: string, modelUrl?: string): Promise<void
       color: PLACEHOLDER_COLOR,
       modelUrl: key,
       sourceImageKey: job?.previewKey ?? undefined,
-      sourceImageName: job?.fileName,
     });
     removeJob(id);
   } catch (error) {
