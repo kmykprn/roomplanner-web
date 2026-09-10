@@ -116,17 +116,24 @@ function createJobStatus(job: GenerationJob): HTMLElement {
   content.className = 'generation-job__content';
   content.append(name, message);
 
+  const visual = document.createElement('div');
+  visual.className = 'generation-job__visual';
+  if (job.previewUrl) {
+    const thumbnail = document.createElement('img');
+    thumbnail.className = 'generation-job__thumbnail';
+    thumbnail.src = job.previewUrl;
+    thumbnail.alt = `${job.fileName} のプレビュー`;
+    visual.append(thumbnail);
+  }
+
   if (job.phase === 'running') {
     const ring = createProgressRing();
     const seconds = elapsedSeconds(job.startedAt);
     ring.update(seconds / EXPECTED_DURATION_SECONDS, remaining(seconds));
-    const progress = document.createElement('div');
-    progress.className = 'progress';
-    progress.append(ring.element, content);
-    row.append(progress);
-  } else {
-    row.append(content);
+    visual.append(ring.element);
   }
+  visual.append(content);
+  row.append(visual);
 
   if (job.phase === 'failed') {
     message.classList.add('is-error');

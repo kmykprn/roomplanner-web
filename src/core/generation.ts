@@ -12,6 +12,7 @@ import { shrinkForUpload } from '@/core/imageResize';
 import { ApiError, createJob, getJob } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
 import { saveModel } from '@/platform/modelCache';
+import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCache';
 import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from '@/config/api';
 
 /**
@@ -39,6 +40,9 @@ export interface GenerationJob {
   id: string;
   jobId: string | null;
   fileName: string;
+  /** 元写真の縮小プレビュー。端末に保存したキーと表示用URLを分けて持つ */
+  previewKey: string | null;
+  previewUrl: string | null;
   phase: GenerationPhase;
   /** 開始時刻（epoch ms）。経過時間の表示と、諦める判断に使う */
   startedAt: number | null;
@@ -63,7 +67,12 @@ function persist(state: GenerationState): void {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(
-          pending.map(({ jobId, fileName, startedAt }) => ({ jobId, fileName, startedAt }))
+          pending.map(({ jobId, fileName, previewKey, startedAt }) => ({
+            jobId,
+            fileName,
+            previewKey,
+            startedAt,
+          }))
         )
       );
     } else {
@@ -100,6 +109,8 @@ export async function startGeneration(files: File[]): Promise<void> {
     id: crypto.randomUUID(),
     jobId: null,
     fileName: file.name,
+    previewKey: null,
+    previewUrl: null,
     phase: 'uploading',
     startedAt: null,
     error: null,
@@ -119,6 +130,8 @@ export async function startGeneration(files: File[]): Promise<void> {
 
 async function submit(id: string, file: File): Promise<void> {
   try {
+    const preview = await savePreview(id, file);
+    if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
     const image = await shrinkForUpload(file);
     const jobId = await createJob(image);
     updateJob(id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
@@ -135,7 +148,7 @@ async function submit(id: string, file: File): Promise<void> {
  * 復帰した時点で完成していれば、そのまま部屋に置かれる。
  */
 export function resumeGeneration(): void {
-  let saved: Array<{ jobId?: string; fileName?: string; startedAt?: number }> = [];
+  let saved: Array<{ jobId?: string; fileName?: string; previewKey?: string; startedAt?: number }> = [];
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
     saved = Array.isArray(value) ? value : [];
@@ -148,6 +161,8 @@ export function resumeGeneration(): void {
       id: crypto.randomUUID(),
       jobId: job.jobId,
       fileName: job.fileName || '写真から作成した家具',
+      previewKey: job.previewKey ?? null,
+      previewUrl: null,
       phase: 'queued',
       startedAt: job.startedAt ?? Date.now(),
       error: null,
@@ -155,7 +170,15 @@ export function resumeGeneration(): void {
   if (jobs.length === 0) return;
 
   setState({ jobs: [...generationState.get().jobs, ...jobs] });
-  for (const job of jobs) void watch(job.id, job.jobId!);
+  for (const job of jobs) {
+    if (job.previewKey) void restorePreview(job.id, job.previewKey);
+    void watch(job.id, job.jobId!);
+  }
+}
+
+async function restorePreview(id: string, key: string): Promise<void> {
+  const url = await resolvePreview(key);
+  if (url) updateJob(id, { previewUrl: url });
 }
 
 /** 完成するまで一定間隔で見に行く */
@@ -215,6 +238,7 @@ async function place(id: string, jobId: string, modelUrl?: string): Promise<void
   try {
     // 署名付きURLは1時間で切れる。中身を先に保存してから置く
     const key = await saveModel(jobId, modelUrl);
+    const job = generationState.get().jobs.find((item) => item.id === id);
     addFurniture({
       id: crypto.randomUUID(),
       typeId: 'generated',
@@ -224,6 +248,8 @@ async function place(id: string, jobId: string, modelUrl?: string): Promise<void
       size: [...GENERATED_SIZE],
       color: PLACEHOLDER_COLOR,
       modelUrl: key,
+      sourceImageKey: job?.previewKey ?? undefined,
+      sourceImageName: job?.fileName,
     });
     removeJob(id);
   } catch (error) {
@@ -234,7 +260,9 @@ async function place(id: string, jobId: string, modelUrl?: string): Promise<void
 /** 指定した失敗表示だけを閉じる。他の作成は続ける。 */
 export function dismissError(id: string): void {
   const job = generationState.get().jobs.find((item) => item.id === id);
-  if (job?.phase === 'failed') removeJob(id);
+  if (job?.phase !== 'failed') return;
+  if (job.previewKey) void deletePreview(job.previewKey);
+  removeJob(id);
 }
 
 function toMessage(error: unknown): string {
