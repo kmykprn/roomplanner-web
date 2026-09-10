@@ -15,6 +15,19 @@ export type JobState = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export interface JobStatus {
   state: JobState;
+  /**
+   * いまサーバーが何をしているか。
+   *
+   * **無いことがある。** サーバーは工程の書き込みに失敗しても生成を続けるので、
+   * 8分間ずっと来ないこともありうる。値の一覧は api/SPEC.md
+   */
+  phase?: string;
+  /**
+   * その工程に入ってからの経過秒。**サーバー側で引いた値**。
+   *
+   * 時刻ではなく経過秒を受け取るのは、端末の時計のずれを持ち込まないため
+   */
+  phaseElapsedSeconds?: number;
   /** 完成した GLB の場所。succeeded のときだけ入る。1時間で切れる */
   modelUrl?: string;
   /** failed のときの理由 */

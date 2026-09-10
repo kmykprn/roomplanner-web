@@ -9,7 +9,7 @@
 import { createStore } from '@/core/store';
 import { addFurniture, findFreePosition } from '@/core/appState';
 import { shrinkForUpload } from '@/core/imageResize';
-import { ApiError, createJob, getJob } from '@/platform/api';
+import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
 import { saveModel } from '@/platform/modelCache';
 import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCache';
@@ -46,6 +46,21 @@ export interface GenerationJob {
   phase: GenerationPhase;
   /** 開始時刻（epoch ms）。経過時間の表示と、諦める判断に使う */
   startedAt: number | null;
+  /**
+   * サーバー側の工程。まだ分からないときは null。
+   *
+   * 画面側の `phase`（uploading / queued …）とは別物。あちらは端末の都合、
+   * こちらはサーバーが実際に何をしているか
+   */
+  serverPhase: string | null;
+  /**
+   * その工程が始まった時刻（**端末の時計での** epoch ms）。
+   *
+   * サーバーからは経過秒で受け取り、受け取った時点で端末の時刻に直す。
+   * こうしておくと、15秒に1回しか見に行かなくても、その間の円は
+   * 端末側で滑らかに進められる
+   */
+  serverPhaseStartedAt: number | null;
   error: string | null;
 }
 
@@ -113,6 +128,8 @@ export async function startGeneration(files: File[]): Promise<void> {
     previewUrl: null,
     phase: 'uploading',
     startedAt: null,
+    serverPhase: null,
+    serverPhaseStartedAt: null,
     error: null,
   }));
   if (jobs.length === 0) return;
@@ -165,6 +182,8 @@ export function resumeGeneration(): void {
       previewUrl: null,
       phase: 'queued',
       startedAt: job.startedAt ?? Date.now(),
+      serverPhase: null,
+      serverPhaseStartedAt: null,
       error: null,
     }));
   if (jobs.length === 0) return;
@@ -183,9 +202,14 @@ async function restorePreview(id: string, key: string): Promise<void> {
 
 /** 完成するまで一定間隔で見に行く */
 async function watch(id: string, jobId: string): Promise<void> {
+  // 待たずに1回目を叩く。開き直した直後に工程が分かるようにするため。
+  // 先に15秒待つと、その間だけ円が「順番待ち」に戻って見える
+  let first = true;
+
   while (true) {
     // 生成に8分かかるので、細かく叩いても分かることは増えない
-    await sleep(POLL_INTERVAL_MS);
+    if (!first) await sleep(POLL_INTERVAL_MS);
+    first = false;
 
     const current = generationState.get().jobs.find((job) => job.id === id);
     if (!current || current.jobId !== jobId) return;
@@ -218,14 +242,33 @@ async function watch(id: string, jobId: string): Promise<void> {
       });
       return;
     }
-    if (status.state === 'queued' || status.state === 'running') {
-      updateJob(id, { phase: status.state });
-      continue;
-    }
+    rememberProgress(id, status);
+    if (status.state === 'queued' || status.state === 'running') continue;
 
     await place(id, jobId, status.modelUrl);
     return;
   }
+}
+
+/**
+ * サーバーが言ってきた進み具合を覚える。
+ *
+ * **工程が変わったときだけ基準時刻を更新する。** 毎回入れ直すと、通信にかかった
+ * ぶんだけ基準がうしろにずれて、円がわずかに巻き戻る。工程の中では端末の時計だけで
+ * 進めておき、切り替わりでサーバーに合わせ直すほうが、見え方が安定する
+ */
+function rememberProgress(id: string, status: JobStatus): void {
+  const current = generationState.get().jobs.find((job) => job.id === id);
+  if (!current) return;
+
+  const patch: Partial<GenerationJob> = {};
+  if (status.state === 'queued' || status.state === 'running') patch.phase = status.state;
+  const serverPhase = status.phase ?? null;
+  if (serverPhase !== current.serverPhase) {
+    patch.serverPhase = serverPhase;
+    patch.serverPhaseStartedAt = Date.now() - (status.phaseElapsedSeconds ?? 0) * 1000;
+  }
+  if (Object.keys(patch).length > 0) updateJob(id, patch);
 }
 
 /** 完成したモデルを端末に保存してから部屋に置く */

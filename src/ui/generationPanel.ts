@@ -8,7 +8,8 @@
 
 import { pickImages } from '@/platform/picker';
 import { getUid } from '@/platform/auth';
-import { EXPECTED_DURATION_SECONDS, IS_CONFIGURED } from '@/config/api';
+import { IS_CONFIGURED } from '@/config/api';
+import { EXPECTED_TOTAL_SECONDS, progressFor } from '@/core/progress';
 import { createProgressRing } from '@/ui/progressRing';
 import {
   dismissError,
@@ -24,7 +25,7 @@ export function createGenerationPanel(): HTMLElement {
 
   const status = document.createElement('p');
   status.className = 'hint';
-  status.textContent = `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`;
+  status.textContent = `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_TOTAL_SECONDS / 60)}分）`;
 
   const jobs = document.createElement('div');
   jobs.className = 'generation-jobs';
@@ -69,7 +70,7 @@ export function createGenerationPanel(): HTMLElement {
     status.textContent = authFailed
       ? authFailureMessage()
       : state.jobs.length === 0
-        ? `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`
+        ? `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_TOTAL_SECONDS / 60)}分）`
         : '';
     jobs.replaceChildren(...state.jobs.map(createJobStatus));
   }
@@ -128,8 +129,8 @@ function createJobStatus(job: GenerationJob): HTMLElement {
 
   if (job.phase === 'running') {
     const ring = createProgressRing();
-    const seconds = elapsedSeconds(job.startedAt);
-    ring.update(seconds / EXPECTED_DURATION_SECONDS, remaining(seconds));
+    const progress = progressFor(job.serverPhase, elapsedInPhase(job));
+    ring.update(progress.ratio, progress.centerText);
     visual.append(ring.element);
   }
   visual.append(content);
@@ -152,8 +153,12 @@ function describe(job: GenerationJob): string {
       return '写真を送っています…';
     case 'queued':
       return '作成を受け付けました。開始まで少しお待ちください';
-    case 'running':
-      return '3Dモデルを作成中です';
+    case 'running': {
+      const progress = progressFor(job.serverPhase, elapsedInPhase(job));
+      // その工程が実測より長引いているときは、そう言う。
+      // 円が止まって見える理由が分かるほうが、待つ側は不安にならない
+      return progress.label + (progress.isOverrunning ? '（思ったより時間がかかっています）' : '');
+    }
     case 'placing':
       return 'できあがりました。部屋に置いています…';
     case 'failed':
@@ -161,21 +166,14 @@ function describe(job: GenerationJob): string {
   }
 }
 
-function elapsedSeconds(startedAt: number | null): number {
-  if (!startedAt) return 0;
-  return Math.floor((Date.now() - startedAt) / 1000);
-}
-
 /**
- * 円の中央に出す残り時間。
+ * いまの工程に入ってから何秒経ったか。
  *
- * **これは見込みであって約束ではない。** 想定を超えたら数字を出すのをやめ、
- * 「まもなく」に切り替える。減らない数字を見せ続けるより正直で、
- * 「止まっているのでは」という不安も生みにくい
+ * 基準はサーバーが返した経過秒を端末の時刻に直したもの（generation.ts が持つ）。
+ * まだ工程が分かっていないうちは、受付からの経過をそのまま使う
  */
-function remaining(elapsedSec: number): string {
-  const left = EXPECTED_DURATION_SECONDS - elapsedSec;
-  if (left <= 0) return 'まもなく';
-  const minutes = Math.ceil(left / 60);
-  return `あと${minutes}分`;
+function elapsedInPhase(job: GenerationJob): number {
+  const base = job.serverPhaseStartedAt ?? job.startedAt;
+  if (!base) return 0;
+  return Math.max(0, Math.floor((Date.now() - base) / 1000));
 }
