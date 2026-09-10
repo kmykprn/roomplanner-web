@@ -67,8 +67,6 @@ export interface Progress {
   centerText: string;
   /** いま何をしているか */
   label: string;
-  /** その工程が実測より長引いているか。画面の言い回しを変えるのに使う */
-  isOverrunning: boolean;
 }
 
 /**
@@ -92,7 +90,6 @@ export function progressFor(phase: string | null, elapsedInPhaseSec: number): Pr
     ratio: Math.min(done / TOTAL_SECONDS, MAX_RATIO),
     centerText: remainingText(TOTAL_SECONDS - done),
     label: step.label,
-    isOverrunning: elapsedInPhaseSec > step.seconds,
   };
 }
 
@@ -108,12 +105,8 @@ function unknownPhase(phase: string | null): Progress {
     ratio: 0,
     centerText: '作成中',
     label: phase ? '作成しています' : '順番を待っています',
-    isOverrunning: false,
   };
 }
-
-/** 全体の想定時間（秒）。画面の案内文に使う */
-export const EXPECTED_TOTAL_SECONDS = TOTAL_SECONDS;
 
 /**
  * 円の中央に出す残り時間。
