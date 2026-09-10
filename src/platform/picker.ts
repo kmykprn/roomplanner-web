@@ -19,20 +19,30 @@ export function isNativeApp(): boolean {
  * @param useCamera true ならカメラを直接起動する（対応環境のみ）
  */
 export function pickImage(useCamera = false): Promise<File | null> {
+  return pickFiles(useCamera, false).then((files) => files[0] ?? null);
+}
+
+/** 複数の写真を一度に選ばせる。キャンセル時は空配列を返す。 */
+export function pickImages(): Promise<File[]> {
+  return pickFiles(false, true);
+}
+
+function pickFiles(useCamera: boolean, multiple: boolean): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    input.multiple = multiple;
 
     // iOS Safari / Android Chrome はこの属性でカメラが直接開く
     if (useCamera) input.capture = 'environment';
 
     input.addEventListener('change', () => {
-      resolve(input.files?.[0] ?? null);
+      resolve(Array.from(input.files ?? []));
     });
 
     // ファイル選択をキャンセルしたときに Promise が残り続けないようにする
-    input.addEventListener('cancel', () => resolve(null));
+    input.addEventListener('cancel', () => resolve([]));
 
     input.click();
   });
