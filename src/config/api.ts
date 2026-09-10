@@ -48,12 +48,11 @@ export const FIREBASE_CONFIG = {
 export const IS_CONFIGURED = FIREBASE_CONFIG.apiKey.length > 0;
 
 /**
- * 生成の所要時間。実測で約502秒（8分22秒）。
- * 画面の案内文とポーリング間隔の根拠にする。
+ * 状態を見に行く間隔。生成が約8分（実測502秒）かかるので、細かく叩く意味がない。
+ *
+ * 工程ごとの所要時間は core/progress.ts にある（そちらがサーバーの `phase` と
+ * 対になっているので、時間の話は一箇所にまとめてある）
  */
-export const EXPECTED_DURATION_SECONDS = 502;
-
-/** 状態を見に行く間隔。生成が8分かかるので、細かく叩く意味がない */
 export const POLL_INTERVAL_MS = 15_000;
 
 /** これを超えたら見に行くのをやめる。生成時間の3倍あれば十分 */

@@ -8,7 +8,8 @@
 
 import { pickImage } from '@/platform/picker';
 import { getUid } from '@/platform/auth';
-import { EXPECTED_DURATION_SECONDS, IS_CONFIGURED } from '@/config/api';
+import { IS_CONFIGURED } from '@/config/api';
+import { EXPECTED_TOTAL_SECONDS, progressFor } from '@/core/progress';
 import { createProgressRing } from '@/ui/progressRing';
 import {
   dismissError,
@@ -73,8 +74,8 @@ export function createGenerationPanel(): HTMLElement {
     // 待っている間だけ円を出す。それ以外は説明文だけで足りる
     ring.setVisible(state.phase === 'waiting');
     if (state.phase === 'waiting') {
-      const seconds = elapsedSeconds(state.startedAt);
-      ring.update(seconds / EXPECTED_DURATION_SECONDS, remaining(seconds));
+      const progress = progressFor(state.serverPhase, elapsedInPhase(state));
+      ring.update(progress.ratio, progress.centerText);
     }
 
     startButton.hidden = state.phase !== 'idle';
@@ -115,16 +116,17 @@ function authFailureMessage(): string {
 function describe(state: GenerationState): string {
   switch (state.phase) {
     case 'idle':
-      return `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`;
+      return `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_TOTAL_SECONDS / 60)}分）`;
     case 'uploading':
       return '写真を送っています…';
     case 'waiting': {
-      const seconds = elapsedSeconds(state.startedAt);
-      const over = seconds > EXPECTED_DURATION_SECONDS;
-      // 見込みを超えたら、待ち時間の案内をやめて状況だけ伝える
-      return over
-        ? '思ったより時間がかかっています。この画面を閉じても続きます'
-        : 'モデルを作成中です。この画面を閉じても続きます';
+      const progress = progressFor(state.serverPhase, elapsedInPhase(state));
+      // その工程が実測より長引いているときは、そう言う。
+      // 円が止まって見える理由が分かるほうが、待つ側は不安にならない
+      const suffix = progress.isOverrunning
+        ? '（思ったより時間がかかっています）'
+        : '。この画面を閉じても続きます';
+      return progress.label + suffix;
     }
     case 'placing':
       return 'できあがりました。部屋に置いています…';
@@ -133,21 +135,14 @@ function describe(state: GenerationState): string {
   }
 }
 
-function elapsedSeconds(startedAt: number | null): number {
-  if (!startedAt) return 0;
-  return Math.floor((Date.now() - startedAt) / 1000);
-}
-
 /**
- * 円の中央に出す残り時間。
+ * いまの工程に入ってから何秒経ったか。
  *
- * **これは見込みであって約束ではない。** 想定を超えたら数字を出すのをやめ、
- * 「まもなく」に切り替える。減らない数字を見せ続けるより正直で、
- * 「止まっているのでは」という不安も生みにくい
+ * 基準はサーバーが返した経過秒を端末の時刻に直したもの（generation.ts が持つ）。
+ * まだ工程が分かっていないうちは、受付からの経過をそのまま使う
  */
-function remaining(elapsedSec: number): string {
-  const left = EXPECTED_DURATION_SECONDS - elapsedSec;
-  if (left <= 0) return 'まもなく';
-  const minutes = Math.ceil(left / 60);
-  return `あと${minutes}分`;
+function elapsedInPhase(state: GenerationState): number {
+  const base = state.serverPhaseStartedAt ?? state.startedAt;
+  if (!base) return 0;
+  return Math.max(0, Math.floor((Date.now() - base) / 1000));
 }
