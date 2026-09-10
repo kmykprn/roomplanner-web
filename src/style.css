@@ -244,3 +244,33 @@ body {
   align-items: center;
   gap: 14px;
 }
+
+.generation-jobs {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+}
+
+.generation-job {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.generation-job__content {
+  min-width: 0;
+}
+
+.generation-job__name {
+  overflow: hidden;
+  margin: 0 0 2px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

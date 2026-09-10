@@ -3,9 +3,7 @@
  *
  * 生成には約8分かかる。その間ユーザーはアプリを閉じられるし、リロードもする。
  * **待っている状態を端末に残し、開き直したら続きから見に行く**のがこのファイルの主眼。
- *
- * 同時に走らせられるのは1件だけ。サーバー側も409で弾くので、
- * 画面の状態も1件ぶんしか持たない。
+ * 複数の写真は個別のジョブとして扱い、完成したものから部屋へ置く。
  */
 
 import { createStore } from '@/core/store';
@@ -27,36 +25,46 @@ const GENERATED_SIZE: [number, number, number] = [1, 1, 1];
 /** 生成した家具の色。GLB が読めるまでの箱に使うだけ */
 const PLACEHOLDER_COLOR = '#bdb2a7';
 
-const STORAGE_KEY = 'roomplanner.generation';
+const STORAGE_KEY = 'roomplanner.generations';
 
 export type GenerationPhase =
-  | 'idle'
   | 'uploading'
-  | 'waiting'
+  | 'queued'
+  | 'running'
   | 'placing'
   | 'failed';
 
-export interface GenerationState {
-  phase: GenerationPhase;
-  /** 受付番号。待っている間だけ入る */
+export interface GenerationJob {
+  /** 端末内での識別子。サーバーの jobId が届く前から使う */
+  id: string;
   jobId: string | null;
+  fileName: string;
+  phase: GenerationPhase;
   /** 開始時刻（epoch ms）。経過時間の表示と、諦める判断に使う */
   startedAt: number | null;
-  /** 失敗したときに画面へ出す文言 */
   error: string | null;
 }
 
-const initial: GenerationState = { phase: 'idle', jobId: null, startedAt: null, error: null };
+export interface GenerationState {
+  jobs: GenerationJob[];
+}
+
+const initial: GenerationState = { jobs: [] };
 
 export const generationState = createStore<GenerationState>(initial);
 
-/** 待ち状態だけを端末に残す。完了・失敗したら消す */
+/** 未完了のジョブだけを端末に残す。完了・失敗後に復元しないため。 */
 function persist(state: GenerationState): void {
   try {
-    if (state.phase === 'waiting' && state.jobId) {
+    const pending = state.jobs.filter(
+      (job) => job.jobId && (job.phase === 'queued' || job.phase === 'running')
+    );
+    if (pending.length > 0) {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ jobId: state.jobId, startedAt: state.startedAt })
+        JSON.stringify(
+          pending.map(({ jobId, fileName, startedAt }) => ({ jobId, fileName, startedAt }))
+        )
       );
     } else {
       localStorage.removeItem(STORAGE_KEY);
@@ -72,26 +80,51 @@ function setState(patch: Partial<GenerationState>): void {
   persist(generationState.get());
 }
 
+function updateJob(id: string, patch: Partial<GenerationJob>): void {
+  setState({
+    jobs: generationState.get().jobs.map((job) => (job.id === id ? { ...job, ...patch } : job)),
+  });
+}
+
+function removeJob(id: string): void {
+  setState({ jobs: generationState.get().jobs.filter((job) => job.id !== id) });
+}
+
 /**
  * 写真を送って生成を頼む。
  *
- * 完成を待たずに返る。以後の進み方は generationState を購読して見る。
+ * 完成を待たずに返る。選択した各写真の進み方は generationState を購読して見る。
  */
-export async function startGeneration(file: File): Promise<void> {
-  if (generationState.get().phase === 'waiting') return;
+export async function startGeneration(files: File[]): Promise<void> {
+  const jobs = files.map<GenerationJob>((file) => ({
+    id: crypto.randomUUID(),
+    jobId: null,
+    fileName: file.name,
+    phase: 'uploading',
+    startedAt: null,
+    error: null,
+  }));
+  if (jobs.length === 0) return;
 
-  setState({ phase: 'uploading', error: null, jobId: null, startedAt: null });
+  setState({ jobs: [...generationState.get().jobs, ...jobs] });
   try {
-    // お金がかかる操作なので、本登録が要るならここで求める（いまは素通り）
     await ensureRegistered();
+  } catch (error) {
+    for (const job of jobs) updateJob(job.id, { phase: 'failed', error: toMessage(error) });
+    return;
+  }
 
+  await Promise.all(jobs.map((job, index) => submit(job.id, files[index])));
+}
+
+async function submit(id: string, file: File): Promise<void> {
+  try {
     const image = await shrinkForUpload(file);
     const jobId = await createJob(image);
-
-    setState({ phase: 'waiting', jobId, startedAt: Date.now() });
-    void watch(jobId);
+    updateJob(id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
+    void watch(id, jobId);
   } catch (error) {
-    setState({ phase: 'failed', error: toMessage(error), jobId: null, startedAt: null });
+    updateJob(id, { phase: 'failed', error: toMessage(error) });
   }
 }
 
@@ -102,33 +135,42 @@ export async function startGeneration(file: File): Promise<void> {
  * 復帰した時点で完成していれば、そのまま部屋に置かれる。
  */
 export function resumeGeneration(): void {
-  let saved: { jobId?: string; startedAt?: number } | null = null;
+  let saved: Array<{ jobId?: string; fileName?: string; startedAt?: number }> = [];
   try {
-    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+    saved = Array.isArray(value) ? value : [];
   } catch {
-    saved = null;
+    saved = [];
   }
-  if (!saved?.jobId) return;
+  const jobs = saved
+    .filter((job): job is Required<typeof job> => Boolean(job.jobId))
+    .map<GenerationJob>((job) => ({
+      id: crypto.randomUUID(),
+      jobId: job.jobId,
+      fileName: job.fileName || '写真から作成した家具',
+      phase: 'queued',
+      startedAt: job.startedAt ?? Date.now(),
+      error: null,
+    }));
+  if (jobs.length === 0) return;
 
-  setState({ phase: 'waiting', jobId: saved.jobId, startedAt: saved.startedAt ?? Date.now() });
-  void watch(saved.jobId);
+  setState({ jobs: [...generationState.get().jobs, ...jobs] });
+  for (const job of jobs) void watch(job.id, job.jobId!);
 }
 
 /** 完成するまで一定間隔で見に行く */
-async function watch(jobId: string): Promise<void> {
+async function watch(id: string, jobId: string): Promise<void> {
   while (true) {
     // 生成に8分かかるので、細かく叩いても分かることは増えない
     await sleep(POLL_INTERVAL_MS);
 
-    // 別の生成が始まった、または画面側で取り消された場合は降りる
-    const current = generationState.get();
-    if (current.jobId !== jobId) return;
+    const current = generationState.get().jobs.find((job) => job.id === id);
+    if (!current || current.jobId !== jobId) return;
 
     if (Date.now() - (current.startedAt ?? 0) > POLL_TIMEOUT_MS) {
-      setState({
+      updateJob(id, {
         phase: 'failed',
         error: '時間内に終わりませんでした。時間をおいて試してください',
-        jobId: null,
       });
       return;
     }
@@ -140,34 +182,36 @@ async function watch(jobId: string): Promise<void> {
       // 通信が切れただけかもしれないので、続けて見に行く。
       // 認証や権限の問題なら、次も同じように失敗して諦めることになる
       if (error instanceof ApiError && error.status === 404) {
-        setState({ phase: 'failed', error: '生成の記録が見つかりませんでした', jobId: null });
+        updateJob(id, { phase: 'failed', error: '生成の記録が見つかりませんでした' });
         return;
       }
       continue;
     }
 
     if (status.state === 'failed') {
-      setState({
+      updateJob(id, {
         phase: 'failed',
         error: status.error ?? '生成に失敗しました',
-        jobId: null,
       });
       return;
     }
-    if (status.state !== 'succeeded') continue;
+    if (status.state === 'queued' || status.state === 'running') {
+      updateJob(id, { phase: status.state });
+      continue;
+    }
 
-    await place(jobId, status.modelUrl);
+    await place(id, jobId, status.modelUrl);
     return;
   }
 }
 
 /** 完成したモデルを端末に保存してから部屋に置く */
-async function place(jobId: string, modelUrl?: string): Promise<void> {
+async function place(id: string, jobId: string, modelUrl?: string): Promise<void> {
   if (!modelUrl) {
-    setState({ phase: 'failed', error: '完成したモデルの場所が分かりません', jobId: null });
+    updateJob(id, { phase: 'failed', error: '完成したモデルの場所が分かりません' });
     return;
   }
-  setState({ phase: 'placing' });
+  updateJob(id, { phase: 'placing' });
   try {
     // 署名付きURLは1時間で切れる。中身を先に保存してから置く
     const key = await saveModel(jobId, modelUrl);
@@ -181,16 +225,16 @@ async function place(jobId: string, modelUrl?: string): Promise<void> {
       color: PLACEHOLDER_COLOR,
       modelUrl: key,
     });
-    setState({ phase: 'idle', jobId: null, startedAt: null, error: null });
+    removeJob(id);
   } catch (error) {
-    setState({ phase: 'failed', error: toMessage(error), jobId: null });
+    updateJob(id, { phase: 'failed', error: toMessage(error) });
   }
 }
 
-/** 失敗の表示を消す。次の生成を始められる状態に戻す */
-export function dismissError(): void {
-  if (generationState.get().phase !== 'failed') return;
-  setState({ phase: 'idle', error: null });
+/** 指定した失敗表示だけを閉じる。他の作成は続ける。 */
+export function dismissError(id: string): void {
+  const job = generationState.get().jobs.find((item) => item.id === id);
+  if (job?.phase === 'failed') removeJob(id);
 }
 
 function toMessage(error: unknown): string {

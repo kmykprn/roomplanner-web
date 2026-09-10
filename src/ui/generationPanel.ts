@@ -6,7 +6,7 @@
  * ここは進み具合を映すだけで、進行そのものは generation.ts が持っている。
  */
 
-import { pickImage } from '@/platform/picker';
+import { pickImages } from '@/platform/picker';
 import { getUid } from '@/platform/auth';
 import { EXPECTED_DURATION_SECONDS, IS_CONFIGURED } from '@/config/api';
 import { createProgressRing } from '@/ui/progressRing';
@@ -14,6 +14,7 @@ import {
   dismissError,
   generationState,
   startGeneration,
+  type GenerationJob,
   type GenerationState,
 } from '@/core/generation';
 
@@ -23,25 +24,18 @@ export function createGenerationPanel(): HTMLElement {
 
   const status = document.createElement('p');
   status.className = 'hint';
+  status.textContent = `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`;
 
-  // 待っている間だけ出す。8分かかるので、動いていることが目で分かる必要がある
-  const ring = createProgressRing();
-  const progress = document.createElement('div');
-  progress.className = 'progress';
-  progress.append(ring.element, status);
+  const jobs = document.createElement('div');
+  jobs.className = 'generation-jobs';
 
   const startButton = document.createElement('button');
   startButton.className = 'button';
   startButton.textContent = '写真を選んで作る';
   startButton.addEventListener('click', async () => {
-    const file = await pickImage();
-    if (file) void startGeneration(file);
+    const files = await pickImages();
+    if (files.length > 0) void startGeneration(files);
   });
-
-  const retryButton = document.createElement('button');
-  retryButton.className = 'button';
-  retryButton.textContent = 'とじる';
-  retryButton.addEventListener('click', dismissError);
 
   // 限定公開のうちは、この識別子をサーバー側の許可リストに登録してもらう必要がある。
   // 個人情報は含まれない（匿名アカウントなので紐づく情報が無い）。
@@ -67,24 +61,17 @@ export function createGenerationPanel(): HTMLElement {
       render(generationState.get());
     });
 
-  panel.append(progress, startButton, retryButton, identity);
+  panel.append(status, jobs, startButton, identity);
 
   function render(state: GenerationState): void {
-    // 待っている間だけ円を出す。それ以外は説明文だけで足りる
-    ring.setVisible(state.phase === 'waiting');
-    if (state.phase === 'waiting') {
-      const seconds = elapsedSeconds(state.startedAt);
-      ring.update(seconds / EXPECTED_DURATION_SECONDS, remaining(seconds));
-    }
-
-    startButton.hidden = state.phase !== 'idle';
-    // 認証できていないなら押しても必ず失敗する。押せなくしておく
     startButton.disabled = authFailed;
-    retryButton.hidden = state.phase !== 'failed';
-
-    const failed = state.phase === 'failed' || authFailed;
-    status.classList.toggle('is-error', failed);
-    status.textContent = authFailed ? authFailureMessage() : describe(state);
+    status.classList.toggle('is-error', authFailed);
+    status.textContent = authFailed
+      ? authFailureMessage()
+      : state.jobs.length === 0
+        ? `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`
+        : '';
+    jobs.replaceChildren(...state.jobs.map(createJobStatus));
   }
 
   render(generationState.get());
@@ -93,7 +80,9 @@ export function createGenerationPanel(): HTMLElement {
   // 待っている間、状態そのものは変わらないので購読だけでは経過時間が止まる。
   // 8分待たせる画面で数字が動かないと、固まったように見える
   setInterval(() => {
-    if (generationState.get().phase === 'waiting') render(generationState.get());
+    if (generationState.get().jobs.some((job) => job.phase === 'running')) {
+      render(generationState.get());
+    }
   }, 1000);
 
   return panel;
@@ -111,25 +100,57 @@ function authFailureMessage(): string {
     : 'この配信には生成の設定が入っていません（管理者にお伝えください）';
 }
 
-/** いま何が起きているかを 1 行で伝える */
-function describe(state: GenerationState): string {
-  switch (state.phase) {
-    case 'idle':
-      return `家具の写真から3Dモデルを作ります（約${Math.round(EXPECTED_DURATION_SECONDS / 60)}分）`;
+function createJobStatus(job: GenerationJob): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'generation-job';
+
+  const name = document.createElement('p');
+  name.className = 'generation-job__name';
+  name.textContent = job.fileName;
+
+  const message = document.createElement('p');
+  message.className = 'hint';
+  message.textContent = describe(job);
+
+  const content = document.createElement('div');
+  content.className = 'generation-job__content';
+  content.append(name, message);
+
+  if (job.phase === 'running') {
+    const ring = createProgressRing();
+    const seconds = elapsedSeconds(job.startedAt);
+    ring.update(seconds / EXPECTED_DURATION_SECONDS, remaining(seconds));
+    const progress = document.createElement('div');
+    progress.className = 'progress';
+    progress.append(ring.element, content);
+    row.append(progress);
+  } else {
+    row.append(content);
+  }
+
+  if (job.phase === 'failed') {
+    message.classList.add('is-error');
+    const closeButton = document.createElement('button');
+    closeButton.className = 'button';
+    closeButton.textContent = 'とじる';
+    closeButton.addEventListener('click', () => dismissError(job.id));
+    row.append(closeButton);
+  }
+  return row;
+}
+
+function describe(job: GenerationJob): string {
+  switch (job.phase) {
     case 'uploading':
       return '写真を送っています…';
-    case 'waiting': {
-      const seconds = elapsedSeconds(state.startedAt);
-      const over = seconds > EXPECTED_DURATION_SECONDS;
-      // 見込みを超えたら、待ち時間の案内をやめて状況だけ伝える
-      return over
-        ? '思ったより時間がかかっています。この画面を閉じても続きます'
-        : 'モデルを作成中です。この画面を閉じても続きます';
-    }
+    case 'queued':
+      return '作成を受け付けました。開始まで少しお待ちください';
+    case 'running':
+      return '3Dモデルを作成中です';
     case 'placing':
       return 'できあがりました。部屋に置いています…';
     case 'failed':
-      return state.error ?? '生成に失敗しました';
+      return job.error ?? '作成できませんでした';
   }
 }
 
