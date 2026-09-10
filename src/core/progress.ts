@@ -31,8 +31,11 @@ interface Step {
 const STEPS: readonly Step[] = [
   { phase: null, seconds: 25, label: '順番を待っています' },
   { phase: 'preparing', seconds: 15, label: '写真を読み込んでいます' },
-  { phase: 'loading_texture_model', seconds: 185, label: '模様を作る準備をしています' },
-  { phase: 'loading_shape_model', seconds: 78, label: '形を作る準備をしています' },
+  // ここから3つは同じ文言にしてある。利用者から見ればどれも「形ができるのを
+  // 待っている」時間で、読み込みと生成の区別に意味が無いため。
+  // 工程を分けたままにするのは、所要時間が違い、円の進み方が変わるから
+  { phase: 'loading_texture_model', seconds: 185, label: '形を作っています' },
+  { phase: 'loading_shape_model', seconds: 78, label: '形を作っています' },
   { phase: 'generating_shape', seconds: 30, label: '形を作っています' },
   { phase: 'generating_texture', seconds: 169, label: '色と模様をつけています' },
   // 成果物の保存は数秒だが、終わったことに画面が気づくのは次に見に行くとき
