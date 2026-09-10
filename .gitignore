@@ -6,3 +6,7 @@ dist/
 # Capacitor（step 4 以降で追加される）
 ios/
 android/
+
+# 実際の値が入る。.env.example だけを追跡する
+.env
+.env.local

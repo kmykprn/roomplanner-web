@@ -23,11 +23,16 @@ import {
   getAuth,
   onAuthStateChanged,
   signInAnonymously,
+  type Auth,
   type User,
 } from 'firebase/auth';
-import { FIREBASE_CONFIG } from '@/config/api';
+import { FIREBASE_CONFIG, IS_CONFIGURED } from '@/config/api';
 
-const auth = getAuth(initializeApp(FIREBASE_CONFIG));
+// **設定が無いときは初期化しない。**
+// getAuth() は鍵が空だとその場で例外を投げ、モジュールの読み込みごと失敗する。
+// つまり生成機能だけでなく、部屋の表示を含むアプリ全体が起動しなくなる。
+// 生成はアプリの一部でしかないので、設定漏れで全部を巻き添えにしない
+const auth = IS_CONFIGURED ? getAuth(initializeApp(FIREBASE_CONFIG)) : null;
 
 /**
  * 認証が済むまで待つ。
@@ -36,20 +41,30 @@ const auth = getAuth(initializeApp(FIREBASE_CONFIG));
  * 先に signInAnonymously を呼ぶと復元前の状態で新しいアカウントを作ってしまうため、
  * 通知を待ってから、未ログインのときだけ作る。
  */
-const ready: Promise<User> = new Promise((resolve, reject) => {
+const ready: Promise<User> = auth
+  ? watchAuthState(auth)
+  : Promise.reject(new Error('Firebase の設定が入っていません（VITE_FIREBASE_API_KEY）'));
+
+// 掴む人がいないと「未処理の拒否」として警告が出る。
+// 実際の通知は呼び出し側が catch して画面に出すので、ここでは黙らせるだけ
+void ready.catch(() => {});
+
+function watchAuthState(instance: Auth): Promise<User> {
+  return new Promise((resolve, reject) => {
   const stop = onAuthStateChanged(
-    auth,
+    instance,
     (user) => {
       if (user) {
         stop();
         resolve(user);
         return;
       }
-      signInAnonymously(auth).catch(reject);
+      signInAnonymously(instance).catch(reject);
     },
     reject
   );
-});
+  });
+}
 
 /** APIを叩くためのトークン。1時間で失効するので、必要になるたびに取り直す */
 export async function getIdToken(): Promise<string> {

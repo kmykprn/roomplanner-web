@@ -35,6 +35,10 @@ jobs:
       - run: npm run build
         env:
           DEPLOY_BASE: /roomplanner-web/
+          # 秘密ではない（ビルド後のJSに必ず入る）が、リポジトリには置かない。
+          # 理由は src/config/api.ts のコメントを参照。
+          # 未設定でもビルドは通り、生成タブにその旨が出る
+          VITE_FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
 
       - uses: actions/configure-pages@v5
 

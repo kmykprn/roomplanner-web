@@ -8,7 +8,7 @@
 
 import { pickImage } from '@/platform/picker';
 import { getUid } from '@/platform/auth';
-import { EXPECTED_DURATION_SECONDS } from '@/config/api';
+import { EXPECTED_DURATION_SECONDS, IS_CONFIGURED } from '@/config/api';
 import { createProgressRing } from '@/ui/progressRing';
 import {
   dismissError,
@@ -84,9 +84,7 @@ export function createGenerationPanel(): HTMLElement {
 
     const failed = state.phase === 'failed' || authFailed;
     status.classList.toggle('is-error', failed);
-    status.textContent = authFailed
-      ? '認証できませんでした。通信を確かめて開き直してください'
-      : describe(state);
+    status.textContent = authFailed ? authFailureMessage() : describe(state);
   }
 
   render(generationState.get());
@@ -99,6 +97,18 @@ export function createGenerationPanel(): HTMLElement {
   }, 1000);
 
   return panel;
+}
+
+/**
+ * 認証できなかった理由。
+ *
+ * 設定の入れ忘れと、通信や鍵の問題は、利用者がすべきことが違う。
+ * 前者は開き直しても直らないので、そう伝える
+ */
+function authFailureMessage(): string {
+  return IS_CONFIGURED
+    ? '認証できませんでした。通信を確かめて開き直してください'
+    : 'この配信には生成の設定が入っていません（管理者にお伝えください）';
 }
 
 /** いま何が起きているかを 1 行で伝える */
