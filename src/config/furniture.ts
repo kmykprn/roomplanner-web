@@ -46,8 +46,12 @@ export interface PlacedFurniture {
   modelUrl?: string;
   /** 生成した家具の表示名。一覧に無い種類なので自前で持つ */
   name?: string;
-  /** 生成に使った写真の縮小プレビュー。端末の IndexedDB に保存する */
+  /**
+   * 生成に使った写真の縮小プレビュー。端末の IndexedDB に保存する。
+   *
+   * **いまどこにも表示していない。** 家具を消すときに一緒に捨てるために持っている。
+   * 消さずに残しているのは、作った家具の一覧（保管機能）でサムネイルに使う
+   * 予定があるため
+   */
   sourceImageKey?: string;
-  /** 元写真のファイル名。プレビューを読めない場合も識別できるよう残す */
-  sourceImageName?: string;
 }

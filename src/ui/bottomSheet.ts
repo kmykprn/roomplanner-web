@@ -7,7 +7,7 @@
 
 import { FURNITURE_TYPES } from '@/config/furniture';
 import { createGenerationPanel } from '@/ui/generationPanel';
-import { deletePreview, resolvePreview } from '@/platform/previewCache';
+import { deletePreview } from '@/platform/previewCache';
 import {
   appState,
   addFurniture,
@@ -123,23 +123,6 @@ export function createBottomSheet(container: HTMLElement): void {
       hint.textContent = '家具をタップすると選択できます';
       wrapper.appendChild(hint);
       return wrapper;
-    }
-
-    if (selected.sourceImageName) {
-      const source = document.createElement('div');
-      source.className = 'source-preview';
-      const image = document.createElement('img');
-      image.className = 'source-preview__image';
-      image.alt = `${selected.sourceImageName} のプレビュー`;
-      const name = document.createElement('span');
-      name.textContent = selected.sourceImageName;
-      source.append(image, name);
-      if (selected.sourceImageKey) {
-        void resolvePreview(selected.sourceImageKey).then((url) => {
-          if (url) image.src = url;
-        });
-      }
-      wrapper.append(source);
     }
 
     wrapper.append(
