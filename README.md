@@ -161,6 +161,8 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 - [docs/LOGIN_PLAN.md](docs/LOGIN_PLAN.md) — Google ログインの導入手順。
   匿名認証のままではサイトデータを消した時点で uid ごと消えるため、
   保管機能（家具一覧・部屋のサーバー保存）より先に入れる
+- [docs/OPEN_ISSUES.md](docs/OPEN_ISSUES.md) — 分かっているが直していないもの。
+  実機で確かめる必要があるもの、方針が決まっていないものを含む
 
 1. GLB モデルの読み込み（v4 のアセットをそのまま流用）
 2. 窓 / ドア / カーテンなど壁固定オブジェクト
