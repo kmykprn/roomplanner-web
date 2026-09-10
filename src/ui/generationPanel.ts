@@ -170,10 +170,10 @@ function describe(job: GenerationJob): string {
  * いまの工程に入ってから何秒経ったか。
  *
  * 基準はサーバーが返した経過秒を端末の時刻に直したもの（generation.ts が持つ）。
- * まだ工程が分かっていないうちは、受付からの経過をそのまま使う
+ * まだ工程が分かっていないうちは、実行が始まった時刻からの経過で代用する
  */
 function elapsedInPhase(job: GenerationJob): number {
-  const base = job.serverPhaseStartedAt ?? job.startedAt;
+  const base = job.serverPhaseStartedAt ?? job.startedRunningAt;
   if (!base) return 0;
   return Math.max(0, Math.floor((Date.now() - base) / 1000));
 }

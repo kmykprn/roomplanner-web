@@ -13,7 +13,7 @@ import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
 import { saveModel } from '@/platform/modelCache';
 import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCache';
-import { POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from '@/config/api';
+import { POLL_INTERVAL_MS, RUN_TIMEOUT_MS, TOTAL_TIMEOUT_MS } from '@/config/api';
 
 /**
  * 生成した家具の大きさ。
@@ -44,8 +44,15 @@ export interface GenerationJob {
   previewKey: string | null;
   previewUrl: string | null;
   phase: GenerationPhase;
-  /** 開始時刻（epoch ms）。経過時間の表示と、諦める判断に使う */
+  /** 受付時刻（epoch ms）。全体の打ち切り判断に使う */
   startedAt: number | null;
+  /**
+   * 実行が始まった時刻（epoch ms）。待機列に並んでいる間は null。
+   *
+   * **打ち切りをここから測る。** 受付から測ると、待機列が伸びたぶんだけ
+   * 実行時間の見積もりが食われ、サーバーが作れているのに画面が捨ててしまう
+   */
+  startedRunningAt: number | null;
   /**
    * サーバー側の工程。まだ分からないときは null。
    *
@@ -128,6 +135,7 @@ export async function startGeneration(files: File[]): Promise<void> {
     previewUrl: null,
     phase: 'uploading',
     startedAt: null,
+    startedRunningAt: null,
     serverPhase: null,
     serverPhaseStartedAt: null,
     error: null,
@@ -182,6 +190,8 @@ export function resumeGeneration(): void {
       previewUrl: null,
       phase: 'queued',
       startedAt: job.startedAt ?? Date.now(),
+      // 実行中だったかどうかは端末に残していない。復帰後に最初の応答で分かる
+      startedRunningAt: null,
       serverPhase: null,
       serverPhaseStartedAt: null,
       error: null,
@@ -214,7 +224,7 @@ async function watch(id: string, jobId: string): Promise<void> {
     const current = generationState.get().jobs.find((job) => job.id === id);
     if (!current || current.jobId !== jobId) return;
 
-    if (Date.now() - (current.startedAt ?? 0) > POLL_TIMEOUT_MS) {
+    if (isOverdue(current)) {
       updateJob(id, {
         phase: 'failed',
         error: '時間内に終わりませんでした。時間をおいて試してください',
@@ -251,6 +261,22 @@ async function watch(id: string, jobId: string): Promise<void> {
 }
 
 /**
+ * 打ち切ってよいか。
+ *
+ * **実行が始まってからの時間と、受付からの時間を別々に見る。**
+ * サーバーは待機列を持つので、受付から実行開始までにいくらでも間が空きうる。
+ * 受付からの一本で測ると、待った時間のぶんだけ実行ぶんの見積もりが食われ、
+ * **サーバーは作れているのに画面が捨てる**（回数は消費済みなので戻らない）。
+ *
+ * 待機がいつまでも終わらない場合の歯止めとして、受付からの上限も残す。
+ */
+function isOverdue(job: GenerationJob): boolean {
+  const now = Date.now();
+  if (job.startedRunningAt !== null && now - job.startedRunningAt > RUN_TIMEOUT_MS) return true;
+  return now - (job.startedAt ?? 0) > TOTAL_TIMEOUT_MS;
+}
+
+/**
  * サーバーが言ってきた進み具合を覚える。
  *
  * **工程が変わったときだけ基準時刻を更新する。** 毎回入れ直すと、通信にかかった
@@ -263,6 +289,10 @@ function rememberProgress(id: string, status: JobStatus): void {
 
   const patch: Partial<GenerationJob> = {};
   if (status.state === 'queued' || status.state === 'running') patch.phase = status.state;
+  // 実行が始まった瞬間を1度だけ控える。打ち切りの起点になる
+  if (status.state === 'running' && !current.startedRunningAt) {
+    patch.startedRunningAt = Date.now();
+  }
   const serverPhase = status.phase ?? null;
   if (serverPhase !== current.serverPhase) {
     patch.serverPhase = serverPhase;
