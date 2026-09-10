@@ -15,10 +15,15 @@ import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { appState } from '@/core/appState';
+import { persistRoomOnChange, restoreRoom } from '@/core/persistence';
+import { resumeGeneration } from '@/core/generation';
 
 const viewport = document.querySelector<HTMLElement>('#viewport');
 const app = document.querySelector<HTMLElement>('#app');
 if (!viewport || !app) throw new Error('起動に必要な要素が見つかりません');
+
+// シーンを組み立てる前に読み戻す。あとからだと部屋の大きさが二重に反映される
+restoreRoom();
 
 const viewer = createViewer(viewport);
 const { room } = appState.get();
@@ -37,8 +42,18 @@ const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.came
 // 状態が変わったときだけ呼ばれる。毎フレーム差分を取る必要はない
 appState.subscribe((state) => furnitureLayer.sync(state.furniture, state.selectedId));
 
+// subscribe は登録するだけで、その場では呼ばれない。
+// 保存した部屋を読み戻したときは変化が起きないので、ここで一度だけ描く。
+// これが無いと、復元した家具が状態にはあるのに画面に出ない
+furnitureLayer.sync(appState.get().furniture, appState.get().selectedId);
+
 // --- UI ---
 createBottomSheet(app);
+
+// --- 端末に残す ---
+persistRoomOnChange();
+// 前回の生成が終わっていれば、ここで部屋に置かれる
+resumeGeneration();
 
 // --- 毎フレームの処理 ---
 viewer.onFrame(() => {

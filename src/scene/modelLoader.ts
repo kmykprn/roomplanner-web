@@ -28,9 +28,11 @@ export async function loadFurnitureModel(
   url: string,
   fitSize: [number, number, number]
 ): Promise<THREE.Group> {
-  // 配信先によって置き場所が変わる（GitHub Pages はサブパス配下）ため、
-  // ビルド時のベースパスを前に付けて絶対的な位置を決める
-  const resolvedUrl = import.meta.env.BASE_URL + url;
+  // public/ からの相対パスにだけベースパスを付ける。
+  // 生成した家具は Blob から作った URL を渡してくるので、
+  // 前に付けると `/roomplanner-web/blob:...` になって読めなくなる
+  const isAbsolute = /^(https?:|blob:|data:)/.test(url);
+  const resolvedUrl = isAbsolute ? url : import.meta.env.BASE_URL + url;
 
   let entry = cache.get(resolvedUrl);
   if (!entry) {

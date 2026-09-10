@@ -37,4 +37,13 @@ export interface PlacedFurniture {
   rotationY: number; // ラジアン
   size: [number, number, number];
   color: string;
+  /**
+   * 写真から生成したモデルの置き場（`modelCache` のキー）。
+   *
+   * FURNITURE_TYPES は静的な一覧なので、生成した家具はそこに載らない。
+   * この値があるときは種類ではなくこちらを見る。
+   */
+  modelUrl?: string;
+  /** 生成した家具の表示名。一覧に無い種類なので自前で持つ */
+  name?: string;
 }
