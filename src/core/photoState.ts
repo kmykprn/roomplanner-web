@@ -14,17 +14,28 @@ import {
   findFreeSpot,
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
+import { shrinkForDisplay } from '@/core/imageResize';
+
+/**
+ * 背景写真の読み込み具合。
+ *
+ * **成否を状態として持つ。** 画面に出さないと、読み込めなかったときに
+ * 「黒いまま」としか分からず、原因の切り分けができない。
+ */
+export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
 export interface PhotoState extends FurnitureSceneState {
   /** 背景写真の表示用 URL（Blob URL）。未選択なら null */
   backgroundUrl: string | null;
   /** 選んだ写真のファイル名。どれを開いているか分かるように画面に出す */
   backgroundName: string | null;
+  backgroundStatus: BackgroundStatus;
 }
 
 export const photoState = createStore<PhotoState>({
   backgroundUrl: null,
   backgroundName: null,
+  backgroundStatus: 'idle',
   furniture: [],
   selectedId: null,
 });
@@ -38,18 +49,54 @@ export const photoScene = createFurnitureScene(photoState, {
 });
 
 /**
- * 背景の写真を差し替える。null を渡すと外す。
+ * 背景の写真を差し替える。
  *
- * **前の Blob URL を必ず解放する。** Blob URL はドキュメントが生きている限り
- * 元の写真をメモリに固定するので、選び直すたびに1枚ぶんが居座り続ける
- * （写真は数MBある）。
+ * **表示できることを確かめてから差し替える。** URL を作った時点では、その画像を
+ * ブラウザが描けるかどうかは分からない（対応していない形式、壊れたファイル、
+ * 端末の上限を超える大きさ）。確かめずに背景へ入れると、黙って黒いままになる。
  */
-export function setBackground(file: File | null): void {
+export async function setBackground(file: File): Promise<void> {
+  photoState.set({ backgroundStatus: 'loading', backgroundName: file.name });
+
+  let url: string | null = null;
+  try {
+    // 原寸のままだと Safari が描かないことがあるので、表示用に縮めてから渡す
+    url = URL.createObjectURL(await shrinkForDisplay(file));
+    await decodeImage(url);
+  } catch {
+    if (url) URL.revokeObjectURL(url);
+    photoState.set({ backgroundStatus: 'failed' });
+    return;
+  }
+
+  replaceBackgroundUrl(url);
+  photoState.set({ backgroundStatus: 'ready' });
+}
+
+/** 背景の写真を外す */
+export function clearBackground(): void {
+  replaceBackgroundUrl(null);
+  photoState.set({ backgroundName: null, backgroundStatus: 'idle' });
+}
+
+/**
+ * 背景の URL を差し替え、前の URL を解放する。
+ *
+ * **解放しないと、選び直すたびに写真1枚ぶん（数MB）がメモリに居座り続ける。**
+ * Blob URL はドキュメントが生きている限り元のデータを固定するため。
+ */
+function replaceBackgroundUrl(url: string | null): void {
   const previous = photoState.get().backgroundUrl;
   if (previous) URL.revokeObjectURL(previous);
+  photoState.set({ backgroundUrl: url });
+}
 
-  photoState.set({
-    backgroundUrl: file ? URL.createObjectURL(file) : null,
-    backgroundName: file ? file.name : null,
+/** 実際に画像として読めるところまで確かめる。読めなければ例外になる */
+function decodeImage(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('画像として読み込めませんでした'));
+    image.src = url;
   });
 }
