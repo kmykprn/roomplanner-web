@@ -8,9 +8,10 @@
  * 写真モードには背景の選択がある。設置と操作は両方にある。
  */
 
-import { FURNITURE_TYPES } from '@/config/furniture';
+import { FURNITURE_TYPES, type PlacedFurniture } from '@/config/furniture';
 import { createGenerationPanel } from '@/ui/generationPanel';
 import { createPhotoPanel } from '@/ui/photoPanel';
+import { createRepeatButton } from '@/ui/repeatButton';
 import { deletePreview } from '@/platform/previewCache';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
@@ -31,6 +32,14 @@ const PHOTO_TABS: TabId[] = ['background', 'add', 'manage'];
 
 /** 1 回のボタン操作で家具を回す角度 */
 const ROTATION_STEP = Math.PI / 12; // 15 度
+
+/** 1 回のボタン操作で家具を大きくする比。掛け算なので、小さいときも大きいときも同じ手応え */
+const SIZE_STEP_RATIO = 1.1;
+/** 大きさの範囲（いちばん長い辺、メートル）。行き過ぎて見失わないように止める */
+const SIZE_LIMITS = { min: 0.1, max: 5 };
+
+/** 1 回のボタン操作で家具を上下させる量（メートル） */
+const HEIGHT_STEP = 0.05;
 
 export function createBottomSheet(container: HTMLElement): void {
   let activeTab: TabId = 'add';
@@ -122,10 +131,20 @@ export function createBottomSheet(container: HTMLElement): void {
     return grid;
   }
 
+  /**
+   * いま出している「操作」タブの行。
+   *
+   * **状態が変わるたびに作り直さない。** 押しっぱなしのボタンが指の下で
+   * 作り替えられると、離す合図がボタンに届かず動き続ける。同じ家具を触っている
+   * 間は値だけを書き替え、別の家具を選んだときだけ作り直す
+   */
+  let manageView: { itemId: string; refresh(item: PlacedFurniture): void } | null = null;
+
   /** 選択中の家具に対する操作 */
   function renderManageTab(): HTMLElement {
     const wrapper = document.createElement('div');
-    wrapper.className = 'row';
+    wrapper.className = 'manage';
+    manageView = null;
 
     const scene = activeScene();
     const { selectedId, furniture } = scene.state();
@@ -139,16 +158,102 @@ export function createBottomSheet(container: HTMLElement): void {
       return wrapper;
     }
 
+    const { id } = selected;
+    const rows = [
+      createManageRow('向き', [
+        ['⟲', '左に回す', () => rotate(id, -ROTATION_STEP)],
+        ['⟳', '右に回す', () => rotate(id, ROTATION_STEP)],
+      ], (item) => formatAngle(item.rotationY)),
+      createManageRow('大きさ', [
+        ['−', '小さくする', () => resize(id, 1 / SIZE_STEP_RATIO)],
+        ['＋', '大きくする', () => resize(id, SIZE_STEP_RATIO)],
+      ], (item) => `幅 ${item.size[0].toFixed(2)} m`),
+      createManageRow('高さ', [
+        ['↓', '下げる', () => lift(id, -HEIGHT_STEP)],
+        ['↑', '上げる', () => lift(id, HEIGHT_STEP)],
+      ], (item) => formatHeight(item.position[1])),
+    ];
+
     wrapper.append(
-      createButton('⟲ 左に回す', () => rotate(selected.id, -ROTATION_STEP)),
-      createButton('⟳ 右に回す', () => rotate(selected.id, ROTATION_STEP)),
+      ...rows.map((row) => row.element),
       createButton('削除', () => {
         if (selected.sourceImageKey) void deletePreview(selected.sourceImageKey);
-        scene.remove(selected.id);
-      }, 'is-danger')
+        scene.remove(id);
+      }, 'is-danger manage__delete')
     );
 
+    manageView = {
+      itemId: id,
+      refresh: (item) => rows.forEach((row) => row.refresh(item)),
+    };
+    manageView.refresh(selected);
     return wrapper;
+  }
+
+  /**
+   * 「見出し・減らす・増やす・いまの値」の1行。
+   * ボタンは押しっぱなしで動き続ける。値は refresh で書き替える
+   */
+  function createManageRow(
+    label: string,
+    buttons: Array<[mark: string, description: string, act: () => void]>,
+    format: (item: PlacedFurniture) => string
+  ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
+    const element = document.createElement('div');
+    element.className = 'manage__row';
+
+    const heading = document.createElement('span');
+    heading.className = 'manage__label';
+    heading.textContent = label;
+
+    const value = document.createElement('span');
+    value.className = 'manage__value';
+
+    element.append(
+      heading,
+      ...buttons.map(([mark, description, act]) =>
+        createRepeatButton(mark, `${label}を${description}`, act)
+      ),
+      value
+    );
+    return {
+      element,
+      refresh: (item) => {
+        value.textContent = format(item);
+      },
+    };
+  }
+
+  /**
+   * 家具の大きさを変える。3辺そろえて掛けるので形は変わらない。
+   *
+   * 部屋モードでは大きくした結果が壁を突き抜けることがあるので、位置を丸め直す
+   */
+  function resize(id: string, ratio: number): void {
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
+    if (!item) return;
+
+    const longest = Math.max(...item.size);
+    if (longest * ratio < SIZE_LIMITS.min || longest * ratio > SIZE_LIMITS.max) return;
+
+    const size = item.size.map((edge) => edge * ratio) as [number, number, number];
+    scene.update(id, {
+      size,
+      position: scene.constrain(item.position, size, item.rotationY),
+    });
+  }
+
+  /** 家具を上下に動かす。下限はモードが決める（部屋なら床、写真なら無し） */
+  function lift(id: string, step: number): void {
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
+    if (!item) return;
+
+    const [x, y, z] = item.position;
+    scene.update(id, {
+      position: scene.constrain([x, y + step, z], item.size, item.rotationY),
+    });
   }
 
   /**
@@ -170,6 +275,19 @@ export function createBottomSheet(container: HTMLElement): void {
     });
   }
 
+  /** 向き。何周も回したときに数字が読めなくならないよう 0〜359 に畳む */
+  function formatAngle(radians: number): string {
+    const degrees = Math.round((radians * 180) / Math.PI);
+    return `${((degrees % 360) + 360) % 360}°`;
+  }
+
+  /** 床からの高さ。写真モードでは床より下にも行けるので、符号を付けて出す */
+  function formatHeight(y: number): string {
+    const rounded = Math.round(y * 100) / 100;
+    const sign = rounded > 0 ? '+' : rounded < 0 ? '−' : '';
+    return `${sign}${Math.abs(rounded).toFixed(2)} m`;
+  }
+
   function createButton(label: string, onClick: () => void, modifier = ''): HTMLButtonElement {
     const button = document.createElement('button');
     button.className = `button ${modifier}`.trim();
@@ -179,9 +297,17 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   // 選択状態が変わったら「操作」タブの中身を描き直す必要がある。
-  // どちらのモードの家具が変わったかは問わない（表示中のほうだけ描き直せばよい）
+  // どちらのモードの家具が変わったかは問わない（表示中のほうだけ描き直せばよい）。
+  // 同じ家具を触っている間は行を残し、値だけ書き替える（上の manageView を参照）
   const redrawManageTab = (): void => {
-    if (activeTab === 'manage') render();
+    if (activeTab !== 'manage') return;
+    const { selectedId, furniture } = activeScene().state();
+    const shown = manageView && furniture.find((f) => f.id === manageView?.itemId);
+    if (shown && shown.id === selectedId) {
+      manageView?.refresh(shown);
+      return;
+    }
+    render();
   };
   appState.subscribe(redrawManageTab);
   photoState.subscribe(redrawManageTab);

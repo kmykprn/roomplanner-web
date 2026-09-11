@@ -232,6 +232,65 @@ body {
   font-size: 14px;
 }
 
+/* 「操作」タブ。選択中の家具の向き・大きさ・高さを行ごとに並べる */
+.manage {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  align-content: start;
+}
+
+.manage__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.manage__label {
+  flex: 0 0 auto;
+  min-width: 44px;
+  font-size: 14px;
+}
+
+.manage__value {
+  flex: 1;
+  overflow: hidden;
+  color: #7a8388;
+  font-size: 13px;
+  /* 数字が伸び縮みしても位置がずれないようにする */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.manage__delete {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+/* 押しっぱなしで動き続けるボタン。指で押せる大きさを確保する */
+.nudge {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  touch-action: manipulation;
+  /* 押しっぱなしで動かしたときに、文字が選択されるのを防ぐ */
+  user-select: none;
+}
+
+.nudge:active {
+  background: var(--primary);
+  color: #fff;
+}
+
 /* 生成パネル。8分待つ画面なので、状態が一目で分かることを優先する */
 .hint.is-error {
   color: var(--danger);

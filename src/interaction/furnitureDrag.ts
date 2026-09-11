@@ -35,8 +35,10 @@ export function createFurnitureDrag(
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
 
-  // 家具は床の上を滑る。y = 0 の水平面に指の位置を投影して移動先を決める
-  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  // 家具は水平面の上を滑る。指の位置をその面に投影して移動先を決める。
+  // **面の高さは掴んだ家具に合わせる。** 持ち上げてある家具を床の面で追うと、
+  // 指と家具の足元がずれて、狙ったところに置けない
+  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
 
   /**
@@ -101,7 +103,11 @@ export function createFurnitureDrag(
     cameraControls.enabled = false;
 
     const item = target.scene.state().furniture.find((f) => f.id === furnitureId);
-    if (item && raycaster.ray.intersectPlane(floorPlane, hitPoint)) {
+    if (!item) return;
+
+    // 平面は「法線・p + constant = 0」なので、高さ h の面は constant = -h
+    dragPlane.constant = -item.position[1];
+    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
       grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
     }
   }
@@ -114,16 +120,17 @@ export function createFurnitureDrag(
 
     toNdc(event);
     raycaster.setFromCamera(pointerNdc, camera);
-    if (!raycaster.ray.intersectPlane(floorPlane, hitPoint)) return;
+    if (!raycaster.ray.intersectPlane(dragPlane, hitPoint)) return;
 
     const next = hitPoint.add(grabOffset);
     const { scene } = draggingTarget;
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
 
-    // 移動先の丸め方はモードが決める（部屋なら壁の内側、写真なら丸めない）
+    // 高さはドラッグでは変えない（ボタン専用）。移動先の丸め方はモードが決める
+    // （部屋なら壁の内側と床の上、写真なら丸めない）
     scene.update(draggingId, {
-      position: scene.constrain([next.x, 0, next.z], item.size, item.rotationY),
+      position: scene.constrain([next.x, item.position[1], next.z], item.size, item.rotationY),
     });
   }
 
