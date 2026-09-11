@@ -7,7 +7,8 @@
  *   動かした → 指の位置を床平面に投影し、その座標へ家具を動かす
  *   離した   → ほとんど動いていなければ「タップ」とみなして選択を切り替える
  *
- * いずれも 1 本目の指だけを見る。2 本目以降はカメラ操作に渡す。
+ * いずれも 1 本目の指だけを見る。**2 本目の指が触れたら家具からは手を離し**、
+ * 見る操作（カメラ／写真に寄る）に渡す。
  */
 
 import * as THREE from 'three';
@@ -38,6 +39,14 @@ export function createFurnitureDrag(
   const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
 
+  /**
+   * 画面に触れている指。本数だけを見る。
+   *
+   * 2 本になったら家具からは手を離す。これが無いと、寄るつもりのピンチで
+   * 1 本目の指の下にあった家具まで一緒に動いてしまう
+   */
+  const activePointers = new Set<number>();
+
   let draggingId: string | null = null;
   /** 掴んでいる間だけ対象を保持する。途中でモードが変わっても操作が迷子にならない */
   let draggingTarget: DragTarget | null = null;
@@ -54,9 +63,22 @@ export function createFurnitureDrag(
     pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
+  /** 掴んでいるものを放し、カメラ操作を掴む前の状態へ戻す */
+  function releaseDrag(): void {
+    if (!draggingId) return;
+    draggingId = null;
+    draggingTarget = null;
+    cameraControls.enabled = cameraWasEnabled;
+  }
+
   function onPointerDown(event: PointerEvent): void {
-    // 2 本指以降はカメラ操作なので、家具の掴みは 1 本目だけ受け付ける
-    if (!event.isPrimary) return;
+    activePointers.add(event.pointerId);
+
+    // 2 本目が触れた時点で見る操作に渡す。掴んでいたものはここで放す
+    if (activePointers.size > 1) {
+      releaseDrag();
+      return;
+    }
 
     pressPosition = { x: event.clientX, y: event.clientY };
     toNdc(event);
@@ -86,8 +108,7 @@ export function createFurnitureDrag(
 
   function onPointerMove(event: PointerEvent): void {
     // 家具を動かすのは 1 本目の指だけ。
-    // これがないと、家具を掴んだまま 2 本目の指を置いたとき、
-    // カメラ操作のつもりの動きで家具のほうが動いてしまう
+    // 掴んだ時点で 2 本目が来れば上で放しているが、そもそも 2 本目の動きは見ない
     if (!event.isPrimary) return;
     if (!draggingId || !draggingTarget) return;
 
@@ -107,6 +128,9 @@ export function createFurnitureDrag(
   }
 
   function onPointerUp(event: PointerEvent): void {
+    // 2 本目が触れていたなら、それは見る操作だった。選択は切り替えない
+    const wasOnlyFinger = activePointers.size === 1;
+    activePointers.delete(event.pointerId);
     if (!event.isPrimary) return;
 
     const movedDistance = Math.hypot(
@@ -114,16 +138,14 @@ export function createFurnitureDrag(
       event.clientY - pressPosition.y
     );
 
-    if (movedDistance < TAP_THRESHOLD_PX) {
+    if (wasOnlyFinger && movedDistance < TAP_THRESHOLD_PX) {
       // 家具の上ならその家具を選択、何もない場所なら選択解除
       const scene = draggingTarget?.scene ?? resolveTarget().scene;
       const { selectedId } = scene.state();
       scene.select(draggingId === selectedId ? null : draggingId);
     }
 
-    draggingId = null;
-    draggingTarget = null;
-    cameraControls.enabled = cameraWasEnabled;
+    releaseDrag();
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);

@@ -96,16 +96,26 @@ body {
   touch-action: none; /* ブラウザ既定のスクロール／ズームを止め、自前のジェスチャに回す */
 }
 
-/*
- * 写真モードの背景。写真は CSS で敷き、その上に透明のキャンバスを重ねる。
- * contain にするのは写真の全体を見せるため。余白は黒にして、
- * 写真の外側であることが分かるようにする
- */
+/* 写真モードの余白。写真の外側であることが分かるように黒くする */
 .viewport--photo {
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
   background-color: #1b1d1e;
+}
+
+/*
+ * 写真を敷く層。その上に透明のキャンバスを重ねる。
+ * 大きさと位置は viewer.ts がキャンバスと揃えて入れるので、ここでは指定しない。
+ *
+ * 寄ったときは background-size / background-position を書き替えて引き伸ばす。
+ * 背景は要素の箱で切り取られるので、はみ出した分はキャンバスの外に出ない
+ */
+.viewport__photo {
+  display: none;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.viewport--photo .viewport__photo {
+  display: block;
 }
 
 .viewport canvas {
