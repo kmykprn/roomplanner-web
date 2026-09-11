@@ -356,6 +356,13 @@ body {
   gap: 8px;
 }
 
+/* 位置の表示は「奥 1.2m / 横 0.3m」と長くなる。行から溢れさせない */
+.align__row .align__value {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .align__label {
   flex: 0 0 auto;
   min-width: 40px;
@@ -365,8 +372,8 @@ body {
 /* 押しっぱなしで動き続けるボタン。指で押せる大きさを確保する */
 .align__nudge {
   flex: 0 0 auto;
-  width: 46px;
-  height: 38px;
+  width: 44px;
+  height: 34px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);

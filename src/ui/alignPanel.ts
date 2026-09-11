@@ -7,11 +7,13 @@
  */
 
 import { adjustFloorView, photoState, resetFloorView } from '@/core/photoState';
-import { CELL_METERS, STEPS, type FloorView } from '@/core/floorView';
+import { CELL_METERS, forwardOnFloor, STEPS, type FloorView } from '@/core/floorView';
 
-const GUIDE = `方眼が床に乗って見えるまで動かしてください（1マス ${CELL_METERS * 100}cm）`;
+const GUIDE = `方眼が床に乗って見えるまで動かしてください（細い線 ${CELL_METERS * 100}cm / 太い線 2m）`;
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
-const GESTURE_HINT = '写真の上を指でも動かせます。上下＝傾き / 左右＝向き / 2本指＝大きさ・水平';
+const GESTURE_HINT =
+  '写真の上を1本指でなぞると、方眼をつかんで動かせます（2本指＝大きさ・水平）。' +
+  '大きさは、太い線1つぶんがソファの幅くらいになるのが目安';
 
 /** 押しっぱなしで動き出すまでの待ち時間と、その後の間隔（ミリ秒） */
 const REPEAT_DELAY_MS = 350;
@@ -19,46 +21,84 @@ const REPEAT_INTERVAL_MS = 70;
 
 /** 各行の作り。ボタンの向きと、1回ぶんの動かし方をまとめて持つ */
 const ROWS: Array<{
-  key: keyof FloorView;
   label: string;
   /** 減らす側・増やす側のボタンに出す文字 */
   marks: [string, string];
-  /** 1回ぶん動かしたあとの値 */
-  step: (view: FloorView, direction: -1 | 1) => number;
+  /** ボタンに読ませる説明。文字だけでは向きが分からないため */
+  directions: [string, string];
+  /** 1回ぶん動かしたあとの値。位置のように2つ同時に変わるものもある */
+  step: (view: FloorView, direction: -1 | 1) => Partial<FloorView>;
   /** 画面に出す値 */
   format: (view: FloorView) => string;
 }> = [
   {
-    key: 'pitch',
+    label: '位置',
+    marks: ['↓', '↑'],
+    directions: ['手前へ', '奥へ'],
+    /**
+     * 方眼を、画面の奥⇄手前へ滑らせる。
+     *
+     * 向きを変えると「奥」の指す方角も変わるので、そのときの向きから出す。
+     * 左右へ動かすのは1本指のドラッグのほうが速いので、ボタンには置かない
+     */
+    step: (view, direction) => {
+      const [forwardX, forwardZ] = forwardOnFloor(view);
+      return {
+        offsetX: view.offsetX + forwardX * STEPS.offset * direction,
+        offsetZ: view.offsetZ + forwardZ * STEPS.offset * direction,
+      };
+    },
+    format: (view) => describeOffset(view),
+  },
+  {
     label: '傾き',
     marks: ['▽', '△'],
-    step: (view, direction) => view.pitch + STEPS.pitch * direction,
+    directions: ['寝かせる', '起こす'],
+    step: (view, direction) => ({ pitch: view.pitch + STEPS.pitch * direction }),
     format: (view) => `${Math.round(view.pitch)}°`,
   },
   {
-    key: 'yaw',
     label: '向き',
     marks: ['↺', '↻'],
-    step: (view, direction) => view.yaw + STEPS.yaw * direction,
+    directions: ['左へ回す', '右へ回す'],
+    step: (view, direction) => ({ yaw: view.yaw + STEPS.yaw * direction }),
     format: (view) => `${Math.round(view.yaw)}°`,
   },
   {
-    key: 'height',
-    label: '高さ',
+    label: '大きさ',
     marks: ['−', '＋'],
-    // 高さは掛け算で動かす。低いときも高いときも同じ手応えになる
-    step: (view, direction) =>
-      direction > 0 ? view.height * STEPS.heightRatio : view.height / STEPS.heightRatio,
-    format: (view) => `${view.height.toFixed(2)} m`,
+    directions: ['小さく', '大きく'],
+    /**
+     * **＋でマス目が大きくなる向きにする。**
+     *
+     * 中身は撮った人の目の高さで、上げるほどマス目は小さく見える。
+     * 数値の増減をそのままボタンに割り当てると、＋を押してマス目が縮む。
+     * 使う人が見ているのはマス目なので、見えるとおりの向きに合わせる
+     */
+    step: (view, direction) => ({
+      height: direction > 0 ? view.height / STEPS.heightRatio : view.height * STEPS.heightRatio,
+    }),
+    format: (view) => `目線 ${view.height.toFixed(2)}m`,
   },
   {
-    key: 'roll',
     label: '水平',
     marks: ['↺', '↻'],
-    step: (view, direction) => view.roll + STEPS.roll * direction,
+    directions: ['左へ傾ける', '右へ傾ける'],
+    step: (view, direction) => ({ roll: view.roll + STEPS.roll * direction }),
     format: (view) => `${view.roll.toFixed(1)}°`,
   },
 ];
+
+/** 方眼をどれだけ動かしたか。向きが変わっても「奥／手前」で読めるようにする */
+function describeOffset(view: FloorView): string {
+  const [forwardX, forwardZ] = forwardOnFloor(view);
+  const forward = view.offsetX * forwardX + view.offsetZ * forwardZ;
+  const sideways = view.offsetX * forwardZ - view.offsetZ * forwardX;
+
+  if (Math.hypot(forward, sideways) < 0.05) return '中央';
+  const depth = `${forward >= 0 ? '奥' : '手前'} ${Math.abs(forward).toFixed(1)}m`;
+  return Math.abs(sideways) < 0.05 ? depth : `${depth} / 横 ${Math.abs(sideways).toFixed(1)}m`;
+}
 
 export function createAlignPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -79,8 +119,8 @@ export function createAlignPanel(): HTMLElement {
     value.className = 'align__value';
 
     const buttons = ([-1, 1] as const).map((direction, index) =>
-      createRepeatButton(row.marks[index], `${row.label}を${direction < 0 ? '戻す' : '進める'}`, () =>
-        adjustFloorView({ [row.key]: row.step(photoState.get().floorView, direction) })
+      createRepeatButton(row.marks[index], `${row.label}を${row.directions[index]}`, () =>
+        adjustFloorView(row.step(photoState.get().floorView, direction))
       )
     );
 

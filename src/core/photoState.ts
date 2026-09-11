@@ -18,7 +18,7 @@ import { shrinkForDisplay } from '@/core/imageResize';
 import {
   clampFloorView,
   DEFAULT_FLOOR_VIEW,
-  floorPointUnderCenter,
+  floorGridCenter,
   type FloorView,
 } from '@/core/floorView';
 
@@ -59,10 +59,10 @@ export const photoState = createStore<PhotoState>({
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
   // カメラは原点の真上にあるので、原点に置くと足元（画面の外）に出てしまう。
-  // いま見ている場所を中心にして空きを探す
+  // 方眼を敷いた場所を中心にして空きを探す（置いた家具が方眼の上に出る）
   placementFor: (size) =>
     findFreeSpot(photoState.get().furniture, size, {
-      center: floorPointUnderCenter(photoState.get().floorView),
+      center: floorGridCenter(photoState.get().floorView),
     }),
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい

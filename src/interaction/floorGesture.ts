@@ -1,30 +1,43 @@
 /**
- * 写真の上で、指で床を動かす。
+ * 写真の上で、指で方眼を動かす。
  *
- *   1本指で上下 … 傾き（床の寝かせ具合）
- *   1本指で左右 … 向き（マス目の向き）
- *   2本指ピンチ … 高さ（マス目の大きさ）
- *   2本指ひねり … 水平（写真の傾き）
+ *   1本指ドラッグ … 方眼そのものを床の上で滑らせる（つかんで動かす）
+ *   2本指ピンチ   … 1マスの見かけの大きさ
+ *   2本指ひねり   … 水平（写真の傾き）
  *
- * ボタン（`ui/alignPanel.ts`）と同じ値を触る。**どちらが使いやすいかを決めるため、
- * 両方を同時に使えるようにしてある。**
+ * **傾きと向きはボタン側にある**（`ui/alignPanel.ts`）。1本指は「方眼をつかんで
+ * 動かす」に使うほうが直接的なので、そちらへ譲っている。
  *
  * 動くのは「床」タブを開いている間だけ。開いていない間は家具のドラッグに譲る。
  */
 
+import * as THREE from 'three';
 import { adjustFloorView, photoState } from '@/core/photoState';
 
-/** 指1ピクセルあたりの変化量（度）。画面の高さぶん動かすと一周しない程度に抑える */
-const PITCH_PER_PIXEL = 0.15;
-const YAW_PER_PIXEL = 0.3;
-
-export function createFloorGesture(canvas: HTMLCanvasElement): () => void {
+export function createFloorGesture(
+  canvas: HTMLCanvasElement,
+  camera: THREE.PerspectiveCamera
+): () => void {
   /** 画面に触れている指。2本指の判定に使う */
   const pointers = new Map<number, { x: number; y: number }>();
 
-  /** 2本指の前回の間隔と角度。1フレーム目は基準を取るだけ */
+  /** 2本指の前回の間隔と角度。1本目の move では基準を取るだけ */
   let previousSpread = 0;
-  let previousAngle = 0;
+  let previousAngle: number | null = null;
+
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const hitPoint = new THREE.Vector3();
+
+  /** 指が触れている床の位置。地平線より上を指していれば null */
+  function floorPointAt(x: number, y: number): THREE.Vector3 | null {
+    const bounds = canvas.getBoundingClientRect();
+    pointerNdc.x = ((x - bounds.left) / bounds.width) * 2 - 1;
+    pointerNdc.y = -((y - bounds.top) / bounds.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNdc, camera);
+    return raycaster.ray.intersectPlane(floorPlane, hitPoint) ? hitPoint : null;
+  }
 
   function isActive(): boolean {
     return photoState.get().isAligning;
@@ -36,19 +49,18 @@ export function createFloorGesture(canvas: HTMLCanvasElement): () => void {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     // 指の本数が変わったら、ピンチとひねりの基準を取り直す
     previousSpread = 0;
-    previousAngle = 0;
+    previousAngle = null;
   }
 
   function onPointerMove(event: PointerEvent): void {
     const previous = pointers.get(event.pointerId);
     if (!previous || !isActive()) return;
 
-    const deltaX = event.clientX - previous.x;
-    const deltaY = event.clientY - previous.y;
+    const from = { x: previous.x, y: previous.y };
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (pointers.size === 1) {
-      tilt(deltaX, deltaY);
+      slide(from, { x: event.clientX, y: event.clientY });
     } else if (pointers.size === 2) {
       pinchAndTwist();
     }
@@ -57,22 +69,29 @@ export function createFloorGesture(canvas: HTMLCanvasElement): () => void {
   function onPointerUp(event: PointerEvent): void {
     pointers.delete(event.pointerId);
     previousSpread = 0;
-    previousAngle = 0;
+    previousAngle = null;
   }
 
   /**
-   * 1本指。上へ動かすと見下ろす角度が増え、床が寝て見える。
-   * 「床の奥をつまんで持ち上げる」向きに合わせてある
+   * 1本指。指の下の床が動いたぶんだけ方眼を動かす。
+   *
+   * 画面の移動量をそのまま使わず**床の上で測る**のは、手前と奥で
+   * 1ピクセルの意味が変わるため。指につかんだ場所がついてくる動きになる
    */
-  function tilt(deltaX: number, deltaY: number): void {
+  function slide(from: { x: number; y: number }, to: { x: number; y: number }): void {
+    const before = floorPointAt(from.x, from.y)?.clone();
+    if (!before) return;
+    const after = floorPointAt(to.x, to.y);
+    if (!after) return;
+
     const { floorView } = photoState.get();
     adjustFloorView({
-      pitch: floorView.pitch - deltaY * PITCH_PER_PIXEL,
-      yaw: floorView.yaw + deltaX * YAW_PER_PIXEL,
+      offsetX: floorView.offsetX + (after.x - before.x),
+      offsetZ: floorView.offsetZ + (after.z - before.z),
     });
   }
 
-  /** 2本指。間隔で高さ、角度で水平を変える */
+  /** 2本指。間隔で大きさ、角度で水平を変える */
   function pinchAndTwist(): void {
     const [a, b] = [...pointers.values()];
     const spread = Math.hypot(a.x - b.x, a.y - b.y);
@@ -82,10 +101,10 @@ export function createFloorGesture(canvas: HTMLCanvasElement): () => void {
     const patch: { height?: number; roll?: number } = {};
 
     if (previousSpread > 0 && spread > 0) {
-      // 指を広げるとマス目が大きくなる＝床に近づく＝高さが下がる
+      // 指を広げるとマス目が大きくなる＝床に近づく＝目線が下がる
       patch.height = floorView.height * (previousSpread / spread);
     }
-    if (previousAngle !== 0) {
+    if (previousAngle !== null) {
       let turned = angle - previousAngle;
       // −π と π をまたぐときに一周ぶん飛ぶのを防ぐ
       if (turned > Math.PI) turned -= Math.PI * 2;

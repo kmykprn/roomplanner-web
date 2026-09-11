@@ -4,10 +4,14 @@
  * 「写真がどんなカメラで撮られたか」を割り出すのをやめ、**床（方眼）を直接動かして
  * 写真に合わせる**形にした。使う人が触るのは次の4つだけで、どれも見れば分かるものにしてある。
  *
+ *   位置 … 方眼そのものを床の上で滑らせる。写真の床の上へ持ってくる
  *   傾き … 床の寝かせ具合。奥が持ち上がる／寝る
  *   向き … マス目の向き。フローリングの向きに合わせる
- *   高さ … マス目の大きさ。撮った人の目の高さでもある
+ *   大きさ … 1マスの見かけの大きさ（＝縮尺）。中身は撮った人の目の高さ
  *   水平 … 写真が傾いているときに直す
+ *
+ * **位置と大きさは別のもの。** 位置は方眼が動き、大きさは方眼は動かずに
+ * 1マスの見かけだけが変わる。ここを混ぜると操作が通じない（実機で指摘された）。
  *
  * ## 画角を出していない理由
  *
@@ -22,10 +26,18 @@ export interface FloorView {
   pitch: number;
   /** 床の向き（度） */
   yaw: number;
-  /** 撮った人の目の高さ（m）。マス目の大きさに効く */
+  /** 撮った人の目の高さ（m）。1マスの見かけの大きさに効く */
   height: number;
   /** 写真の傾き（度）。水平が出ていない写真を直す */
   roll: number;
+  /**
+   * 方眼を床の上で滑らせた量（メートル）。画面の中央からのずれ。
+   *
+   * **中央からの相対で持つ。** 床の上の絶対位置で持つと、傾きを変えたときに
+   * カメラの向きだけが変わって方眼が画面の外へ出ていってしまう
+   */
+  offsetX: number;
+  offsetZ: number;
 }
 
 /** 方眼1マスの大きさ（メートル）。既知の物（ドア幅80cm・畳）と比べやすい大きさ */
@@ -43,6 +55,8 @@ export const DEFAULT_FLOOR_VIEW: FloorView = {
   yaw: 0,
   height: 1.5,
   roll: 0,
+  offsetX: 0,
+  offsetZ: 0,
 };
 
 /**
@@ -55,6 +69,8 @@ const LIMITS = {
   pitch: { min: 3, max: 85 },
   height: { min: 0.3, max: 5 },
   roll: { min: -25, max: 25 },
+  // 行き過ぎて戻れなくならないよう、部屋いくつぶんかで止める
+  offset: { min: -20, max: 20 },
 };
 
 /** ボタン1回ぶんの変化量。指で動かすより細かく詰められるようにする */
@@ -62,8 +78,13 @@ export const STEPS = {
   pitch: 1,
   yaw: 1,
   roll: 0.5,
-  /** 高さは掛け算で動かす。低いときも高いときも同じ手応えになる */
-  heightRatio: 1.05,
+  /** 位置はボタン1回で 30cm 動かす。1マス（50cm）より細かく置ける */
+  offset: 0.3,
+  /**
+   * 大きさは掛け算で動かす。低いときも高いときも同じ手応えになる。
+   * 1.05 では1回ぶんの変化が見えず「動いていない」と受け取られたので広げた
+   */
+  heightRatio: 1.1,
 };
 
 /** 範囲に収める。向きは一周させる */
@@ -73,7 +94,30 @@ export function clampFloorView(view: FloorView): FloorView {
     yaw: ((view.yaw % 360) + 360) % 360,
     height: clamp(view.height, LIMITS.height),
     roll: clamp(view.roll, LIMITS.roll),
+    offsetX: clamp(view.offsetX, LIMITS.offset),
+    offsetZ: clamp(view.offsetZ, LIMITS.offset),
   };
+}
+
+/**
+ * 方眼を敷く場所。画面の中央がぶつかる床の位置から、動かしたぶんだけずらす。
+ *
+ * 新しい家具もここに出す。方眼の上に出ないと、置いた家具が床に乗っているか
+ * 確かめられない
+ */
+export function floorGridCenter(view: FloorView): [number, number, number] {
+  const center = floorPointUnderCenter(view);
+  return [center[0] + view.offsetX, 0, center[2] + view.offsetZ];
+}
+
+/**
+ * 画面の奥へ向かう、床の上の向き。
+ *
+ * 位置のボタン（手前／奥）と、いま何メートルずれているかの表示に使う
+ */
+export function forwardOnFloor(view: FloorView): [number, number] {
+  const yaw = (view.yaw * Math.PI) / 180;
+  return [-Math.sin(yaw), -Math.cos(yaw)];
 }
 
 /**

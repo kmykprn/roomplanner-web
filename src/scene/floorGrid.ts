@@ -11,6 +11,18 @@
  * 見えない**。実際に「画面全体が方眼で埋まって判断できない」状態になった。
  * 手前を濃く、遠くを薄くすると、床に敷いてあるように見え、比べる相手（床の線）も
  * 隠れなくなる。
+ *
+ * ## 太い線と細い線を混ぜる理由
+ *
+ * 同じ太さの線だけだと、マス目が詰まっても「少し細かくなった」以上のことが
+ * 読み取れず、**大きさを変えても何も起きていないように見える**（実機で言われた）。
+ * 2mごとに太い線を入れると目盛りの刻みが見え、詰まり具合が一目で分かる。
+ * 2mは「ソファ1つぶん」なので、大きさの見当をつける手がかりにもなる。
+ *
+ * ## 線の下に暗い縁を敷く理由
+ *
+ * 床の色は写真によって違う。明るいフローリングの上に細い青線を置くと沈んで
+ * 見えなくなる。線の下に一回り太い暗色を敷くと、明るい床でも暗い床でも読める。
  */
 
 import * as THREE from 'three';
@@ -23,10 +35,20 @@ import { THEME } from '@/config/theme';
  * 見ている場所を中心に敷くので、手前も奥も覆える広さが要る。
  * 狭いと、床を寝かせた（俯角が小さい）ときに手前が空いてしまう
  */
-const EXTENT = 20;
+const EXTENT = 16;
 
-/** 敷き紙の解像度。線がにじまない程度にとる */
-const TEXTURE_SIZE = 1024;
+/** 敷き紙の解像度。1メモリが約0.8cmになる */
+const TEXTURE_SIZE = 2048;
+
+/** 太い線を入れる間隔（メートル）。ソファ1つぶんで、大きさの見当がつく */
+const MAJOR_METERS = 2;
+
+/** 線の太さ（テクスチャのメモリ数）と、下に敷く縁の太さ */
+const LINE_WIDTH = { minor: 2, major: 5 };
+const HALO_EXTRA = 3;
+
+/** 線の下に敷く暗い縁。明るい床でも線が沈まないようにする */
+const HALO_COLOR = 'rgba(18,28,33,0.5)';
 
 export interface FloorGrid {
   object: THREE.Object3D;
@@ -72,25 +94,36 @@ function drawGrid(): HTMLCanvasElement {
 
   const cells = EXTENT / CELL_METERS;
   const pitch = TEXTURE_SIZE / cells;
+  const majorEvery = MAJOR_METERS / CELL_METERS;
 
-  context.strokeStyle = THEME.primary;
-  // 手前で見たときに太く見えすぎない太さ（1メモリが約2cmに相当する）
-  context.lineWidth = 1.5;
-  for (let i = 0; i <= cells; i++) {
-    const position = Math.round(i * pitch) + 0.5;
-    context.beginPath();
-    context.moveTo(position, 0);
-    context.lineTo(position, TEXTURE_SIZE);
-    context.moveTo(0, position);
-    context.lineTo(TEXTURE_SIZE, position);
-    context.stroke();
+  context.lineCap = 'butt';
+
+  // 縁を先に全部敷いてから線を描く。1本ずつ重ねると、隣の線が縁で消される
+  for (const pass of ['halo', 'line'] as const) {
+    for (const weight of ['minor', 'major'] as const) {
+      context.strokeStyle = pass === 'halo' ? HALO_COLOR : THEME.primary;
+      context.lineWidth = LINE_WIDTH[weight] + (pass === 'halo' ? HALO_EXTRA : 0);
+
+      context.beginPath();
+      for (let i = 0; i <= cells; i++) {
+        const isMajor = i % majorEvery === 0;
+        if ((weight === 'major') !== isMajor) continue;
+
+        const position = Math.round(i * pitch) + 0.5;
+        context.moveTo(position, 0);
+        context.lineTo(position, TEXTURE_SIZE);
+        context.moveTo(0, position);
+        context.lineTo(TEXTURE_SIZE, position);
+      }
+      context.stroke();
+    }
   }
 
   // 外へ向かって薄くする。destination-in なので、描いた線の濃さがそのまま削られる
   const half = TEXTURE_SIZE / 2;
   const fade = context.createRadialGradient(half, half, 0, half, half, half);
-  fade.addColorStop(0, 'rgba(0,0,0,0.8)');
-  fade.addColorStop(0.65, 'rgba(0,0,0,0.45)');
+  fade.addColorStop(0, 'rgba(0,0,0,1)');
+  fade.addColorStop(0.6, 'rgba(0,0,0,0.7)');
   fade.addColorStop(1, 'rgba(0,0,0,0)');
 
   context.globalCompositeOperation = 'destination-in';

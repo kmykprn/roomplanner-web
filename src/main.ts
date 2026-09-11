@@ -22,7 +22,7 @@ import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createFloorGrid } from '@/scene/floorGrid';
 import { createFloorGesture } from '@/interaction/floorGesture';
-import { floorPointUnderCenter } from '@/core/floorView';
+import { floorGridCenter } from '@/core/floorView';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
@@ -84,7 +84,7 @@ createFurnitureDrag(
 );
 
 // 写真の上で床を動かす操作。「床」タブを開いている間だけ効く
-createFloorGesture(viewer.canvas);
+createFloorGesture(viewer.canvas, viewer.camera);
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 
 // --- 状態とシーンを同期する ---
@@ -145,8 +145,8 @@ function applyPhotoView(): void {
   viewer.setContentAspect(backgroundAspect);
   applyPhotoCamera(viewer.camera, floorView);
 
-  // 方眼はカメラの真下ではなく、いま見ている場所に敷く
-  floorGrid.setCenter(floorPointUnderCenter(floorView));
+  // 方眼はカメラの真下ではなく、いま見ている場所（＋動かしたぶん）に敷く
+  floorGrid.setCenter(floorGridCenter(floorView));
   floorGrid.object.visible = isAligning && backgroundStatus === 'ready';
 }
 
