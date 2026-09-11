@@ -15,6 +15,7 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
+import { clampPhotoView, DEFAULT_PHOTO_VIEW, type PhotoView } from '@/core/photoView';
 
 /**
  * 背景写真の読み込み具合。
@@ -32,6 +33,9 @@ export interface PhotoState extends FurnitureSceneState {
   backgroundStatus: BackgroundStatus;
   /** 背景写真の縦横比（幅 ÷ 高さ）。写真の矩形の中だけに描くために要る */
   backgroundAspect: number | null;
+
+  /** 写真のどこを、どれだけ寄って見ているか。写真と 3D の両方がこれに従う */
+  view: PhotoView;
 }
 
 export const photoState = createStore<PhotoState>({
@@ -39,6 +43,7 @@ export const photoState = createStore<PhotoState>({
   backgroundName: null,
   backgroundStatus: 'idle',
   backgroundAspect: null,
+  view: { ...DEFAULT_PHOTO_VIEW },
   furniture: [],
   selectedId: null,
 });
@@ -80,6 +85,8 @@ export async function setBackground(file: File): Promise<void> {
   photoState.set({
     backgroundStatus: 'ready',
     backgroundAspect: aspect,
+    // 前の写真で寄ったままだと、新しい写真がいきなり拡大された状態で出る
+    view: { ...DEFAULT_PHOTO_VIEW },
   });
 }
 
@@ -91,6 +98,16 @@ export function clearBackground(): void {
     backgroundStatus: 'idle',
     backgroundAspect: null,
   });
+}
+
+/**
+ * 見ている場所を変える。**丸めはここ1箇所に置く。**
+ *
+ * ピンチ（`interaction/photoZoom.ts`）から呼ばれる。写真からはみ出す値が来ても、
+ * ここで枠の中へ戻してから入れる
+ */
+export function setPhotoView(view: PhotoView): void {
+  photoState.set({ view: clampPhotoView(view) });
 }
 
 /**

@@ -9,12 +9,20 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { THEME } from '@/config/theme';
+import { viewOrigin, type PhotoView } from '@/core/photoView';
 
 export interface Viewer {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   canvas: HTMLCanvasElement;
+  /**
+   * 背景の写真を敷く層。**キャンバスとぴったり同じ矩形に置かれる。**
+   *
+   * 入れ物いっぱいに敷くと、寄ったときに写真だけがキャンバスの外へはみ出し、
+   * 3D の描かれない場所に写真が見えてしまう
+   */
+  photoLayer: HTMLElement;
   /**
    * 描画範囲を指定の縦横比に収める。null で画面いっぱいに戻す。
    *
@@ -23,6 +31,14 @@ export interface Viewer {
    * 対応しなくなる。**写真が写っている矩形の中だけに描く。**
    */
   setContentAspect(aspect: number | null): void;
+
+  /**
+   * 写真のどこを、どれだけ寄って見るかを決める。null で全体に戻す。
+   *
+   * 写真は背景を引き伸ばし、3D は視錐台を切り取って、**同じ矩形**を出す。
+   * 3D をキャンバスごと引き伸ばさないので、寄っても家具はボケない
+   */
+  setPhotoView(view: PhotoView | null): void;
 
   /** 毎フレーム呼ばれる処理を登録する */
   onFrame(callback: () => void): void;
@@ -43,7 +59,10 @@ export function createViewer(container: HTMLElement): Viewer {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
 
-  container.appendChild(renderer.domElement);
+  // 写真はキャンバスの下に敷く。キャンバスは alpha: true なので透けて見える
+  const photoLayer = document.createElement('div');
+  photoLayer.className = 'viewport__photo';
+  container.append(photoLayer, renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(THEME.background);
@@ -67,6 +86,11 @@ export function createViewer(container: HTMLElement): Viewer {
 
   /** 描画範囲の縦横比。null なら入れ物いっぱいに描く */
   let contentAspect: number | null = null;
+  /** 写真のどこを見ているか。null なら切り取らない（部屋モード） */
+  let photoView: PhotoView | null = null;
+  /** いま描いている大きさ（CSS ピクセル）。写真をずらす量の計算に要る */
+  let drawWidth = 0;
+  let drawHeight = 0;
 
   function resize(): void {
     const width = container.clientWidth;
@@ -74,23 +98,50 @@ export function createViewer(container: HTMLElement): Viewer {
     if (width === 0 || height === 0) return;
 
     // 指定された縦横比に収める（写真と同じ「はみ出さずに全体を入れる」置き方）
-    const drawWidth = contentAspect
-      ? Math.min(width, height * contentAspect)
-      : width;
-    const drawHeight = contentAspect ? drawWidth / contentAspect : height;
+    drawWidth = contentAspect ? Math.min(width, height * contentAspect) : width;
+    drawHeight = contentAspect ? drawWidth / contentAspect : height;
 
     renderer.setSize(drawWidth, drawHeight, false);
 
-    // キャンバスの見た目の大きさと位置。中央に寄せる。
-    // CSS の 100% 指定より、ここで入れる値のほうが優先される
-    const style = renderer.domElement.style;
-    style.width = `${drawWidth}px`;
-    style.height = `${drawHeight}px`;
-    style.marginLeft = `${(width - drawWidth) / 2}px`;
-    style.marginTop = `${(height - drawHeight) / 2}px`;
+    // キャンバスと写真の層を、同じ大きさ・同じ場所に重ねる。
+    // 入れ物の中央に寄せる（CSS の 100% 指定より、ここで入れる値が優先される）
+    for (const element of [renderer.domElement, photoLayer]) {
+      const style = element.style;
+      style.position = 'absolute';
+      style.left = `${(width - drawWidth) / 2}px`;
+      style.top = `${(height - drawHeight) / 2}px`;
+      style.width = `${drawWidth}px`;
+      style.height = `${drawHeight}px`;
+    }
 
     camera.aspect = drawWidth / drawHeight;
-    camera.updateProjectionMatrix();
+    applyPhotoView();
+  }
+
+  /**
+   * 見ている矩形を、写真と 3D の両方へ反映する。
+   *
+   * 写真は引き伸ばした背景をずらし、3D はカメラに同じ割合の切り取りを教える。
+   * **どちらも同じ値から出す。**別々に持つと、寄ったときだけ家具が写真からずれる
+   */
+  function applyPhotoView(): void {
+    if (!photoView) {
+      camera.clearViewOffset(); // updateProjectionMatrix も中で呼ばれる
+      photoLayer.style.backgroundSize = '';
+      photoLayer.style.backgroundPosition = '';
+      return;
+    }
+
+    const { x, y } = viewOrigin(photoView);
+    const visible = 1 / photoView.scale;
+
+    // 全体を 1 × 1 として渡す。割合で持つので、画面の大きさが変わっても効き方は同じ
+    camera.setViewOffset(1, 1, x, y, visible, visible);
+
+    // 縦横の両方を指定する。片方を auto にすると、丸めの分だけ枠に隙間が出る
+    const percent = `${photoView.scale * 100}%`;
+    photoLayer.style.backgroundSize = `${percent} ${percent}`;
+    photoLayer.style.backgroundPosition = `${-x * photoView.scale * drawWidth}px ${-y * photoView.scale * drawHeight}px`;
   }
 
   // コンテナのサイズ変化に追従する（画面回転・アドレスバーの伸縮に対応）
@@ -111,11 +162,17 @@ export function createViewer(container: HTMLElement): Viewer {
     scene,
     camera,
     canvas: renderer.domElement,
+    photoLayer,
     setContentAspect(aspect) {
       // 角をドラッグするたびに呼ばれる。変わっていないなら測り直さない
       if (contentAspect === aspect) return;
       contentAspect = aspect;
       resize();
+    },
+    setPhotoView(view) {
+      photoView = view;
+      // ピンチの間ずっと呼ばれる。入れ物の大きさは変わらないので測り直さない
+      applyPhotoView();
     },
     onFrame(callback) {
       frameCallbacks.push(callback);
@@ -129,6 +186,7 @@ export function createViewer(container: HTMLElement): Viewer {
       pmrem.dispose();
       renderer.dispose();
       renderer.domElement.remove();
+      photoLayer.remove();
     },
   };
 }

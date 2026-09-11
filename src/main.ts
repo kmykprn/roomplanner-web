@@ -20,6 +20,7 @@ import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
+import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
@@ -74,6 +75,13 @@ createFurnitureDrag(
       : { scene: roomScene, layer: roomFurniture },
   cameraControls
 );
+
+// 写真に寄る操作。2本指のときだけ動くので、家具のドラッグとは取り合わない。
+// 写真がまだ無いうちは効かせない（寄る相手が無いのに3Dだけ拡大されると訳が分からない）
+createPhotoZoom(
+  viewer.canvas,
+  () => isPhotoMode() && photoState.get().backgroundStatus === 'ready'
+);
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 
 // --- 状態とシーンを同期する ---
@@ -107,7 +115,9 @@ function applyMode(): void {
   if (photo) {
     applyPhotoView();
   } else {
-    // 写真モードは描画範囲も画角も変えるので、どちらも戻す
+    // 写真モードは描画範囲も画角も切り取りも変えるので、すべて戻す。
+    // 切り取りを残すと、部屋モードの描画まで寄ったままになる
+    viewer.setPhotoView(null);
     viewer.setContentAspect(null);
     viewer.camera.fov = roomFov;
     viewer.camera.updateProjectionMatrix();
@@ -116,7 +126,7 @@ function applyMode(): void {
 
 function applyBackground(): void {
   const { backgroundUrl } = photoState.get();
-  viewport.style.backgroundImage = backgroundUrl ? `url("${backgroundUrl}")` : '';
+  viewer.photoLayer.style.backgroundImage = backgroundUrl ? `url("${backgroundUrl}")` : '';
 }
 
 /**
@@ -128,9 +138,11 @@ function applyBackground(): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
+  const { backgroundAspect, view } = photoState.get();
 
-  viewer.setContentAspect(photoState.get().backgroundAspect);
+  viewer.setContentAspect(backgroundAspect);
   applyPhotoCamera(viewer.camera);
+  viewer.setPhotoView(view);
 }
 
 modeState.subscribe(applyMode);
