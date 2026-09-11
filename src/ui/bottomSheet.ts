@@ -11,17 +11,15 @@
 import { FURNITURE_TYPES } from '@/config/furniture';
 import { createGenerationPanel } from '@/ui/generationPanel';
 import { createPhotoPanel } from '@/ui/photoPanel';
-import { createAlignPanel } from '@/ui/alignPanel';
 import { deletePreview } from '@/platform/previewCache';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
-import { photoState, setAligning } from '@/core/photoState';
+import { photoState } from '@/core/photoState';
 
-type TabId = 'background' | 'align' | 'add' | 'generate' | 'manage';
+type TabId = 'background' | 'add' | 'generate' | 'manage';
 
 const TABS: Record<TabId, string> = {
   background: '背景',
-  align: '床',
   add: '設置',
   generate: '写真から',
   manage: '操作',
@@ -29,7 +27,7 @@ const TABS: Record<TabId, string> = {
 
 /** モードごとのタブの並び */
 const ROOM_TABS: TabId[] = ['add', 'generate', 'manage'];
-const PHOTO_TABS: TabId[] = ['background', 'align', 'add', 'manage'];
+const PHOTO_TABS: TabId[] = ['background', 'add', 'manage'];
 
 /** 1 回のボタン操作で家具を回す角度 */
 const ROTATION_STEP = Math.PI / 12; // 15 度
@@ -53,7 +51,6 @@ export function createBottomSheet(container: HTMLElement): void {
   // 毎回作り直すと進行表示が途切れるので、1つ作って使い回す
   const generationPanel = createGenerationPanel();
   const photoPanel = createPhotoPanel();
-  const alignPanel = createAlignPanel();
 
   function visibleTabs(): TabId[] {
     return isPhotoMode() ? PHOTO_TABS : ROOM_TABS;
@@ -64,10 +61,6 @@ export function createBottomSheet(container: HTMLElement): void {
 
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
-
-    // 四角と方眼は「床」タブを開いている間だけ出す。
-    // 出しっぱなしにすると、家具を置くときに四角が邪魔になる
-    setAligning(activeTab === 'align');
 
     tabBar.replaceChildren(
       ...tabs.map((tab) => {
@@ -91,7 +84,6 @@ export function createBottomSheet(container: HTMLElement): void {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
     if (activeTab === 'generate') return generationPanel;
     if (activeTab === 'background') return photoPanel;
-    if (activeTab === 'align') return alignPanel;
     return renderManageTab();
   }
 

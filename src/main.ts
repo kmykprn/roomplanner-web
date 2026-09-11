@@ -20,8 +20,6 @@ import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
-import { createFloorGrid } from '@/scene/floorGrid';
-import { createFloorGizmo } from '@/interaction/floorGizmo';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
@@ -57,19 +55,12 @@ const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
 const roomFurniture = createFurnitureLayer();
 const photoFurniture = createFurnitureLayer();
-/**
- * 写真モードの床。
- *
- * **方眼と、その上に置いた家具をまとめてここに入れる。** これを動かすことが
- * そのまま「写真に床を合わせる」になる（カメラは動かさない）。
- * 家具の座標はこの中から見たものなので、「床は y = 0、家具は底面基準」の
- * 決まりはそのまま使える。
- */
-const photoFloor = new THREE.Group();
-const floorGrid = createFloorGrid();
-photoFloor.add(floorGrid.object, photoFurniture.group);
-
-viewer.scene.add(roomObjects.group, createLighting(room), roomFurniture.group, photoFloor);
+viewer.scene.add(
+  roomObjects.group,
+  createLighting(room),
+  roomFurniture.group,
+  photoFurniture.group
+);
 
 // --- 操作を繋ぐ ---
 const cameraControls = createCameraControls(viewer.canvas, viewer.camera);
@@ -79,16 +70,10 @@ createFurnitureDrag(
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? { scene: photoScene, layer: photoFurniture, frame: photoFloor }
+      ? { scene: photoScene, layer: photoFurniture }
       : { scene: roomScene, layer: roomFurniture },
-  cameraControls,
-  // 床を合わせている間は、指の動きはギズモのほうへ渡す
-  () => !photoState.get().isAligning
+  cameraControls
 );
-
-// 床をつかんで動かすギズモ。「床」タブを開いている間だけ出る
-const floorGizmo = createFloorGizmo(viewer.camera, viewer.canvas, photoFloor);
-viewer.scene.add(floorGizmo.helper);
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 
 // --- 状態とシーンを同期する ---
@@ -118,9 +103,6 @@ function applyMode(): void {
 
   // 写真モードのカメラは固定。写真は動かないので、カメラだけ回ると嘘になる
   cameraControls.enabled = !photo;
-  floorGrid.object.visible = false;
-  floorGizmo.helper.visible = false;
-  photoFloor.visible = photo;
 
   if (photo) {
     applyPhotoView();
@@ -142,27 +124,13 @@ function applyBackground(): void {
  *
  * **3D を描く範囲を写真の矩形に合わせるのが肝。** 写真は画面いっぱいには
  * 収まらないので余白ができるが、そこにまで 3D を描くと、写真の中の床と
- * 3D の床が対応しなくなり、方眼を合わせても意味がなくなる。
+ * 3D の床が対応しなくなり、家具の見え方が写真とずれる。
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, floorTransform, isAligning, backgroundStatus } = photoState.get();
 
-  viewer.setContentAspect(backgroundAspect);
+  viewer.setContentAspect(photoState.get().backgroundAspect);
   applyPhotoCamera(viewer.camera);
-
-  // 状態を床のグループへ反映する。ギズモで動かしたときも、ボタンで動かしたときも、
-  // 通り道はここ1本にしておく
-  photoFloor.position.set(...floorTransform.position);
-  photoFloor.rotation.set(
-    THREE.MathUtils.degToRad(floorTransform.rotation[0]),
-    THREE.MathUtils.degToRad(floorTransform.rotation[1]),
-    THREE.MathUtils.degToRad(floorTransform.rotation[2])
-  );
-  photoFloor.scale.setScalar(floorTransform.scale);
-
-  floorGrid.object.visible = isAligning && backgroundStatus === 'ready';
-  floorGizmo.sync();
 }
 
 modeState.subscribe(applyMode);

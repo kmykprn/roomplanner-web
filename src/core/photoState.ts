@@ -15,12 +15,6 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
-import {
-  clampFloorTransform,
-  DEFAULT_FLOOR_TRANSFORM,
-  type FloorTransform,
-  type GizmoMode,
-} from '@/core/floorTransform';
 
 /**
  * 背景写真の読み込み具合。
@@ -38,13 +32,6 @@ export interface PhotoState extends FurnitureSceneState {
   backgroundStatus: BackgroundStatus;
   /** 背景写真の縦横比（幅 ÷ 高さ）。写真の矩形の中だけに描くために要る */
   backgroundAspect: number | null;
-
-  /** 床の置き方。これを写真に合わせてもらう */
-  floorTransform: FloorTransform;
-  /** ギズモでいま何を触っているか */
-  gizmoMode: GizmoMode;
-  /** 床を合わせている最中か。方眼とギズモはこの間だけ出す */
-  isAligning: boolean;
 }
 
 export const photoState = createStore<PhotoState>({
@@ -52,16 +39,13 @@ export const photoState = createStore<PhotoState>({
   backgroundName: null,
   backgroundStatus: 'idle',
   backgroundAspect: null,
-  floorTransform: structuredClone(DEFAULT_FLOOR_TRANSFORM),
-  gizmoMode: 'translate',
-  isAligning: false,
   furniture: [],
   selectedId: null,
 });
 
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
-  // 家具は床のグループの中に入るので、原点がそのまま方眼の中心になる
+  // カメラは原点を見下ろす位置で固定してある。原点から空きを探せば画面に入る
   placementFor: (size) => findFreeSpot(photoState.get().furniture, size),
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
@@ -96,7 +80,6 @@ export async function setBackground(file: File): Promise<void> {
   photoState.set({
     backgroundStatus: 'ready',
     backgroundAspect: aspect,
-    floorTransform: structuredClone(DEFAULT_FLOOR_TRANSFORM),
   });
 }
 
@@ -108,36 +91,6 @@ export function clearBackground(): void {
     backgroundStatus: 'idle',
     backgroundAspect: null,
   });
-}
-
-/** 床を合わせている最中かを切り替える */
-export function setAligning(isAligning: boolean): void {
-  if (photoState.get().isAligning !== isAligning) photoState.set({ isAligning });
-}
-
-/** ギズモで触るものを切り替える（移動・回転・大きさ） */
-export function setGizmoMode(gizmoMode: GizmoMode): void {
-  if (photoState.get().gizmoMode !== gizmoMode) photoState.set({ gizmoMode });
-}
-
-/**
- * 床の置き方を変える。渡した項目だけを差し替え、範囲に収める。
- *
- * ギズモ（`interaction/floorGizmo.ts`）とボタン（`ui/alignPanel.ts`）の
- * どちらもここを通る。**両方から同じ値を触るので、丸めは1箇所に置く。**
- */
-export function adjustFloorTransform(patch: Partial<FloorTransform>): void {
-  photoState.set({
-    floorTransform: clampFloorTransform({
-      ...photoState.get().floorTransform,
-      ...patch,
-    }),
-  });
-}
-
-/** 床の置き方を初期値に戻す */
-export function resetFloorTransform(): void {
-  photoState.set({ floorTransform: structuredClone(DEFAULT_FLOOR_TRANSFORM) });
 }
 
 /**
