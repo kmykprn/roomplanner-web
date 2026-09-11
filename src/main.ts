@@ -26,7 +26,12 @@ import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
 import { photoState, photoScene } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
-import { persistRoomOnChange, restoreRoom } from '@/core/persistence';
+import {
+  persistPhotoOnChange,
+  persistRoomOnChange,
+  restorePhoto,
+  restoreRoom,
+} from '@/core/persistence';
 import { resumeGeneration } from '@/core/generation';
 import { THEME } from '@/config/theme';
 
@@ -43,6 +48,7 @@ const header = requireElement('.header');
 
 // シーンを組み立てる前に読み戻す。あとからだと部屋の大きさが二重に反映される
 restoreRoom();
+restorePhoto();
 
 const viewer = createViewer(viewport);
 const { room } = appState.get();
@@ -71,8 +77,8 @@ createFurnitureDrag(
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? { scene: photoScene, layer: photoFurniture }
-      : { scene: roomScene, layer: roomFurniture },
+      ? { scene: photoScene, layer: photoFurniture, surface: 'screen' }
+      : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls
 );
 
@@ -157,6 +163,7 @@ createBottomSheet(app);
 
 // --- 端末に残す ---
 persistRoomOnChange();
+persistPhotoOnChange();
 // 前回の生成が終わっていれば、ここで部屋に置かれる
 resumeGeneration();
 
