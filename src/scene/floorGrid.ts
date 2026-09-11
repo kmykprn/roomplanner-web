@@ -26,7 +26,7 @@
  */
 
 import * as THREE from 'three';
-import { CELL_METERS } from '@/core/floorView';
+import { CELL_METERS } from '@/core/floorTransform';
 import { THEME } from '@/config/theme';
 
 /**
@@ -52,8 +52,6 @@ const HALO_COLOR = 'rgba(18,28,33,0.5)';
 
 export interface FloorGrid {
   object: THREE.Object3D;
-  /** いま見ている場所へ移す。カメラの真下に置くと画面の外に出てしまう */
-  setCenter(center: [number, number, number]): void;
 }
 
 export function createFloorGrid(): FloorGrid {
@@ -75,12 +73,7 @@ export function createFloorGrid(): FloorGrid {
   // PlaneGeometry は縦に立っているので、床へ倒す
   mesh.rotation.x = -Math.PI / 2;
 
-  return {
-    object: mesh,
-    setCenter(center) {
-      mesh.position.set(center[0], 0, center[2]);
-    },
-  };
+  return { object: mesh };
 }
 
 /** 方眼を描いた敷き紙を作る。中心を濃く、外へ向かって薄くする */

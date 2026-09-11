@@ -97,21 +97,13 @@ export function createFurnitureScene<T extends FurnitureSceneState>(
  *
  * `limit` を渡すとその範囲からはみ出す候補を除く（部屋の壁）。
  * 渡さなければ制限なし。**写真モードには壁が無い。**
- *
- * `center` を渡すとその周りを探す。写真モードではカメラの真下が原点になるため、
- * 原点から探すと画面の外（足元）に置いてしまう。
  */
 export function findFreeSpot(
   furniture: PlacedFurniture[],
   size: [number, number, number],
-  options: {
-    limit?: { halfWidth: number; halfDepth: number };
-    center?: [number, number, number];
-  } = {}
+  options: { limit?: { halfWidth: number; halfDepth: number } } = {}
 ): [number, number, number] {
-  const { limit, center } = options;
-  const originX = center?.[0] ?? 0;
-  const originZ = center?.[2] ?? 0;
+  const { limit } = options;
   const [width, , depth] = size;
 
   const STEP = 0.5; // 候補を探す間隔（メートル）
@@ -122,8 +114,8 @@ export function findFreeSpot(
 
   for (let ring = 0; ring <= maxRings; ring++) {
     for (const [gridX, gridZ] of ringOffsets(ring)) {
-      const x = originX + gridX * STEP;
-      const z = originZ + gridZ * STEP;
+      const x = gridX * STEP;
+      const z = gridZ * STEP;
 
       // 家具が範囲からはみ出す候補は除外する（新規設置なので回転は 0）
       if (limit && Math.abs(x) + width / 2 > limit.halfWidth) continue;
@@ -136,7 +128,7 @@ export function findFreeSpot(
     }
   }
 
-  return [originX, 0, originZ];
+  return [0, 0, 0];
 }
 
 /** 中央から距離 ring にある格子点を列挙する（ring = 0 なら中央のみ） */
