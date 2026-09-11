@@ -47,6 +47,7 @@ export function createFurnitureLayer(): FurnitureLayer {
 
       object.position.set(...item.position);
       object.rotation.y = item.rotationY;
+      applySize(object, item.size);
 
       // 選択枠は子として持たせてあるので、表示を切り替えるだけでよい
       const outline = object.getObjectByName('outline');
@@ -61,9 +62,24 @@ export function createFurnitureLayer(): FurnitureLayer {
   };
 }
 
+/**
+ * 大きさの変化を、作り直さずに拡大率で追従させる。
+ *
+ * 箱もモデルも作ったときの大きさで組んであり、あとから変えると作り直し
+ * （GLB なら読み直し）になる。大きさは3辺そろえて変えるので、作ったときの
+ * 大きさとの比を group に掛けるだけで足りる。原点が足元なので、拡大しても
+ * 足は床に付いたまま
+ */
+function applySize(object: THREE.Group, size: [number, number, number]): void {
+  const builtWidth = object.userData.builtWidth as number;
+  object.scale.setScalar(size[0] / builtWidth);
+}
+
 function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   const object = new THREE.Group();
   const [width, height, depth] = item.size;
+  // 拡大率の基準。あとで大きさが変わったとき、これとの比で拡大する
+  object.userData.builtWidth = width;
 
   const geometry = new THREE.BoxGeometry(width, height, depth);
   const mesh = new THREE.Mesh(

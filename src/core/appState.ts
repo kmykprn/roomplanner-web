@@ -53,9 +53,10 @@ function clampInsideRoom(
   const limitX = Math.max(0, room.width / 2 - halfX);
   const limitZ = Math.max(0, room.depth / 2 - halfZ);
 
+  // 高さは床で止める。写真モードには床が無いので、あちらは止めない
   return [
     Math.min(Math.max(position[0], -limitX), limitX),
-    position[1],
+    Math.max(position[1], 0),
     Math.min(Math.max(position[2], -limitZ), limitZ),
   ];
 }
