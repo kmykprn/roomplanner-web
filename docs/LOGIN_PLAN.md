@@ -89,15 +89,24 @@ startButton.addEventListener('click', async () => {
 
 ## 手順0: コンソール設定【人手が必要。Claude からは実行できない】
 
-| # | 場所 | やること |
-|---|---|---|
-| 0-1 | Firebase Console → Authentication → Sign-in method | **Google を有効化** |
-| 0-2 | Authentication → Settings → 承認済みドメイン | **`kmykprn.github.io` を追加**（既定は `localhost` と `*.firebaseapp.com` だけ） |
-| 0-3 | GCP → API とサービス → OAuth 同意画面 | **公開ステータスを「本番」に**。「テスト」のままだとテストユーザーに登録した人しかログインできない |
+| # | 場所 | やること | 状態 |
+|---|---|---|---|
+| 0-1 | Firebase Console → Authentication → Sign-in method | **Google を有効化** | **完了** |
+| 0-2 | Authentication → Settings → 承認済みドメイン | **`kmykprn.github.io` を追加**（既定は `localhost` と `*.firebaseapp.com` だけ） | **完了** |
+| 0-3 | GCP → Google Auth Platform → 対象（旧「OAuth 同意画面」） | **公開ステータスを「本番」に**。「テスト」のままだとテストユーザーに登録した人しかログインできない | **保留** |
 
 **0-2 を忘れると `auth/unauthorized-domain` で必ず落ちる。** 最初に踏む石。
+0-1 と 0-2 はここを通過済みで、認証URIの発行まで実機で確認してある。
 
-終了条件: 3つとも設定済みであることを画面で確認できること。
+**0-3 は先に別の作業が要るので保留になっている。** ブランディングのホームページと
+プライバシーポリシーの URL が空だと「アプリを公開」が押せず、そのプライバシー
+ポリシーのページ自体がまだ無い。事情と必要な中身は `docs/OPEN_ISSUES.md` の
+1（同意画面）と 2（privacy.html）にある。
+
+**手順1〜4 は 0-3 が保留のままでも進められる。** 自分のアカウントをテストユーザーに
+登録すれば実機のログイン確認まで通る。0-3 が要るのは**人に配るとき**。
+
+終了条件: 0-1・0-2 が設定済みであること。0-3 は配布前までに済ませること。
 
 ---
 
