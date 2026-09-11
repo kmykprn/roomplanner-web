@@ -1,25 +1,64 @@
 /**
- * 写真モードの「床」タブ。写真の中の長方形に四角を合わせてもらう。
+ * 写真モードの「床」タブ。方眼が写真の床に乗って見えるまで合わせてもらう。
  *
- * ここで決まるのはカメラの `{ 画角・高さ・俯角・向き }`。
- * 合っているかどうかは**方眼が写真の床に貼り付いて見えるか**で判断してもらう。
+ * **ボタンと指の操作の両方を用意してある。** どちらが使いやすいかを決めるため、
+ * 同時に使える（指の操作は `interaction/floorGesture.ts`）。
+ * ボタンは押しっぱなしで動き続ける。細かく詰めるときはこちらが向く。
  */
 
-import { photoState, setAssumedFov, setFloorWidthMeters } from '@/core/photoState';
+import { adjustFloorView, photoState, resetFloorView } from '@/core/photoState';
+import { CELL_METERS, STEPS, type FloorView } from '@/core/floorView';
 
-const GUIDE = '四角の4隅を、写真の中の長方形（ラグ・タイル・床の見切り）に合わせてください';
-
-/** 画角が計算で出せなかったときの断り。手で直せることを伝える */
-const FOV_ASSUMED_NOTE =
-  '正面から撮った写真では画角が計算で出せません。奥行きが合わないときはここで調整してください';
-
-/** 計算で出せたときの断り。触れない理由を伝える */
-const FOV_MEASURED_NOTE = '画角は写真から計算できました。調整は要りません';
-const FAILED = 'この形では合わせられません。角を戻してください';
+const GUIDE = `方眼が床に乗って見えるまで動かしてください（1マス ${CELL_METERS * 100}cm）`;
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
+const GESTURE_HINT = '写真の上を指でも動かせます。上下＝傾き / 左右＝向き / 2本指＝大きさ・水平';
 
-/** 画角を手で直せる範囲（度）。実在のカメラが収まる幅 */
-const FOV_RANGE = { min: 20, max: 110 };
+/** 押しっぱなしで動き出すまでの待ち時間と、その後の間隔（ミリ秒） */
+const REPEAT_DELAY_MS = 350;
+const REPEAT_INTERVAL_MS = 70;
+
+/** 各行の作り。ボタンの向きと、1回ぶんの動かし方をまとめて持つ */
+const ROWS: Array<{
+  key: keyof FloorView;
+  label: string;
+  /** 減らす側・増やす側のボタンに出す文字 */
+  marks: [string, string];
+  /** 1回ぶん動かしたあとの値 */
+  step: (view: FloorView, direction: -1 | 1) => number;
+  /** 画面に出す値 */
+  format: (view: FloorView) => string;
+}> = [
+  {
+    key: 'pitch',
+    label: '傾き',
+    marks: ['▽', '△'],
+    step: (view, direction) => view.pitch + STEPS.pitch * direction,
+    format: (view) => `${Math.round(view.pitch)}°`,
+  },
+  {
+    key: 'yaw',
+    label: '向き',
+    marks: ['↺', '↻'],
+    step: (view, direction) => view.yaw + STEPS.yaw * direction,
+    format: (view) => `${Math.round(view.yaw)}°`,
+  },
+  {
+    key: 'height',
+    label: '高さ',
+    marks: ['−', '＋'],
+    // 高さは掛け算で動かす。低いときも高いときも同じ手応えになる
+    step: (view, direction) =>
+      direction > 0 ? view.height * STEPS.heightRatio : view.height / STEPS.heightRatio,
+    format: (view) => `${view.height.toFixed(2)} m`,
+  },
+  {
+    key: 'roll',
+    label: '水平',
+    marks: ['↺', '↻'],
+    step: (view, direction) => view.roll + STEPS.roll * direction,
+    format: (view) => `${view.roll.toFixed(1)}°`,
+  },
+];
 
 export function createAlignPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -28,51 +67,50 @@ export function createAlignPanel(): HTMLElement {
   const status = document.createElement('p');
   status.className = 'hint';
 
-  // 四角の実寸。これを入れると、目分量だった寸法が実測になる
-  const widthField = createField('四角の横幅', 'm');
-  widthField.input.type = 'number';
-  widthField.input.min = '0.1';
-  widthField.input.step = '0.1';
-  widthField.input.addEventListener('input', () => {
-    setFloorWidthMeters(Number(widthField.input.value));
+  const rows = ROWS.map((row) => {
+    const element = document.createElement('div');
+    element.className = 'align__row';
+
+    const label = document.createElement('span');
+    label.className = 'align__label';
+    label.textContent = row.label;
+
+    const value = document.createElement('span');
+    value.className = 'align__value';
+
+    const buttons = ([-1, 1] as const).map((direction, index) =>
+      createRepeatButton(row.marks[index], `${row.label}を${direction < 0 ? '戻す' : '進める'}`, () =>
+        adjustFloorView({ [row.key]: row.step(photoState.get().floorView, direction) })
+      )
+    );
+
+    element.append(label, buttons[0], buttons[1], value);
+    return { element, value, buttons, format: row.format };
   });
 
-  // 画角。計算で出せているときは触らせない（出した値のほうが確かなため）
-  const fovField = createField('画角', '°');
-  fovField.input.type = 'range';
-  fovField.input.min = String(FOV_RANGE.min);
-  fovField.input.max = String(FOV_RANGE.max);
-  fovField.input.step = '1';
-  fovField.input.addEventListener('input', () => {
-    setAssumedFov(Number(fovField.input.value));
-  });
+  const gestureHint = document.createElement('p');
+  gestureHint.className = 'hint align__note';
+  gestureHint.textContent = GESTURE_HINT;
 
-  const fovNote = document.createElement('p');
-  fovNote.className = 'hint align__note';
+  const resetButton = document.createElement('button');
+  resetButton.className = 'button is-quiet align__reset';
+  resetButton.textContent = '最初に戻す';
+  resetButton.addEventListener('click', resetFloorView);
 
-  panel.append(status, widthField.element, fovField.element, fovNote);
+  panel.append(status, ...rows.map((row) => row.element), gestureHint, resetButton);
 
   function render(): void {
-    const state = photoState.get();
-    const hasPhoto = state.backgroundStatus === 'ready';
-    const assumed = state.calibration?.fovAssumed ?? true;
+    const { backgroundStatus, floorView } = photoState.get();
+    const hasPhoto = backgroundStatus === 'ready';
 
-    status.classList.toggle('is-error', hasPhoto && state.calibrationFailed);
-    status.textContent = !hasPhoto ? NO_PHOTO : state.calibrationFailed ? FAILED : GUIDE;
+    status.textContent = hasPhoto ? GUIDE : NO_PHOTO;
+    gestureHint.hidden = !hasPhoto;
+    resetButton.disabled = !hasPhoto;
 
-    // **行を出し入れしない。** 出し入れするとパネルの高さが変わり、
-    // その上にある 3D の表示領域まで動く。角をドラッグしている最中にこれが起きると、
-    // 写真が指の下でずれて、狙った場所に角を置けなくなる（実際に踏んだ）
-    widthField.input.disabled = !hasPhoto;
-    // 画角が計算で出せているときは、仮定より計算の結果のほうが確かなので触らせない
-    fovField.input.disabled = !hasPhoto || !assumed;
-    fovNote.textContent = assumed ? FOV_ASSUMED_NOTE : FOV_MEASURED_NOTE;
-
-    // 入力中の値を上書きしないよう、変わったときだけ書き戻す
-    setIfChanged(widthField.input, String(state.floorWidthMeters));
-    setIfChanged(fovField.input, String(Math.round(state.assumedFov)));
-    widthField.value.textContent = `${state.floorWidthMeters} m`;
-    fovField.value.textContent = `${Math.round(state.calibration?.fov ?? state.assumedFov)}°`;
+    for (const row of rows) {
+      row.value.textContent = row.format(floorView);
+      for (const button of row.buttons) button.disabled = !hasPhoto;
+    }
   }
 
   render();
@@ -81,32 +119,39 @@ export function createAlignPanel(): HTMLElement {
   return panel;
 }
 
-interface Field {
-  element: HTMLElement;
-  input: HTMLInputElement;
-  value: HTMLElement;
-}
+/**
+ * 押している間くり返すボタン。
+ *
+ * 1回ぶんが小さいので、押しっぱなしで動き続けないと詰められない。
+ * 指を離す・画面の外へ出る・掴みを取られる、のどれでも止める
+ */
+function createRepeatButton(mark: string, label: string, act: () => void): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.className = 'align__nudge';
+  button.textContent = mark;
+  button.setAttribute('aria-label', label);
 
-function createField(label: string, unit: string): Field {
-  const element = document.createElement('label');
-  element.className = 'align__field';
+  let delayTimer = 0;
+  let repeatTimer = 0;
 
-  const caption = document.createElement('span');
-  caption.className = 'align__label';
-  caption.textContent = label;
+  function stop(): void {
+    clearTimeout(delayTimer);
+    clearInterval(repeatTimer);
+  }
 
-  const input = document.createElement('input');
-  input.className = 'align__input';
+  button.addEventListener('pointerdown', (event) => {
+    if (button.disabled) return;
+    // 押したところで指を固定する。動かしても離すまでこのボタンが受け取る
+    button.setPointerCapture(event.pointerId);
+    act();
+    delayTimer = window.setTimeout(() => {
+      repeatTimer = window.setInterval(act, REPEAT_INTERVAL_MS);
+    }, REPEAT_DELAY_MS);
+  });
 
-  const value = document.createElement('span');
-  value.className = 'align__value';
-  value.textContent = unit;
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+    button.addEventListener(type, stop);
+  }
 
-  element.append(caption, input, value);
-  return { element, input, value };
-}
-
-/** 入力欄に触っている最中の値を奪わないよう、違うときだけ書き込む */
-function setIfChanged(input: HTMLInputElement, value: string): void {
-  if (input.value !== value) input.value = value;
+  return button;
 }

@@ -1,52 +1,28 @@
 /**
  * 写真モードのカメラ。
  *
- * 決めるべき値は `{ 画角・高さ・俯角・向き }` の4つ。
- * **床合わせが済んでいればその4つは計算で埋まる**（`core/photoCalibration.ts`）。
- * まだなら、立って部屋を見たときに近い固定値を置く。写真には合っていないので、
- * 置いたモデルは遠近が揃わない。
+ * 床の見え方（`core/floorView.ts` の4つの値）から、そのまま組み立てる。
+ * **割り出すのではなく、使う人が合わせた値をそのまま使う。**
+ *
+ * カメラは原点の真上に置き、向きだけを変える。床（y = 0）は動かさないので、
+ * 家具の置き場も当たり判定も写真モードと部屋モードで同じままでいられる。
  */
 
 import * as THREE from 'three';
-import type { FloorCalibration } from '@/core/photoCalibration';
+import { FIXED_FOV, type FloorView } from '@/core/floorView';
 
-/** 床合わせをしていないときの見え方。立って撮ったときのおおよそ */
-const DEFAULT_VIEW = {
-  fov: 50,
-  /** 撮影者の目の高さ（m） */
-  height: 1.5,
-  /** 被写体までの距離（m） */
-  distance: 4,
-  /** 見ている高さ（m）。床より少し上を見て、やや見下ろす形にする */
-  lookAtHeight: 0.4,
-};
+export function applyPhotoCamera(camera: THREE.PerspectiveCamera, view: FloorView): void {
+  camera.fov = FIXED_FOV;
+  camera.position.set(0, view.height, 0);
 
-/** 使い回して割り当てを減らす。毎フレームではないが、角のドラッグ中は連続で呼ばれる */
-const basis = new THREE.Matrix4();
-const axisRight = new THREE.Vector3();
-const axisUp = new THREE.Vector3();
-const axisBack = new THREE.Vector3();
-
-export function applyPhotoCamera(
-  camera: THREE.PerspectiveCamera,
-  calibration: FloorCalibration | null
-): void {
-  if (!calibration) {
-    camera.fov = DEFAULT_VIEW.fov;
-    camera.position.set(0, DEFAULT_VIEW.height, DEFAULT_VIEW.distance);
-    camera.lookAt(0, DEFAULT_VIEW.lookAtHeight, 0);
-    camera.updateProjectionMatrix();
-    return;
-  }
-
-  camera.fov = calibration.fov;
-  camera.position.set(...calibration.position);
-
-  // 3つの軸から向きを組む。回転として入れるので、three.js 側の行列更新は普段どおり動く
-  axisRight.set(...calibration.right);
-  axisUp.set(...calibration.up);
-  axisBack.set(...calibration.back);
-  camera.quaternion.setFromRotationMatrix(basis.makeBasis(axisRight, axisUp, axisBack));
+  // YXZ の順に回すと、向き → 傾き → 水平 の順で効く。
+  // この順でないと、傾けたあとの向きが斜めに回ってしまう
+  camera.rotation.set(
+    THREE.MathUtils.degToRad(-view.pitch),
+    THREE.MathUtils.degToRad(view.yaw),
+    THREE.MathUtils.degToRad(view.roll),
+    'YXZ'
+  );
 
   camera.updateProjectionMatrix();
 }

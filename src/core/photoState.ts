@@ -15,27 +15,12 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
-import { calibrateFloor, type FloorCalibration, type FloorQuad } from '@/core/photoCalibration';
-
-/**
- * 床合わせの四角の初期位置。
- *
- * 手前が広く奥が狭い台形にしてある。床の上の長方形は写真の中でこう写るので、
- * 4隅を大きく動かさずに済む。順番は 手前左 → 手前右 → 奥右 → 奥左 で、
- * `0→1`（手前の辺）が「横幅」になる。
- */
-const DEFAULT_QUAD: FloorQuad = [
-  { x: 0.25, y: 0.8 },
-  { x: 0.75, y: 0.8 },
-  { x: 0.65, y: 0.6 },
-  { x: 0.35, y: 0.6 },
-];
-
-/** 四角の横幅の初期値（メートル）。ラグ1枚ぶんくらい */
-const DEFAULT_WIDTH_METERS = 2;
-
-/** 画角が計算で出せないときに使う値（度）。スマホの標準的なカメラに近いあたり */
-const DEFAULT_FOV = 50;
+import {
+  clampFloorView,
+  DEFAULT_FLOOR_VIEW,
+  floorPointUnderCenter,
+  type FloorView,
+} from '@/core/floorView';
 
 /**
  * 背景写真の読み込み具合。
@@ -51,27 +36,13 @@ export interface PhotoState extends FurnitureSceneState {
   /** 選んだ写真のファイル名。どれを開いているか分かるように画面に出す */
   backgroundName: string | null;
   backgroundStatus: BackgroundStatus;
-  /** 背景写真の縦横比（幅 ÷ 高さ）。床合わせの計算に要る */
+  /** 背景写真の縦横比（幅 ÷ 高さ）。写真の矩形の中だけに描くために要る */
   backgroundAspect: number | null;
 
-  /** 床合わせの四角。写真の中の位置を 0〜1 で持つ（画面の大きさが変わっても保つ） */
-  floorQuad: FloorQuad;
-  /** 四角の `0→1` の辺の実寸（メートル）。これがスケールの基準になる */
-  floorWidthMeters: number;
-  /** 画角が計算で出せないときに使う値（度） */
-  assumedFov: number;
-  /** 床合わせの操作中か。四角と方眼はこの間だけ出す */
+  /** 床の見え方。これを写真に合わせてもらう */
+  floorView: FloorView;
+  /** 床を合わせている最中か。方眼はこの間だけ出す */
   isAligning: boolean;
-
-  /**
-   * 割り出したカメラ。まだ合わせていなければ null。
-   *
-   * **解けない形のあいだは直前の値を残す。** 角をドラッグしている最中は
-   * ねじれた四角を必ず通るので、そのたびにカメラが消えると画面が点滅する。
-   */
-  calibration: FloorCalibration | null;
-  /** いまの四角では割り出せないか。画面で知らせるために持つ */
-  calibrationFailed: boolean;
 }
 
 export const photoState = createStore<PhotoState>({
@@ -79,19 +50,20 @@ export const photoState = createStore<PhotoState>({
   backgroundName: null,
   backgroundStatus: 'idle',
   backgroundAspect: null,
-  floorQuad: DEFAULT_QUAD,
-  floorWidthMeters: DEFAULT_WIDTH_METERS,
-  assumedFov: DEFAULT_FOV,
+  floorView: { ...DEFAULT_FLOOR_VIEW },
   isAligning: false,
-  calibration: null,
-  calibrationFailed: false,
   furniture: [],
   selectedId: null,
 });
 
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
-  placementFor: (size) => findFreeSpot(photoState.get().furniture, size),
+  // カメラは原点の真上にあるので、原点に置くと足元（画面の外）に出てしまう。
+  // いま見ている場所を中心にして空きを探す
+  placementFor: (size) =>
+    findFreeSpot(photoState.get().furniture, size, {
+      center: floorPointUnderCenter(photoState.get().floorView),
+    }),
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
   constrain: (position) => position,
@@ -121,13 +93,12 @@ export async function setBackground(file: File): Promise<void> {
   }
 
   replaceBackgroundUrl(url);
-  // 写真が変われば床も変わる。四角は初期位置に戻す
+  // 写真が変われば床も変わる。合わせ直してもらう
   photoState.set({
     backgroundStatus: 'ready',
     backgroundAspect: aspect,
-    floorQuad: DEFAULT_QUAD,
+    floorView: { ...DEFAULT_FLOOR_VIEW },
   });
-  recalibrate();
 }
 
 /** 背景の写真を外す */
@@ -137,52 +108,27 @@ export function clearBackground(): void {
     backgroundName: null,
     backgroundStatus: 'idle',
     backgroundAspect: null,
-    calibration: null,
-    calibrationFailed: false,
   });
 }
 
-/** 床合わせの操作中かを切り替える */
+/** 床を合わせている最中かを切り替える */
 export function setAligning(isAligning: boolean): void {
   if (photoState.get().isAligning !== isAligning) photoState.set({ isAligning });
 }
 
-/** 四角を動かす。動かすたびにカメラを割り出し直す */
-export function setFloorQuad(floorQuad: FloorQuad): void {
-  photoState.set({ floorQuad });
-  recalibrate();
-}
-
-/** 四角の横幅の実寸を変える。スケール（カメラの高さ）が変わる */
-export function setFloorWidthMeters(floorWidthMeters: number): void {
-  if (!(floorWidthMeters > 0)) return;
-  photoState.set({ floorWidthMeters });
-  recalibrate();
-}
-
-/** 仮定する画角を変える。計算で出せている写真では結果は変わらない */
-export function setAssumedFov(assumedFov: number): void {
-  photoState.set({ assumedFov });
-  recalibrate();
-}
-
 /**
- * いまの四角からカメラを割り出す。
+ * 床の見え方を動かす。渡した項目だけを変え、範囲に収める。
  *
- * **解けなかったときは直前のカメラを残す。** 角をドラッグしている最中は
- * ねじれた四角や潰れた四角を必ず通るので、そのたびに消すと画面が点滅し、
- * 手を戻す先も分からなくなる。
+ * 指の操作（interaction/floorGesture.ts）とボタン（ui/alignPanel.ts）の
+ * どちらもここを通る。**両方から同じ値を触るので、丸めは1箇所に置く。**
  */
-function recalibrate(): void {
-  const { floorQuad, backgroundAspect, floorWidthMeters, assumedFov } = photoState.get();
-  if (!backgroundAspect) return;
+export function adjustFloorView(patch: Partial<FloorView>): void {
+  photoState.set({ floorView: clampFloorView({ ...photoState.get().floorView, ...patch }) });
+}
 
-  const result = calibrateFloor(floorQuad, backgroundAspect, floorWidthMeters, assumedFov);
-  photoState.set(
-    result
-      ? { calibration: result, calibrationFailed: false }
-      : { calibrationFailed: true }
-  );
+/** 床の見え方を初期値に戻す */
+export function resetFloorView(): void {
+  photoState.set({ floorView: { ...DEFAULT_FLOOR_VIEW } });
 }
 
 /**

@@ -82,7 +82,6 @@ function rotatedHalfExtents(
 function findFreePosition(size: [number, number, number]): [number, number, number] {
   const { room, furniture } = appState.get();
   return findFreeSpot(furniture, size, {
-    halfWidth: room.width / 2,
-    halfDepth: room.depth / 2,
+    limit: { halfWidth: room.width / 2, halfDepth: room.depth / 2 },
   });
 }
