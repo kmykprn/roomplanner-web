@@ -29,7 +29,14 @@ export function createFurnitureDrag(
   camera: THREE.PerspectiveCamera,
   // 部屋と写真でシーンも3Dのレイヤーも変わる。掴んだ時点のものを使う
   resolveTarget: () => DragTarget,
-  cameraControls: CameraControls
+  cameraControls: CameraControls,
+  /**
+   * 家具の操作を受け付けるか。
+   *
+   * 床を合わせている間は、同じ1本指の動きを床のほうが使う。
+   * 両方が動くと、合わせているつもりで家具が飛んでいく
+   */
+  isEnabled: () => boolean = () => true
 ): () => void {
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
@@ -57,6 +64,7 @@ export function createFurnitureDrag(
   function onPointerDown(event: PointerEvent): void {
     // 2 本指以降はカメラ操作なので、家具の掴みは 1 本目だけ受け付ける
     if (!event.isPrimary) return;
+    if (!isEnabled()) return;
 
     pressPosition = { x: event.clientX, y: event.clientY };
     toNdc(event);

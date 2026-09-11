@@ -21,7 +21,8 @@ import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createFloorGrid } from '@/scene/floorGrid';
-import { createFloorQuadOverlay } from '@/ui/floorQuad';
+import { createFloorGesture } from '@/interaction/floorGesture';
+import { floorPointUnderCenter } from '@/core/floorView';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
@@ -77,8 +78,13 @@ createFurnitureDrag(
     isPhotoMode()
       ? { scene: photoScene, layer: photoFurniture }
       : { scene: roomScene, layer: roomFurniture },
-  cameraControls
+  cameraControls,
+  // 床を合わせている間は、指の動きは床のほうへ渡す
+  () => !photoState.get().isAligning
 );
+
+// 写真の上で床を動かす操作。「床」タブを開いている間だけ効く
+createFloorGesture(viewer.canvas);
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 
 // --- 状態とシーンを同期する ---
@@ -134,13 +140,14 @@ function applyBackground(): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, calibration, isAligning, calibrationFailed } = photoState.get();
+  const { backgroundAspect, floorView, isAligning, backgroundStatus } = photoState.get();
 
   viewer.setContentAspect(backgroundAspect);
-  applyPhotoCamera(viewer.camera, calibration);
+  applyPhotoCamera(viewer.camera, floorView);
 
-  floorGrid.object.visible = isAligning && calibration !== null;
-  floorGrid.setValid(!calibrationFailed);
+  // 方眼はカメラの真下ではなく、いま見ている場所に敷く
+  floorGrid.setCenter(floorPointUnderCenter(floorView));
+  floorGrid.object.visible = isAligning && backgroundStatus === 'ready';
 }
 
 modeState.subscribe(applyMode);
@@ -151,7 +158,6 @@ applyBackground();
 
 // --- UI ---
 header.appendChild(createModeSwitch());
-createFloorQuadOverlay(viewport, viewer.canvas);
 createBottomSheet(app);
 
 // --- 端末に残す ---
