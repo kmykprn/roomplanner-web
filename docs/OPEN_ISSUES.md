@@ -3,14 +3,16 @@
 引き継ぎ時点で分かっているが直していないもの。**気づいた経緯と、どう確かめるかを残す**
 のが目的。優先度は付けていないので、着手前に持ち主と相談すること。
 
-対象は2つのリポジトリにまたがる。
+対象は2つのリポジトリと、両方が乗っている GCP プロジェクトにまたがる。
 
 - クライアント: https://github.com/kmykprn/roomplanner-web
 - サーバー: https://github.com/kmykprn/Hunyuan3D-2GP
 
 ---
 
-## サーバー（Hunyuan3D-2GP）
+## 共通（GCPプロジェクト）
+
+どちらのリポジトリのコードでもなく、コンソールでしか動かせないもの。
 
 ### 1. OAuth 同意画面が「テスト中」のまま
 
@@ -32,17 +34,16 @@ Google ログインは使える状態になっている（プロバイダ有効�
 | アプリケーションのホームページ | `https://kmykprn.github.io/roomplanner-web/` |
 | プライバシーポリシー | `https://kmykprn.github.io/roomplanner-web/privacy.html` |
 
-**URL は承認済みドメイン配下である必要がある。** `kmykprn.github.io` は登録済みなので
-条件は満たす。ただし**ページが実在しないとまずい**（同意画面からリンクが張られる）。
-プライバシーポリシーは未作成なので、公開前に書く。
+**ページが実在しないとまずい**（同意画面からリンクが張られる）。プライバシー
+ポリシーはまだ無いので、**これが前提になる → 2**。
 
-内容として書くべきこと（いずれも実装から確認できる事実）:
-
-- 写真を Google Cloud（`asia-southeast1` / シンガポール）へ送り、3Dモデル生成に使う
-- 入力画像と生成物は**30日で自動削除**される（`infra/storage.tf` の `lifecycle_rule`）
-- Google ログインで取得するのは `email` / `profile` / `openid` のみ
-- 第三者提供はしない
-- 連絡先
+**承認済みドメインは2つあり、別物。** 手順0-2 で足したのは Firebase Authentication の
+承認済みドメイン（ログインのリダイレクト先を許可するもの）で、ここで要るのは
+OAuth 同意画面ブランディングの承認済みドメイン（同意画面から張るリンクの行き先を
+許可するもの）。**前者に足しても後者には載らない。** 後者は Search Console での
+ドメイン所有権確認を求められることがある。`github.io` は Public Suffix なので
+`kmykprn.github.io` 単位で確認でき、Pages に確認用のファイルを置けば通せるはずだが、
+**ひと手間増える前提でいること。**
 
 **ロゴは上げないこと。** 上げると Google の審査対象になる。現在のスコープは基本3つ
 だけなので、ロゴ無しなら審査は不要。利用規約は任意。
@@ -55,7 +56,31 @@ Google ログインは使える状態になっている（プロバイダ有効�
 
 ## クライアント（roomplanner-web）
 
-### 2. Firebase に到達できないと「取得中…」で止まり、ボタンは押せたまま
+### 2. プライバシーポリシーのページが無い
+
+**1 の前提。** 同意画面を本番に切り替えるには、実在するプライバシーポリシーの URL が要る。
+**置き場所はこのリポジトリ。** `public/` に置いたものはビルドでそのまま配信されるので、
+`public/privacy.html` にすれば `https://kmykprn.github.io/roomplanner-web/privacy.html`
+で開ける。
+
+書くべきこと（いずれも実装から確認できる事実）:
+
+- 写真を Google Cloud（`asia-southeast1` / シンガポール）へ送り、3Dモデル生成に使う
+- 入力画像と生成物は**30日で自動削除**される（`infra/storage.tf` の `lifecycle_rule`）。
+  ただし消えるのは生成物バケットの中身だけで、**許可リスト（別バケットの
+  `config/allowed_uids.json`）に登録した uid はこの30日ルールの外**。限定公開を
+  やめるときに消すもの
+- Google ログインで取得するのは `email` / `profile` / `openid` のみ
+- 第三者提供はしない
+- 連絡先
+
+**Service Worker に食われないか確認すること。** `vite-plugin-pwa` は `generateSW` 方式で、
+navigateFallback が `index.html` のままだと、PWA を入れた端末で `/privacy.html` を
+開いてもアプリ本体が表示される。同意画面のリンクから飛んだ利用者がポリシーを読めない
+（Google の審査クローラは Service Worker を持たないので影響しない）。ビルド後に
+`dist/sw.js` を見て `navigateFallbackDenylist` の要否を判断する。
+
+### 3. Firebase に到達できないと「取得中…」で止まり、ボタンは押せたまま
 
 `src/ui/generationPanel.ts`:
 
@@ -76,7 +101,7 @@ void getUid()
 
 直し方の案: `getUid()` に待ち時間を設け、超えたら「認証できませんでした」に倒す。
 
-### 3. 生成した GLB が Cache Storage から消えない
+### 4. 生成した GLB が Cache Storage から消えない
 
 `src/platform/modelCache.ts` に削除関数があるが、**どこからも呼ばれていない。**
 
@@ -91,7 +116,7 @@ export async function deleteModel(key: string): Promise<void> {
 
 `src/ui/bottomSheet.ts` の削除ボタンで `deletePreview` と並べて呼べばよい。
 
-### 4. Blob URL が解放されていない
+### 5. Blob URL が解放されていない
 
 `URL.createObjectURL` が3箇所にあるが、`URL.revokeObjectURL` は**0箇所**。
 
@@ -104,7 +129,7 @@ export async function deleteModel(key: string): Promise<void> {
 Blob URL はドキュメントが生きている限り元の Blob をメモリに固定する。
 サムネイルは小さいが、**GLB は1件4〜5MB** なので効いてくる。
 
-### 5. README の「今後の予定」が実態とずれている
+### 6. README の「今後の予定」が実態とずれている
 
 引き継ぎ資料として誤解のもとになる。
 
@@ -116,7 +141,7 @@ Blob URL はドキュメントが生きている限り元の Blob をメモリ�
 
 ## 方針が決まっていないもの
 
-### 6. Capacitor / App Store をやるかどうか
+### 7. Capacitor / App Store をやるかどうか
 
 README の「今後の予定」5 に「Capacitor 8 で iOS アプリ化 → App Store」がある。
 `vite.config.ts` にも Capacitor 向けのベースパス分岐が入っている。
@@ -129,7 +154,7 @@ README の「今後の予定」5 に「Capacitor 8 で iOS アプリ化 → App 
 
 ---
 
-# 確認して解決したもの
+## 確認して解決したもの
 
 記録として残す。**同じことを二度調べないため**と、確かめ方を再利用するため。
 
@@ -151,9 +176,17 @@ OOM（signal 9）を踏んでいる箇所なので実測したかった。
 `run.googleapis.com/container/memory/utilizations` を `hunyuan3d-measure` で
 絞って取得。テクスチャ付き生成を4件流した区間を含む。
 
-**`Popen` 化による悪化は見られない。** 旧実装 `subprocess.run(stderr=PIPE)` は
-標準エラーの全文をメモリに保持していたが、新実装は末尾200行しか残さず、読んだ行は
-その場で素通しする。理屈どおり軽いまま。
+**内訳でも裏が取れる。** 16.3GiB のうち 4GiB は gcsfuse の in-memory キャッシュ
+（`infra/job.tf` の `empty_dir { medium = "MEMORY", size_limit = "4Gi" }`）で、
+残り約12GiB がアプリ側。これは 16GiB 割り当てだった頃の「キャッシュ4GiB＋アプリ約12GiB」
+とほぼ同じ姿で、**当時はほぼ上限に張り付いていた**ことになる。32GiB にした判断の
+裏付けでもある。
+
+**測定で言えるのは「いまの割り当てに対して余裕がある」まで。** PR #12 の前後で
+測り比べたわけではないので、**`Popen` 化で悪化していない根拠は測定ではなく実装のほうに
+ある。** 旧実装 `subprocess.run(stderr=PIPE)` は標準エラーの全文をメモリに保持していたが、
+新実装は末尾200行しか残さず、読んだ行はその場で素通しする。保持量が青天井から固定長に
+変わっているので、悪化する経路が無い。
 
 なお OPEN_ISSUES に「16GiB のうち 4GiB を gcsfuse が占めており余裕が少ない」と
 書いてあったが、**現在の割り当ては 32GiB**（`infra/variables.tf` の
@@ -181,10 +214,11 @@ curl -s -G -H "Authorization: Bearer $(gcloud auth print-access-token)" \
 ```
 slot0: job_4df2bae14e784264  exec=98gj4  running
 slot1: job_38316d76aaea492e  exec=6ln75  running
-slot2: (空)
-job_87bda098fb8b4310         queued
+job_87bda098fb8b4310                     queued（枠の空き待ち）
 ```
 
+枠は `queue/slots/` に `max_running_jobs` 本ぶんだけ作られる（既定2。
+`api/main.py` の `_claim_global_slot` が `range(MAX_RUNNING_JOBS)` を回す）。
 GPU は2本だけ立ち、3件目が待機。1件目が終わると**利用者が何もしなくても**
 3件目が動き出した。
 
