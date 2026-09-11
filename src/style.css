@@ -50,6 +50,10 @@ body {
 
 .header {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   /* ノッチ / ステータスバーを避ける。Capacitor で包んだときに効く */
   padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
   background: var(--background);
@@ -59,11 +63,49 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* 部屋 / 写真 の切り替え。どちらを触っているかは常に見えている必要がある */
+.mode-switch {
+  display: flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 999px;
+  background: #e6e9ea;
+}
+
+.mode-switch__item {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #5d6567;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  touch-action: manipulation;
+}
+
+.mode-switch__item.is-active {
+  background: var(--surface);
+  color: var(--primary);
+}
+
 .viewport {
   flex: 1;
   position: relative;
   min-height: 0;
   touch-action: none; /* ブラウザ既定のスクロール／ズームを止め、自前のジェスチャに回す */
+}
+
+/*
+ * 写真モードの背景。写真は CSS で敷き、その上に透明のキャンバスを重ねる。
+ * contain にするのは写真の全体を見せるため。余白は黒にして、
+ * 写真の外側であることが分かるようにする
+ */
+.viewport--photo {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  background-color: #1b1d1e;
 }
 
 .viewport canvas {
@@ -165,6 +207,13 @@ body {
 
 .button.is-danger {
   background: var(--danger);
+}
+
+/* 主でない操作。並んだときに押し間違えないよう、主のボタンより弱く見せる */
+.button.is-quiet {
+  background: none;
+  border: 1px solid var(--border);
+  color: #5d6567;
 }
 
 .hint {

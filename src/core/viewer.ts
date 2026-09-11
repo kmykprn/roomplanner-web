@@ -22,7 +22,9 @@ export interface Viewer {
 }
 
 export function createViewer(container: HTMLElement): Viewer {
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // alpha: true は写真モードのため。背景を CSS で敷いた写真に透かす。
+  // 部屋モードは scene.background を色で塗るので、見た目は変わらない
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // モバイルで 3x は重いので上限を 2 に
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;

@@ -3,28 +3,31 @@
  * v4 の components/bottomsheets/（4,109 行）に相当する部分の最小版。
  *
  * UI は DOM。3D の上に重ねるだけなので three.js とは完全に切り離せる。
+ *
+ * **タブの並びはモードで変わる。** 部屋モードには写真からの生成があり、
+ * 写真モードには背景の選択がある。設置と操作は両方にある。
  */
 
 import { FURNITURE_TYPES } from '@/config/furniture';
 import { createGenerationPanel } from '@/ui/generationPanel';
+import { createPhotoPanel } from '@/ui/photoPanel';
 import { deletePreview } from '@/platform/previewCache';
-import {
-  appState,
-  addFurniture,
-  removeFurniture,
-  updateFurniture,
-  selectFurniture,
-  findFreePosition,
-  clampInsideRoom,
-} from '@/core/appState';
+import { activeScene, isPhotoMode, modeState } from '@/core/mode';
+import { appState } from '@/core/appState';
+import { photoState } from '@/core/photoState';
 
-type TabId = 'add' | 'generate' | 'manage';
+type TabId = 'background' | 'add' | 'generate' | 'manage';
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: 'add', label: '設置' },
-  { id: 'generate', label: '写真から' },
-  { id: 'manage', label: '操作' },
-];
+const TABS: Record<TabId, string> = {
+  background: '背景',
+  add: '設置',
+  generate: '写真から',
+  manage: '操作',
+};
+
+/** モードごとのタブの並び */
+const ROOM_TABS: TabId[] = ['add', 'generate', 'manage'];
+const PHOTO_TABS: TabId[] = ['background', 'add', 'manage'];
 
 /** 1 回のボタン操作で家具を回す角度 */
 const ROTATION_STEP = Math.PI / 12; // 15 度
@@ -44,38 +47,47 @@ export function createBottomSheet(container: HTMLElement): void {
   body.className = 'sheet__body';
   sheet.appendChild(body);
 
-  for (const tab of TABS) {
-    const button = document.createElement('button');
-    button.className = 'sheet__tab';
-    button.textContent = tab.label;
-    button.addEventListener('click', () => {
-      activeTab = tab.id;
-      render();
-    });
-    tabBar.appendChild(button);
-  }
-
   // 生成は8分かかり、その間もタブを行き来できる必要がある。
   // 毎回作り直すと進行表示が途切れるので、1つ作って使い回す
   const generationPanel = createGenerationPanel();
+  const photoPanel = createPhotoPanel();
+
+  function visibleTabs(): TabId[] {
+    return isPhotoMode() ? PHOTO_TABS : ROOM_TABS;
+  }
 
   function render(): void {
-    // タブの選択状態を反映する
-    [...tabBar.children].forEach((child, index) => {
-      child.classList.toggle('is-active', TABS[index].id === activeTab);
-    });
+    const tabs = visibleTabs();
+
+    // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
+    if (!tabs.includes(activeTab)) activeTab = tabs[0];
+
+    tabBar.replaceChildren(
+      ...tabs.map((tab) => {
+        const button = document.createElement('button');
+        button.className = 'sheet__tab';
+        button.classList.toggle('is-active', tab === activeTab);
+        button.textContent = TABS[tab];
+        button.addEventListener('click', () => {
+          activeTab = tab;
+          render();
+        });
+        return button;
+      })
+    );
 
     body.replaceChildren(renderActiveTab());
   }
 
   function renderActiveTab(): HTMLElement {
     if (activeTab === 'add') return renderAddTab();
-    // 生成パネルは自分で状態を購読して描き替えるので、作り直さず使い回す
+    // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
     if (activeTab === 'generate') return generationPanel;
+    if (activeTab === 'background') return photoPanel;
     return renderManageTab();
   }
 
-  /** 家具の一覧。押すと部屋の中央に置く */
+  /** 家具の一覧。押すと空いている場所に置く */
   function renderAddTab(): HTMLElement {
     const grid = document.createElement('div');
     grid.className = 'grid';
@@ -90,17 +102,18 @@ export function createBottomSheet(container: HTMLElement): void {
       button.append(swatch, type.name);
 
       button.addEventListener('click', () => {
+        const scene = activeScene();
         const id = crypto.randomUUID();
-        addFurniture({
+        scene.add({
           id,
           typeId: type.id,
           // 底面基準なので y = 0 が床置き。既存の家具に埋まらない場所を選ぶ
-          position: findFreePosition(type.defaultSize),
+          position: scene.placementFor(type.defaultSize),
           rotationY: 0,
           size: [...type.defaultSize],
           color: type.color,
         });
-        selectFurniture(id);
+        scene.select(id);
       });
 
       grid.appendChild(button);
@@ -114,7 +127,8 @@ export function createBottomSheet(container: HTMLElement): void {
     const wrapper = document.createElement('div');
     wrapper.className = 'row';
 
-    const { selectedId, furniture } = appState.get();
+    const scene = activeScene();
+    const { selectedId, furniture } = scene.state();
     const selected = furniture.find((f) => f.id === selectedId);
 
     if (!selected) {
@@ -130,7 +144,7 @@ export function createBottomSheet(container: HTMLElement): void {
       createButton('⟳ 右に回す', () => rotate(selected.id, ROTATION_STEP)),
       createButton('削除', () => {
         if (selected.sourceImageKey) void deletePreview(selected.sourceImageKey);
-        removeFurniture(selected.id);
+        scene.remove(selected.id);
       }, 'is-danger')
     );
 
@@ -141,17 +155,18 @@ export function createBottomSheet(container: HTMLElement): void {
    * 家具を回す。
    *
    * 回すと上から見た輪郭が広がるため、壁ぎわの家具はそのままだと壁を突き抜ける。
-   * 回転後の向きで位置を計算し直し、部屋の中へ押し戻す。
+   * 回転後の向きで位置を計算し直し、置ける範囲へ押し戻す
+   * （写真モードには壁が無いので、そのモードでは何も動かない）。
    */
   function rotate(id: string, step: number): void {
-    const { furniture, room } = appState.get();
-    const item = furniture.find((f) => f.id === id);
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
     if (!item) return;
 
     const rotationY = item.rotationY + step;
-    updateFurniture(id, {
+    scene.update(id, {
       rotationY,
-      position: clampInsideRoom(item.position, item.size, rotationY, room),
+      position: scene.constrain(item.position, item.size, rotationY),
     });
   }
 
@@ -163,9 +178,20 @@ export function createBottomSheet(container: HTMLElement): void {
     return button;
   }
 
-  // 選択状態が変わったら「操作」タブの中身を描き直す必要がある
-  appState.subscribe(() => {
+  // 選択状態が変わったら「操作」タブの中身を描き直す必要がある。
+  // どちらのモードの家具が変わったかは問わない（表示中のほうだけ描き直せばよい）
+  const redrawManageTab = (): void => {
     if (activeTab === 'manage') render();
+  };
+  appState.subscribe(redrawManageTab);
+  photoState.subscribe(redrawManageTab);
+
+  // モードが変わったら、そのモードの最初のタブへ戻す。
+  // 設置タブは両方にあるので、そのままだと写真モードに入っても設置が開いたままになり、
+  // 先にやるべき「背景の写真を選ぶ」に辿り着けない
+  modeState.subscribe(() => {
+    activeTab = visibleTabs()[0];
+    render();
   });
 
   render();

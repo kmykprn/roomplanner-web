@@ -7,7 +7,7 @@
  */
 
 import { createStore } from '@/core/store';
-import { addFurniture, findFreePosition } from '@/core/appState';
+import { roomScene } from '@/core/appState';
 import { shrinkForUpload } from '@/core/imageResize';
 import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
@@ -312,11 +312,11 @@ async function place(id: string, jobId: string, modelUrl?: string): Promise<void
     // 署名付きURLは1時間で切れる。中身を先に保存してから置く
     const key = await saveModel(jobId, modelUrl);
     const job = generationState.get().jobs.find((item) => item.id === id);
-    addFurniture({
+    roomScene.add({
       id: crypto.randomUUID(),
       typeId: 'generated',
       name: '写真から作った家具',
-      position: findFreePosition(GENERATED_SIZE),
+      position: roomScene.placementFor(GENERATED_SIZE),
       rotationY: 0,
       size: [...GENERATED_SIZE],
       color: PLACEHOLDER_COLOR,

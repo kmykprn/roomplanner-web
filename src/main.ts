@@ -3,9 +3,15 @@
  *
  * React がないので、起動処理は上から下へ 1 度だけ走る手続きになる。
  * 「いつ再レンダリングされるか」を考える必要がない。
+ *
+ * モードは2つある。**3D の世界は1つのまま**、表示するものとカメラを差し替える。
+ *
+ *   部屋 … 部屋を組み立てて、その中に家具を置く
+ *   写真 … 選んだ写真を背景にして、その上に家具を置く
  */
 
 import '@/style.css';
+import * as THREE from 'three';
 import { createViewer } from '@/core/viewer';
 import { createRoom } from '@/scene/room';
 import { createLighting } from '@/scene/lighting';
@@ -13,14 +19,26 @@ import { createFurnitureLayer } from '@/scene/furniture';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
+import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createBottomSheet } from '@/ui/bottomSheet';
-import { appState } from '@/core/appState';
+import { createModeSwitch } from '@/ui/modeSwitch';
+import { appState, roomScene } from '@/core/appState';
+import { photoState, photoScene } from '@/core/photoState';
+import { isPhotoMode, modeState } from '@/core/mode';
 import { persistRoomOnChange, restoreRoom } from '@/core/persistence';
 import { resumeGeneration } from '@/core/generation';
+import { THEME } from '@/config/theme';
 
-const viewport = document.querySelector<HTMLElement>('#viewport');
-const app = document.querySelector<HTMLElement>('#app');
-if (!viewport || !app) throw new Error('起動に必要な要素が見つかりません');
+/** 起動に必須の要素を取る。無ければどれが無いのか分かる形で止める */
+function requireElement(selector: string): HTMLElement {
+  const element = document.querySelector<HTMLElement>(selector);
+  if (!element) throw new Error(`起動に必要な要素が見つかりません: ${selector}`);
+  return element;
+}
+
+const viewport = requireElement('#viewport');
+const app = requireElement('#app');
+const header = requireElement('.header');
 
 // シーンを組み立てる前に読み戻す。あとからだと部屋の大きさが二重に反映される
 restoreRoom();
@@ -28,26 +46,83 @@ restoreRoom();
 const viewer = createViewer(viewport);
 const { room } = appState.get();
 
+// 写真モードはカメラの画角を写真に合わせて変える。
+// 戻すときのために、部屋モードの画角をここで控えておく
+const roomFov = viewer.camera.fov;
+
 // --- シーンを組み立てる ---
 const roomObjects = createRoom(room);
-const furnitureLayer = createFurnitureLayer();
-viewer.scene.add(roomObjects.group, createLighting(room), furnitureLayer.group);
+// 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
+const roomFurniture = createFurnitureLayer();
+const photoFurniture = createFurnitureLayer();
+viewer.scene.add(
+  roomObjects.group,
+  createLighting(room),
+  roomFurniture.group,
+  photoFurniture.group
+);
 
 // --- 操作を繋ぐ ---
 const cameraControls = createCameraControls(viewer.canvas, viewer.camera);
-createFurnitureDrag(viewer.canvas, viewer.camera, furnitureLayer, cameraControls);
+createFurnitureDrag(
+  viewer.canvas,
+  viewer.camera,
+  // 掴んだ時点のモードで対象を決める
+  () =>
+    isPhotoMode()
+      ? { scene: photoScene, layer: photoFurniture }
+      : { scene: roomScene, layer: roomFurniture },
+  cameraControls
+);
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 
 // --- 状態とシーンを同期する ---
 // 状態が変わったときだけ呼ばれる。毎フレーム差分を取る必要はない
-appState.subscribe((state) => furnitureLayer.sync(state.furniture, state.selectedId));
+appState.subscribe((state) => roomFurniture.sync(state.furniture, state.selectedId));
+photoState.subscribe((state) => photoFurniture.sync(state.furniture, state.selectedId));
 
 // subscribe は登録するだけで、その場では呼ばれない。
 // 保存した部屋を読み戻したときは変化が起きないので、ここで一度だけ描く。
 // これが無いと、復元した家具が状態にはあるのに画面に出ない
-furnitureLayer.sync(appState.get().furniture, appState.get().selectedId);
+roomFurniture.sync(appState.get().furniture, appState.get().selectedId);
+
+// --- モードの切り替え ---
+/** 部屋モードの背景色。写真モードでは透明にして、CSS で敷いた写真を透かす */
+const roomBackground = new THREE.Color(THEME.background);
+
+function applyMode(): void {
+  const photo = isPhotoMode();
+
+  roomObjects.group.visible = !photo;
+  roomFurniture.group.visible = !photo;
+  photoFurniture.group.visible = photo;
+
+  // 写真モードは背景を塗らない。塗ると CSS の写真が隠れる
+  viewer.scene.background = photo ? null : roomBackground;
+  viewport.classList.toggle('viewport--photo', photo);
+
+  // 写真モードのカメラは固定。写真は動かないので、カメラだけ回ると嘘になる
+  cameraControls.enabled = !photo;
+  if (photo) {
+    applyPhotoCamera(viewer.camera);
+  } else {
+    viewer.camera.fov = roomFov;
+    viewer.camera.updateProjectionMatrix();
+  }
+}
+
+function applyBackground(): void {
+  const { backgroundUrl } = photoState.get();
+  viewport.style.backgroundImage = backgroundUrl ? `url("${backgroundUrl}")` : '';
+}
+
+modeState.subscribe(applyMode);
+photoState.subscribe(applyBackground);
+applyMode();
+applyBackground();
 
 // --- UI ---
+header.appendChild(createModeSwitch());
 createBottomSheet(app);
 
 // --- 端末に残す ---
@@ -57,6 +132,7 @@ resumeGeneration();
 
 // --- 毎フレームの処理 ---
 viewer.onFrame(() => {
+  if (isPhotoMode()) return; // 写真モードのカメラは固定なので、追従させるものが無い
   cameraControls.update();
   updateWallVisibility(); // カメラが動いたぶんだけ壁の透過を追従させる
 });
