@@ -20,6 +20,8 @@ import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
+import { createFloorGrid } from '@/scene/floorGrid';
+import { createFloorQuadOverlay } from '@/ui/floorQuad';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
@@ -55,11 +57,14 @@ const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
 const roomFurniture = createFurnitureLayer();
 const photoFurniture = createFurnitureLayer();
+// 床合わせの方眼。写真モードで「床」タブを開いている間だけ出す
+const floorGrid = createFloorGrid();
 viewer.scene.add(
   roomObjects.group,
   createLighting(room),
   roomFurniture.group,
-  photoFurniture.group
+  photoFurniture.group,
+  floorGrid.object
 );
 
 // --- 操作を繋ぐ ---
@@ -103,9 +108,13 @@ function applyMode(): void {
 
   // 写真モードのカメラは固定。写真は動かないので、カメラだけ回ると嘘になる
   cameraControls.enabled = !photo;
+  floorGrid.object.visible = false;
+
   if (photo) {
-    applyPhotoCamera(viewer.camera);
+    applyPhotoView();
   } else {
+    // 写真モードは描画範囲も画角も変えるので、どちらも戻す
+    viewer.setContentAspect(null);
     viewer.camera.fov = roomFov;
     viewer.camera.updateProjectionMatrix();
   }
@@ -116,13 +125,33 @@ function applyBackground(): void {
   viewport.style.backgroundImage = backgroundUrl ? `url("${backgroundUrl}")` : '';
 }
 
+/**
+ * 写真モードの見え方を、いまの状態に合わせる。
+ *
+ * **3D を描く範囲を写真の矩形に合わせるのが肝。** 写真は画面いっぱいには
+ * 収まらないので余白ができるが、そこにまで 3D を描くと、写真の中の床と
+ * 3D の床が対応しなくなり、方眼を合わせても意味がなくなる。
+ */
+function applyPhotoView(): void {
+  if (!isPhotoMode()) return;
+  const { backgroundAspect, calibration, isAligning, calibrationFailed } = photoState.get();
+
+  viewer.setContentAspect(backgroundAspect);
+  applyPhotoCamera(viewer.camera, calibration);
+
+  floorGrid.object.visible = isAligning && calibration !== null;
+  floorGrid.setValid(!calibrationFailed);
+}
+
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
+photoState.subscribe(applyPhotoView);
 applyMode();
 applyBackground();
 
 // --- UI ---
 header.appendChild(createModeSwitch());
+createFloorQuadOverlay(viewport, viewer.canvas);
 createBottomSheet(app);
 
 // --- 端末に残す ---

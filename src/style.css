@@ -341,3 +341,109 @@ body {
 }
 
 
+
+/* 床合わせの四角。写真の上に重ねる。
+   角以外は指を通して、合わせている最中でも家具を動かせるようにする */
+.floor-quad {
+  position: absolute;
+  inset: 0;
+  /* SVG は画像と同じ「置き換え要素」なので、inset だけでは広がらず
+     既定の 300x150 のままになる。そうなると四隅が枠の外に出て切り取られる */
+  width: 100%;
+  height: 100%;
+  display: none;
+  pointer-events: none;
+}
+
+.floor-quad.is-visible {
+  display: block;
+}
+
+.floor-quad__outline {
+  fill: rgba(10, 126, 164, 0.12);
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.floor-quad__handle {
+  fill: var(--surface);
+  stroke: var(--primary);
+  stroke-width: 3;
+  /* 角だけは掴める。ドラッグ中にブラウザのスクロールに取られないようにする */
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* 割り出せない形になっている間。角を戻せば元に戻る */
+.floor-quad.is-invalid .floor-quad__outline {
+  fill: rgba(192, 57, 43, 0.12);
+  stroke: var(--danger);
+}
+
+.floor-quad.is-invalid .floor-quad__handle {
+  stroke: var(--danger);
+}
+
+/* 床合わせのタブ */
+.align {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  /*
+   * 高さを固定しておく。文言や行数で高さが変わると、その上にある 3D の
+   * 表示領域まで動いてしまう。角をドラッグしている最中にこれが起きると、
+   * 写真が指の下でずれて狙った場所に置けない
+   */
+  min-height: 156px;
+  align-content: start;
+}
+
+.align__input:disabled {
+  opacity: 0.45;
+}
+
+.align__field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.align__label {
+  flex: 0 0 auto;
+  min-width: 72px;
+  font-size: 14px;
+}
+
+.align__input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  accent-color: var(--primary);
+}
+
+/* 数値の入力欄だけは幅を詰める。伸ばしても押しやすくならない */
+.align__input[type='number'] {
+  flex: 0 0 88px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.align__value {
+  flex: 0 0 auto;
+  min-width: 52px;
+  color: #7a8388;
+  font-size: 13px;
+  /* 数字が伸び縮みしても位置がずれないようにする */
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.align__note {
+  font-size: 12px;
+  line-height: 1.5;
+}
