@@ -23,6 +23,14 @@ const TAP_THRESHOLD_PX = 8;
 export interface DragTarget {
   scene: EditableScene;
   layer: FurnitureLayer;
+  /**
+   * 家具をどの面に沿って動かすか。
+   *
+   *   floor  … 床の上を滑る（部屋モード）。奥へ行けば小さく写る
+   *   screen … 画面の面に沿って動く（写真モード）。左右と上下だけで、奥行きは変えない。
+   *            写真の床と 3D の床は合っていないので、奥へ動かして縮む意味がない
+   */
+  surface: 'floor' | 'screen';
 }
 
 export function createFurnitureDrag(
@@ -35,10 +43,13 @@ export function createFurnitureDrag(
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
 
-  // 家具は水平面の上を滑る。指の位置をその面に投影して移動先を決める。
-  // **面の高さは掴んだ家具に合わせる。** 持ち上げてある家具を床の面で追うと、
-  // 指と家具の足元がずれて、狙ったところに置けない
+  // 指の位置をこの面に投影して移動先を決める。向きと位置は掴んだときに決める。
+  // **面は掴んだ家具を通す。** 家具から離れた面で追うと、指と家具がずれて
+  // 狙ったところに置けない
   const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const FLOOR_NORMAL = new THREE.Vector3(0, 1, 0);
+  /** 写真モードのカメラは正面（-Z）を向いているので、画面の面の法線は +Z */
+  const SCREEN_NORMAL = new THREE.Vector3(0, 0, 1);
   const hitPoint = new THREE.Vector3();
 
   /**
@@ -105,8 +116,12 @@ export function createFurnitureDrag(
     const item = target.scene.state().furniture.find((f) => f.id === furnitureId);
     if (!item) return;
 
-    // 平面は「法線・p + constant = 0」なので、高さ h の面は constant = -h
-    dragPlane.constant = -item.position[1];
+    // 平面は「法線・p + constant = 0」なので、家具を通す面は constant = -(法線方向の座標)
+    if (target.surface === 'floor') {
+      dragPlane.set(FLOOR_NORMAL, -item.position[1]);
+    } else {
+      dragPlane.set(SCREEN_NORMAL, -item.position[2]);
+    }
     if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
       grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
     }
@@ -127,10 +142,13 @@ export function createFurnitureDrag(
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
 
-    // 高さはドラッグでは変えない（ボタン専用）。移動先の丸め方はモードが決める
-    // （部屋なら壁の内側と床の上、写真なら丸めない）
+    // 面に沿わない向きの座標はそのまま保つ（床なら高さ、画面なら奥行き）。
+    // 移動先の丸め方はモードが決める（部屋なら壁の内側と床の上、写真なら丸めない）
+    const [, y, z] = item.position;
+    const moved: [number, number, number] =
+      draggingTarget.surface === 'floor' ? [next.x, y, next.z] : [next.x, next.y, z];
     scene.update(draggingId, {
-      position: scene.constrain([next.x, item.position[1], next.z], item.size, item.rotationY),
+      position: scene.constrain(moved, item.size, item.rotationY),
     });
   }
 

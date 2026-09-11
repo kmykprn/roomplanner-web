@@ -15,6 +15,7 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
+import { deleteBackground, saveBackground } from '@/platform/backgroundStore';
 import { clampPhotoView, DEFAULT_PHOTO_VIEW, type PhotoView } from '@/core/photoView';
 
 /**
@@ -48,10 +49,21 @@ export const photoState = createStore<PhotoState>({
   selectedId: null,
 });
 
+/**
+ * 新しい家具を並べる横幅の半分（メートル）。
+ *
+ * 写真モードでは奥行きを使わない（奥へ置くと小さく写り、写真の床と合っていない
+ * 以上その縮み方に意味がない）。**奥行き 0 の横一列**にだけ並べる
+ */
+const PHOTO_ROW_HALF_WIDTH = 8;
+
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
-  // カメラは原点を見下ろす位置で固定してある。原点から空きを探せば画面に入る
-  placementFor: (size) => findFreeSpot(photoState.get().furniture, size),
+  // 奥行きの許容幅を家具の厚みちょうどにすると、z = 0 の候補だけが残る
+  placementFor: (size) =>
+    findFreeSpot(photoState.get().furniture, size, {
+      limit: { halfWidth: PHOTO_ROW_HALF_WIDTH, halfDepth: size[2] / 2 },
+    }),
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
   constrain: (position) => position,
@@ -67,27 +79,44 @@ export const photoScene = createFurnitureScene(photoState, {
 export async function setBackground(file: File): Promise<void> {
   photoState.set({ backgroundStatus: 'loading', backgroundName: file.name });
 
-  let url: string | null = null;
-  let aspect: number;
+  let shrunk: Blob;
   try {
     // 原寸のままだと Safari が描かないことがあるので、表示用に縮めてから渡す
-    url = URL.createObjectURL(await shrinkForDisplay(file));
-    const image = await decodeImage(url);
-    aspect = image.naturalWidth / image.naturalHeight;
+    shrunk = await shrinkForDisplay(file);
   } catch {
-    if (url) URL.revokeObjectURL(url);
     photoState.set({ backgroundStatus: 'failed' });
     return;
   }
 
+  if (!(await showBackground(shrunk))) return;
+
+  // 次に開いたときも残っているように、縮めた1枚を端末に置く。
+  // 置けなくても（容量・プライベートモード）いま見えているものは変わらない
+  saveBackground(shrunk).catch(() => {});
+
+  // 前の写真で寄ったままだと、新しい写真がいきなり拡大された状態で出る
+  photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
+}
+
+/**
+ * 写真を画面に出す。選んだ直後と、起動時に読み戻したときの両方から呼ぶ。
+ * 読めなければ「失敗」にして false を返す
+ */
+export async function showBackground(blob: Blob): Promise<boolean> {
+  const url = URL.createObjectURL(blob);
+  let aspect: number;
+  try {
+    const image = await decodeImage(url);
+    aspect = image.naturalWidth / image.naturalHeight;
+  } catch {
+    URL.revokeObjectURL(url);
+    photoState.set({ backgroundStatus: 'failed' });
+    return false;
+  }
+
   replaceBackgroundUrl(url);
-  // 写真が変われば床も変わる。合わせ直してもらう
-  photoState.set({
-    backgroundStatus: 'ready',
-    backgroundAspect: aspect,
-    // 前の写真で寄ったままだと、新しい写真がいきなり拡大された状態で出る
-    view: { ...DEFAULT_PHOTO_VIEW },
-  });
+  photoState.set({ backgroundStatus: 'ready', backgroundAspect: aspect });
+  return true;
 }
 
 /** 背景の写真を外す */
@@ -98,6 +127,8 @@ export function clearBackground(): void {
     backgroundStatus: 'idle',
     backgroundAspect: null,
   });
+  // 端末に残した1枚も捨てる。次に開いたときに戻ってこないように
+  deleteBackground().catch(() => {});
 }
 
 /**
