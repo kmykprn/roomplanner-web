@@ -12,37 +12,50 @@
 
 ## サーバー（Hunyuan3D-2GP）
 
-### 1. ワーカーのメモリ使用率が実機で未測定
+### 1. OAuth 同意画面が「テスト中」のまま
 
-PR #12 で `worker_entrypoint.py` の子プロセス起動を `subprocess.run` から `Popen` に
-変えた。標準出力を1行ずつ読んで工程（`phase`）を `status.json` に書くため。
+Google ログインは使える状態になっている（プロバイダ有効、承認済みドメインに
+`kmykprn.github.io` を追加済み、認証URIの発行まで実機で確認済み）。ただし
+**公開ステータスが「テスト中」**なので、**テストユーザーに登録したアカウントしか
+ログインできない**（上限100人）。
 
-**理屈の上では従来より軽い。** 旧実装 `subprocess.run(stderr=PIPE)` は標準エラーの
-全文をメモリに保持していたが、新実装は末尾200行しか残さない。読んだ行はその場で
-素通しし、溜めない。
+自分で動作確認するぶんには支障がない。**人に配る前に本番へ切り替える必要がある。**
 
-**しかし実機で測っていない。** 16GiB のうち 4GiB を gcsfuse のファイルキャッシュが
-占めており余裕が少なく、過去に OOM（signal 9）を実際に踏んでいる箇所。
+切り替えようとすると、こう出て「アプリを公開」が押せない。
 
-確かめ方: 実際に1件生成し、Cloud Run のメトリクスで `hunyuan3d-measure` の
-コンテナメモリ使用率を見る。
+> To publish your app, you must complete your configuration on the Branding page.
 
-### 2. 完了通知（`/internal/dispatch`）が2件目で効くか未確認
+ブランディングで空のままの項目があるため。公開に要るのは次の2つ。
 
-ワーカーの `_notify_dispatcher()` が生成完了時に API へ通知し、空いた GPU 枠で
-次の待機ジョブを開始する。PR #13 で入った新しい経路。
+| 項目 | 入れる値 |
+|---|---|
+| アプリケーションのホームページ | `https://kmykprn.github.io/roomplanner-web/` |
+| プライバシーポリシー | `https://kmykprn.github.io/roomplanner-web/privacy.html` |
 
-**1件だけ試しても症状が出ない。** 通知に失敗しても生成結果は残り、次に
-`GET /jobs/{id}` を叩いたときに `_dispatch_queued_jobs()` が枠を回収するため。
+**URL は承認済みドメイン配下である必要がある。** `kmykprn.github.io` は登録済みなので
+条件は満たす。ただし**ページが実在しないとまずい**（同意画面からリンクが張られる）。
+プライバシーポリシーは未作成なので、公開前に書く。
 
-症状が出るのは**2件目を投げたとき**。いつまでも `queued` のままなら、ここが
-失敗している。ワーカーのログに `_notify_dispatcher` の traceback が出る。
+内容として書くべきこと（いずれも実装から確認できる事実）:
+
+- 写真を Google Cloud（`asia-southeast1` / シンガポール）へ送り、3Dモデル生成に使う
+- 入力画像と生成物は**30日で自動削除**される（`infra/storage.tf` の `lifecycle_rule`）
+- Google ログインで取得するのは `email` / `profile` / `openid` のみ
+- 第三者提供はしない
+- 連絡先
+
+**ロゴは上げないこと。** 上げると Google の審査対象になる。現在のスコープは基本3つ
+だけなので、ロゴ無しなら審査は不要。利用規約は任意。
+
+> 公開ステータスとテストユーザーの追加は、**どちらも API が無い**。
+> Google Auth Platform のコンソールでしか操作できない。
+> https://console.cloud.google.com/auth/audience?project=project-db31f07b-2895-48b8-8bb
 
 ---
 
 ## クライアント（roomplanner-web）
 
-### 3. Firebase に到達できないと「取得中…」で止まり、ボタンは押せたまま
+### 2. Firebase に到達できないと「取得中…」で止まり、ボタンは押せたまま
 
 `src/ui/generationPanel.ts`:
 
@@ -63,7 +76,7 @@ void getUid()
 
 直し方の案: `getUid()` に待ち時間を設け、超えたら「認証できませんでした」に倒す。
 
-### 4. 生成した GLB が Cache Storage から消えない
+### 3. 生成した GLB が Cache Storage から消えない
 
 `src/platform/modelCache.ts` に削除関数があるが、**どこからも呼ばれていない。**
 
@@ -78,7 +91,7 @@ export async function deleteModel(key: string): Promise<void> {
 
 `src/ui/bottomSheet.ts` の削除ボタンで `deletePreview` と並べて呼べばよい。
 
-### 5. Blob URL が解放されていない
+### 4. Blob URL が解放されていない
 
 `URL.createObjectURL` が3箇所にあるが、`URL.revokeObjectURL` は**0箇所**。
 
@@ -91,7 +104,7 @@ export async function deleteModel(key: string): Promise<void> {
 Blob URL はドキュメントが生きている限り元の Blob をメモリに固定する。
 サムネイルは小さいが、**GLB は1件4〜5MB** なので効いてくる。
 
-### 6. README の「今後の予定」が実態とずれている
+### 5. README の「今後の予定」が実態とずれている
 
 引き継ぎ資料として誤解のもとになる。
 
@@ -103,7 +116,7 @@ Blob URL はドキュメントが生きている限り元の Blob をメモリ�
 
 ## 方針が決まっていないもの
 
-### 7. Capacitor / App Store をやるかどうか
+### 6. Capacitor / App Store をやるかどうか
 
 README の「今後の予定」5 に「Capacitor 8 で iOS アプリ化 → App Store」がある。
 `vite.config.ts` にも Capacitor 向けのベースパス分岐が入っている。
@@ -113,3 +126,79 @@ README の「今後の予定」5 に「Capacitor 8 で iOS アプリ化 → App 
 使えるのはウェブ配信のときだけ。
 
 無料回数と課金（`docs/LOGIN_PLAN.md` の順序4）に着手する前に決めること。
+
+---
+
+# 確認して解決したもの
+
+記録として残す。**同じことを二度調べないため**と、確かめ方を再利用するため。
+
+### ワーカーのメモリ使用率（旧 1）── ピーク 51%、余裕あり
+
+PR #12 で `worker_entrypoint.py` の子プロセス起動を `subprocess.run` から `Popen` に
+変えた。標準出力を1行ずつ読んで工程（`phase`）を `status.json` に書くため。過去に
+OOM（signal 9）を踏んでいる箇所なので実測したかった。
+
+**Cloud Monitoring で実測した結果、ピークで 51%。**
+
+| | |
+|---|---|
+| 割り当て | 32GiB（8 CPU） |
+| メモリ使用率のピーク | **51%**（p99, 5分間隔・18点） |
+| 中央値のピーク | 49.5% |
+| 実容量に直すと | 約 16.3GiB 使用 / 約 15.7GiB 空き |
+
+`run.googleapis.com/container/memory/utilizations` を `hunyuan3d-measure` で
+絞って取得。テクスチャ付き生成を4件流した区間を含む。
+
+**`Popen` 化による悪化は見られない。** 旧実装 `subprocess.run(stderr=PIPE)` は
+標準エラーの全文をメモリに保持していたが、新実装は末尾200行しか残さず、読んだ行は
+その場で素通しする。理屈どおり軽いまま。
+
+なお OPEN_ISSUES に「16GiB のうち 4GiB を gcsfuse が占めており余裕が少ない」と
+書いてあったが、**現在の割り当ては 32GiB**（`infra/variables.tf` の
+`job_memory`）。16GiB だったのは L4 の 4CPU 構成を試していた頃の話で、そのときは
+実際に OOM を踏んだ。8CPU/32GiB に変えた時点で余裕ができている。
+
+再測定するときのコマンド:
+
+```bash
+P=project-db31f07b-2895-48b8-8bb
+curl -s -G -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  --data-urlencode 'filter=metric.type="run.googleapis.com/container/memory/utilizations" AND resource.labels.job_name="hunyuan3d-measure"' \
+  --data-urlencode "interval.startTime=$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode "interval.endTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode "aggregation.alignmentPeriod=300s" \
+  --data-urlencode "aggregation.perSeriesAligner=ALIGN_PERCENTILE_99" \
+  "https://monitoring.googleapis.com/v3/projects/$P/timeSeries"
+```
+
+### 完了通知が2件目で効くか（旧 2）── 効いている
+
+**3枚同時に投げて確認した。** 1件だけでは症状が出ない（通知が失敗しても
+`GET /jobs/{id}` 側が枠を回収する）ので、待機が発生する状況を作った。
+
+```
+slot0: job_4df2bae14e784264  exec=98gj4  running
+slot1: job_38316d76aaea492e  exec=6ln75  running
+slot2: (空)
+job_87bda098fb8b4310         queued
+```
+
+GPU は2本だけ立ち、3件目が待機。1件目が終わると**利用者が何もしなくても**
+3件目が動き出した。
+
+```
+[11:15:00] 1件目=running    2件目=running  3件目=queued
+[11:15:36] 1件目=succeeded  2件目=running  3件目=running (exec=5pq2f)
+```
+
+通知経路が実際に使われたことは API のアクセスログで裏が取れている。
+
+```
+11:15:11  200  Python-urllib/3.10   ← ワーカーからの完了通知
+11:06:24  401  curl/7.81.0          ← 偽装を試したもの。正しく弾かれた
+```
+
+終了後は `queue/slots/` と `queue/pending/` がどちらも空になり、
+回数も `{"count": 3, "attempts": 3}` と正しく計上された。
