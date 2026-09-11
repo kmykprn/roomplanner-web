@@ -1,104 +1,133 @@
 /**
- * 写真モードの「床」タブ。方眼が写真の床に乗って見えるまで合わせてもらう。
+ * 写真モードの「床」タブ。
  *
- * **ボタンと指の操作の両方を用意してある。** どちらが使いやすいかを決めるため、
- * 同時に使える（指の操作は `interaction/floorGesture.ts`）。
- * ボタンは押しっぱなしで動き続ける。細かく詰めるときはこちらが向く。
+ * **ギズモとボタンの両方を用意してある。** ギズモ（写真の上の矢印とリング）で
+ * 大まかに動かし、ボタンで細かく詰める。どちらも同じ値を触る。
+ *
+ * 出すボタンは、ギズモで触っているものに合わせて切り替える。移動を触っている
+ * ときに回転のボタンまで並べると、何を動かしているのか分からなくなる。
  */
 
-import { adjustFloorView, photoState, resetFloorView } from '@/core/photoState';
-import { CELL_METERS, forwardOnFloor, STEPS, type FloorView } from '@/core/floorView';
+import {
+  adjustFloorTransform,
+  photoState,
+  resetFloorTransform,
+  setGizmoMode,
+} from '@/core/photoState';
+import { CELL_METERS, STEPS, type FloorTransform, type GizmoMode } from '@/core/floorTransform';
 
 const GUIDE = `方眼が床に乗って見えるまで動かしてください（細い線 ${CELL_METERS * 100}cm / 太い線 2m）`;
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
-const GESTURE_HINT =
-  '写真の上を1本指でなぞると、方眼をつかんで動かせます（2本指＝大きさ・水平）。' +
-  '大きさは、太い線1つぶんがソファの幅くらいになるのが目安';
+const GIZMO_HINT = '写真の上の矢印やリングをつかんでも動かせます';
 
 /** 押しっぱなしで動き出すまでの待ち時間と、その後の間隔（ミリ秒） */
 const REPEAT_DELAY_MS = 350;
 const REPEAT_INTERVAL_MS = 70;
 
-/** 各行の作り。ボタンの向きと、1回ぶんの動かし方をまとめて持つ */
-const ROWS: Array<{
+const MODES: Array<{ id: GizmoMode; label: string }> = [
+  { id: 'translate', label: '移動' },
+  { id: 'rotate', label: '回転' },
+  { id: 'scale', label: '大きさ' },
+];
+
+/** ボタン1行ぶんの作り */
+interface Row {
   label: string;
   /** 減らす側・増やす側のボタンに出す文字 */
   marks: [string, string];
   /** ボタンに読ませる説明。文字だけでは向きが分からないため */
   directions: [string, string];
-  /** 1回ぶん動かしたあとの値。位置のように2つ同時に変わるものもある */
-  step: (view: FloorView, direction: -1 | 1) => Partial<FloorView>;
-  /** 画面に出す値 */
-  format: (view: FloorView) => string;
-}> = [
+  /** 1回ぶん動かしたあとの値 */
+  step: (transform: FloorTransform, direction: -1 | 1) => Partial<FloorTransform>;
+  format: (transform: FloorTransform) => string;
+}
+
+/** 移動と回転の行は「どの軸か」だけが違うので、軸ごとの見出しから組み立てる */
+interface AxisRow {
+  /** position / rotation の何番目を触るか（0 = X, 1 = Y, 2 = Z） */
+  axis: 0 | 1 | 2;
+  label: string;
+  marks: [string, string];
+  directions: [string, string];
+}
+
+/** 軸ごとの移動。ギズモの矢印と同じ並び（左右・上下・奥行き） */
+const MOVE_AXES: AxisRow[] = [
+  { axis: 0, label: '左右', marks: ['←', '→'], directions: ['左へ', '右へ'] },
+  { axis: 1, label: '上下', marks: ['↓', '↑'], directions: ['下へ', '上へ'] },
+  // 奥はカメラから遠ざかる向き（-Z）。画面では上へ遠のくので、印も上向きにする
   {
-    label: '位置',
-    marks: ['↓', '↑'],
-    directions: ['手前へ', '奥へ'],
-    /**
-     * 方眼を、画面の奥⇄手前へ滑らせる。
-     *
-     * 向きを変えると「奥」の指す方角も変わるので、そのときの向きから出す。
-     * 左右へ動かすのは1本指のドラッグのほうが速いので、ボタンには置かない
-     */
-    step: (view, direction) => {
-      const [forwardX, forwardZ] = forwardOnFloor(view);
-      return {
-        offsetX: view.offsetX + forwardX * STEPS.offset * direction,
-        offsetZ: view.offsetZ + forwardZ * STEPS.offset * direction,
-      };
-    },
-    format: (view) => describeOffset(view),
+    axis: 2,
+    label: '奥行き',
+    marks: ['↑', '↓'],
+    directions: ['奥へ', '手前へ'],
   },
+];
+
+/** 軸ごとの回転 */
+const TURN_AXES: AxisRow[] = [
   {
+    axis: 0,
     label: '傾き',
-    marks: ['▽', '△'],
+    marks: ['↺', '↻'],
     directions: ['寝かせる', '起こす'],
-    step: (view, direction) => ({ pitch: view.pitch + STEPS.pitch * direction }),
-    format: (view) => `${Math.round(view.pitch)}°`,
   },
   {
+    axis: 1,
     label: '向き',
     marks: ['↺', '↻'],
     directions: ['左へ回す', '右へ回す'],
-    step: (view, direction) => ({ yaw: view.yaw + STEPS.yaw * direction }),
-    format: (view) => `${Math.round(view.yaw)}°`,
   },
+  {
+    axis: 2,
+    label: '水平',
+    marks: ['↺', '↻'],
+    directions: ['左へ傾ける', '右へ傾ける'],
+  },
+];
+
+const MOVE_ROWS: Row[] = MOVE_AXES.map(({ axis, label, marks, directions }) => ({
+  label,
+  marks,
+  directions,
+  step: (transform, direction) => {
+    const position = [...transform.position] as [number, number, number];
+    position[axis] += STEPS.position * direction;
+    return { position };
+  },
+  format: (transform) => `${transform.position[axis].toFixed(1)} m`,
+}));
+
+const TURN_ROWS: Row[] = TURN_AXES.map(({ axis, label, marks, directions }) => ({
+  label,
+  marks,
+  directions,
+  step: (transform, direction) => {
+    const rotation = [...transform.rotation] as [number, number, number];
+    rotation[axis] += STEPS.rotation * direction;
+    return { rotation };
+  },
+  format: (transform) => `${Math.round(transform.rotation[axis])}°`,
+}));
+
+const SCALE_ROWS: Row[] = [
   {
     label: '大きさ',
     marks: ['−', '＋'],
     directions: ['小さく', '大きく'],
-    /**
-     * **＋でマス目が大きくなる向きにする。**
-     *
-     * 中身は撮った人の目の高さで、上げるほどマス目は小さく見える。
-     * 数値の増減をそのままボタンに割り当てると、＋を押してマス目が縮む。
-     * 使う人が見ているのはマス目なので、見えるとおりの向きに合わせる
-     */
-    step: (view, direction) => ({
-      height: direction > 0 ? view.height / STEPS.heightRatio : view.height * STEPS.heightRatio,
+    step: (transform, direction) => ({
+      scale:
+        direction > 0 ? transform.scale * STEPS.scaleRatio : transform.scale / STEPS.scaleRatio,
     }),
-    format: (view) => `目線 ${view.height.toFixed(2)}m`,
-  },
-  {
-    label: '水平',
-    marks: ['↺', '↻'],
-    directions: ['左へ傾ける', '右へ傾ける'],
-    step: (view, direction) => ({ roll: view.roll + STEPS.roll * direction }),
-    format: (view) => `${view.roll.toFixed(1)}°`,
+    format: (transform) => `×${transform.scale.toFixed(2)}`,
   },
 ];
 
-/** 方眼をどれだけ動かしたか。向きが変わっても「奥／手前」で読めるようにする */
-function describeOffset(view: FloorView): string {
-  const [forwardX, forwardZ] = forwardOnFloor(view);
-  const forward = view.offsetX * forwardX + view.offsetZ * forwardZ;
-  const sideways = view.offsetX * forwardZ - view.offsetZ * forwardX;
-
-  if (Math.hypot(forward, sideways) < 0.05) return '中央';
-  const depth = `${forward >= 0 ? '奥' : '手前'} ${Math.abs(forward).toFixed(1)}m`;
-  return Math.abs(sideways) < 0.05 ? depth : `${depth} / 横 ${Math.abs(sideways).toFixed(1)}m`;
-}
+const ROWS_BY_MODE: Record<GizmoMode, Row[]> = {
+  translate: MOVE_ROWS,
+  rotate: TURN_ROWS,
+  scale: SCALE_ROWS,
+};
 
 export function createAlignPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -107,49 +136,91 @@ export function createAlignPanel(): HTMLElement {
   const status = document.createElement('p');
   status.className = 'hint';
 
-  const rows = ROWS.map((row) => {
-    const element = document.createElement('div');
-    element.className = 'align__row';
-
-    const label = document.createElement('span');
-    label.className = 'align__label';
-    label.textContent = row.label;
-
-    const value = document.createElement('span');
-    value.className = 'align__value';
-
-    const buttons = ([-1, 1] as const).map((direction, index) =>
-      createRepeatButton(row.marks[index], `${row.label}を${row.directions[index]}`, () =>
-        adjustFloorView(row.step(photoState.get().floorView, direction))
-      )
-    );
-
-    element.append(label, buttons[0], buttons[1], value);
-    return { element, value, buttons, format: row.format };
+  const modeBar = document.createElement('div');
+  modeBar.className = 'align__modes';
+  const modeButtons = MODES.map((mode) => {
+    const button = document.createElement('button');
+    button.className = 'align__mode';
+    button.textContent = mode.label;
+    button.addEventListener('click', () => setGizmoMode(mode.id));
+    modeBar.appendChild(button);
+    return button;
   });
 
-  const gestureHint = document.createElement('p');
-  gestureHint.className = 'hint align__note';
-  gestureHint.textContent = GESTURE_HINT;
+  const rowsArea = document.createElement('div');
+  rowsArea.className = 'align__rows';
+
+  const gizmoHint = document.createElement('p');
+  gizmoHint.className = 'hint align__note';
+  gizmoHint.textContent = GIZMO_HINT;
 
   const resetButton = document.createElement('button');
   resetButton.className = 'button is-quiet align__reset';
   resetButton.textContent = '最初に戻す';
-  resetButton.addEventListener('click', resetFloorView);
+  resetButton.addEventListener('click', resetFloorTransform);
 
-  panel.append(status, ...rows.map((row) => row.element), gestureHint, resetButton);
+  panel.append(status, modeBar, rowsArea, gizmoHint, resetButton);
+
+  /**
+   * いま出ている行。値と押せるかどうかを書き替えられるよう控えておく。
+   *
+   * **ボタンは作った時点で固定しない。** 写真より先に行を作ることがあるので、
+   * 作ったときの状態で無効にしたままだと、写真を選んでも押せないままになる
+   */
+  let visibleRows: Array<{
+    row: Row;
+    value: HTMLElement;
+    buttons: HTMLButtonElement[];
+  }> = [];
+  let builtMode: GizmoMode | null = null;
+
+  function buildRows(mode: GizmoMode): void {
+    visibleRows = ROWS_BY_MODE[mode].map((row) => {
+      const element = document.createElement('div');
+      element.className = 'align__row';
+
+      const label = document.createElement('span');
+      label.className = 'align__label';
+      label.textContent = row.label;
+
+      const value = document.createElement('span');
+      value.className = 'align__value';
+
+      const buttons = ([-1, 1] as const).map((direction, index) =>
+        createRepeatButton(row.marks[index], `${row.label}を${row.directions[index]}`, () =>
+          adjustFloorTransform(row.step(photoState.get().floorTransform, direction))
+        )
+      );
+
+      element.append(label, buttons[0], buttons[1], value);
+      rowsArea.appendChild(element);
+      return { row, value, buttons };
+    });
+  }
 
   function render(): void {
-    const { backgroundStatus, floorView } = photoState.get();
+    const { backgroundStatus, floorTransform, gizmoMode } = photoState.get();
     const hasPhoto = backgroundStatus === 'ready';
 
     status.textContent = hasPhoto ? GUIDE : NO_PHOTO;
-    gestureHint.hidden = !hasPhoto;
+    gizmoHint.hidden = !hasPhoto;
     resetButton.disabled = !hasPhoto;
+    modeButtons.forEach((button, index) => {
+      button.classList.toggle('is-active', MODES[index].id === gizmoMode);
+      button.disabled = !hasPhoto;
+    });
 
-    for (const row of rows) {
-      row.value.textContent = row.format(floorView);
-      for (const button of row.buttons) button.disabled = !hasPhoto;
+    // 触るものが変わったときだけ作り直す。毎回作り直すと、押しっぱなしの
+    // ボタンが指の下で作り替えられて途切れる
+    if (builtMode !== gizmoMode) {
+      rowsArea.replaceChildren();
+      buildRows(gizmoMode);
+      builtMode = gizmoMode;
+    }
+
+    for (const { row, value, buttons } of visibleRows) {
+      value.textContent = row.format(floorTransform);
+      for (const button of buttons) button.disabled = !hasPhoto;
     }
   }
 

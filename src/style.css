@@ -342,12 +342,48 @@ body {
 
 
 
-/* 床合わせのタブ。ボタンと指の操作の両方を出す */
+/* 床合わせのタブ。ギズモとボタンの両方を出す */
 .align {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   align-content: start;
+}
+
+/* 触るもの（移動・回転・大きさ）の切り替え。ギズモの見た目もこれで変わる */
+.align__modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #e6e9ea;
+}
+
+.align__mode {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #5d6567;
+  font: inherit;
+  font-size: 14px;
+  touch-action: manipulation;
+}
+
+.align__mode.is-active {
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.align__mode:disabled {
+  opacity: 0.45;
+}
+
+.align__rows {
+  display: grid;
+  gap: 6px;
 }
 
 .align__row {
@@ -356,16 +392,9 @@ body {
   gap: 8px;
 }
 
-/* 位置の表示は「奥 1.2m / 横 0.3m」と長くなる。行から溢れさせない */
-.align__row .align__value {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .align__label {
   flex: 0 0 auto;
-  min-width: 40px;
+  min-width: 52px;
   font-size: 14px;
 }
 
@@ -397,11 +426,14 @@ body {
 
 .align__value {
   flex: 1;
+  overflow: hidden;
   color: #7a8388;
   font-size: 13px;
   /* 数字が伸び縮みしても位置がずれないようにする */
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   text-align: right;
+  text-overflow: ellipsis;
 }
 
 .align__note {

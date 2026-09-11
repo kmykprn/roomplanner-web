@@ -22,6 +22,13 @@ const TAP_THRESHOLD_PX = 8;
 export interface DragTarget {
   scene: EditableScene;
   layer: FurnitureLayer;
+  /**
+   * 家具が入っている入れ物。写真モードでは床のグループがこれにあたる。
+   *
+   * 家具の位置は**この入れ物から見た座標**で持っているので、指の位置も
+   * 同じ座標に直してから床に当てる必要がある
+   */
+  frame?: THREE.Object3D;
 }
 
 export function createFurnitureDrag(
@@ -44,6 +51,9 @@ export function createFurnitureDrag(
   // 家具は床の上を滑る。y = 0 の水平面に指の位置を投影して移動先を決める
   const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const hitPoint = new THREE.Vector3();
+  /** 入れ物の中で当てるための、作業用の光線 */
+  const localRay = new THREE.Ray();
+  const inverseFrame = new THREE.Matrix4();
 
   let draggingId: string | null = null;
   /** 掴んでいる間だけ対象を保持する。途中でモードが変わっても操作が迷子にならない */
@@ -59,6 +69,22 @@ export function createFurnitureDrag(
     const rect = canvas.getBoundingClientRect();
     pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  /**
+   * 指の下の床の位置を、家具と同じ座標で返す。
+   *
+   * 入れ物が傾いていても、その中では床は水平（y = 0）のままなので、
+   * 光線のほうを入れ物の中へ移してから当てる
+   */
+  function floorHit(target: DragTarget): THREE.Vector3 | null {
+    if (!target.frame) {
+      return raycaster.ray.intersectPlane(floorPlane, hitPoint) ? hitPoint : null;
+    }
+
+    inverseFrame.copy(target.frame.matrixWorld).invert();
+    localRay.copy(raycaster.ray).applyMatrix4(inverseFrame);
+    return localRay.intersectPlane(floorPlane, hitPoint) ? hitPoint : null;
   }
 
   function onPointerDown(event: PointerEvent): void {
@@ -87,8 +113,9 @@ export function createFurnitureDrag(
     cameraControls.enabled = false;
 
     const item = target.scene.state().furniture.find((f) => f.id === furnitureId);
-    if (item && raycaster.ray.intersectPlane(floorPlane, hitPoint)) {
-      grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
+    const hit = item && floorHit(target);
+    if (item && hit) {
+      grabOffset = new THREE.Vector3(...item.position).sub(hit);
     }
   }
 
@@ -101,9 +128,10 @@ export function createFurnitureDrag(
 
     toNdc(event);
     raycaster.setFromCamera(pointerNdc, camera);
-    if (!raycaster.ray.intersectPlane(floorPlane, hitPoint)) return;
+    const hit = floorHit(draggingTarget);
+    if (!hit) return;
 
-    const next = hitPoint.add(grabOffset);
+    const next = hit.add(grabOffset);
     const { scene } = draggingTarget;
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
