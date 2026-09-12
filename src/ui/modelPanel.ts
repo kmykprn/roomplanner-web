@@ -1,7 +1,8 @@
 /**
  * 「3Dモデル」タブ。置ける 3D モデルを並べ、押すといまのモード（部屋／写真）に置く。
  *
- *   1 段目 … 「＋ 写真から3Dモデルを作成」。押したあとはタブを離れても、アプリを閉じても進行は続く
+ *   1 段目 … 「＋ 写真から3Dモデルを作成」。押したあとはタブを離れても、アプリを閉じても進行は続く。
+ *            匿名のままなら、写真を選んだあとにログインを求める（ui/loginPanel.ts）
  *   2 段目 … 作ったモデル。作成中はその場で円が進み、できあがると押せる姿になる。
  *            × で保管庫から外す（置いてある家具はそのまま）
  *   3 段目 … 基本のモデル（椅子・テーブル…）
@@ -27,9 +28,10 @@ import {
   removeModel,
   type GeneratedModel,
 } from '@/core/modelLibrary';
-import { getUid } from '@/platform/auth';
+import { authState } from '@/platform/auth';
 import { pickImages } from '@/platform/picker';
 import { resolvePreview } from '@/platform/previewCache';
+import { createLoginPanel } from '@/ui/loginPanel';
 import { createProgressRing } from '@/ui/progressRing';
 
 export interface ModelPanelOptions {
@@ -48,13 +50,23 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   generateButton.textContent = '＋ 写真から3Dモデルを作成';
   generateButton.addEventListener('click', async () => {
     const files = await pickImages();
-    if (files.length > 0) void startGeneration(files);
+    if (files.length === 0) return;
+    // 匿名のままなら作成の代わりにログインを求める。写真は預けておき、ログインできたら作成に進む
+    if (authState.get().anonymous) loginPanel.open(files);
+    else void startGeneration(files);
   });
+  /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
+  const loginHint = document.createElement('p');
+  loginHint.className = 'hint lib__login-hint';
+  loginHint.textContent = '作成には Google ログインが必要です';
   /** 認証できないときだけ出す。押せない理由が無いと、壊れているように見える */
   const authNote = document.createElement('p');
   authNote.className = 'hint is-error';
   authNote.hidden = true;
-  generateRow.append(generateButton, authNote);
+  generateRow.append(generateButton, loginHint, authNote);
+
+  // ログインを求めるパネル。作成ボタンの場所と入れ替わりで出る
+  const loginPanel = createLoginPanel((files) => void startGeneration(files));
 
   // --- 2 段目: 作ったモデル ---
   const made = document.createElement('div');
@@ -75,7 +87,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   basicLabel.textContent = '基本のモデル';
   basic.append(basicLabel, createBasicGrid(place));
 
-  panel.append(generateRow, made, basic, createIdentity());
+  panel.append(generateRow, loginPanel.element, made, basic, createIdentity());
 
   /** 押したモデルをいまのモードの空いている場所に置く。置いた直後は選択状態にする */
   function place(item: Omit<PlacedFurniture, 'id' | 'position' | 'rotationY'>): void {
@@ -103,17 +115,20 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     });
   }
 
-  // 認証できないとこのあと何をしても失敗する。
-  // 黙って止まると原因が分からないので、案内の場所に出す
-  let authFailed = false;
-
   function render(): void {
     const { jobs } = generationState.get();
     const { models } = modelLibrary.get();
+    const { status, anonymous } = authState.get();
 
+    // 認証できないとこのあと何をしても失敗する。
+    // 黙って止まると原因が分からないので、ボタンの下に出す
+    const authFailed = status === 'failed';
     generateButton.disabled = authFailed;
     authNote.hidden = !authFailed;
     authNote.textContent = authFailed ? authFailureMessage() : '';
+    loginHint.hidden = authFailed || !anonymous;
+    // ログインを求めている間は作成ボタンを引っ込める（同じ場所に出す）
+    generateRow.hidden = !loginPanel.element.hidden;
 
     // 作成中のものを先頭に、できあがったものを新しい順に並べる
     const running = jobs.filter((job) => job.phase !== 'failed');
@@ -129,17 +144,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   render();
   generationState.subscribe(render);
   modelLibrary.subscribe(render);
+  authState.subscribe(render);
+  // パネルの出し入れは hidden 属性の変化なので、状態の購読では拾えない
+  new MutationObserver(render).observe(loginPanel.element, { attributeFilter: ['hidden'] });
 
   // 待っている間、状態そのものは変わらないので購読だけでは経過時間が止まる。
   // 8分待たせる画面で数字が動かないと、固まったように見える
   setInterval(() => {
     if (generationState.get().jobs.some((job) => job.phase === 'running')) render();
   }, 1000);
-
-  void getUid().catch(() => {
-    authFailed = true;
-    render();
-  });
 
   return panel;
 }
@@ -245,7 +258,7 @@ function createFailure(job: GenerationJob): HTMLElement {
 
 /**
  * 利用者ID。限定公開のうちは、この識別子をサーバー側の許可リストに登録してもらう
- * 必要がある。個人情報は含まれない（匿名アカウントなので紐づく情報が無い）。
+ * 必要がある。個人情報は含まれない（uid は無作為な文字列で、Google に紐づけても変わらない）。
  * 全員が使えるようになったら、この表示ごと消してよい
  */
 function createIdentity(): HTMLElement {
@@ -254,15 +267,13 @@ function createIdentity(): HTMLElement {
   const summary = document.createElement('summary');
   summary.textContent = '利用者ID';
   const uidText = document.createElement('code');
-  uidText.textContent = '取得中…';
   identity.append(summary, uidText);
-  void getUid()
-    .then((uid) => {
-      uidText.textContent = uid;
-    })
-    .catch(() => {
-      uidText.textContent = '取得できませんでした';
-    });
+  const render = (): void => {
+    const { status, uid } = authState.get();
+    uidText.textContent = status === 'failed' ? '取得できませんでした' : (uid ?? '取得中…');
+  };
+  render();
+  authState.subscribe(render);
   return identity;
 }
 
