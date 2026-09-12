@@ -3,37 +3,22 @@
  *
  * 生成には約8分かかる。その間ユーザーはアプリを閉じられるし、リロードもする。
  * **待っている状態を端末に残し、開き直したら続きから見に行く**のがこのファイルの主眼。
- * 複数の写真は個別のジョブとして扱い、完成したものから部屋へ置く。
+ * 複数の写真は個別のジョブとして扱い、完成したものから保管庫（modelLibrary.ts）に入れる。
+ * **完成しても勝手には置かない。** 置くのは「3Dモデル」タブで利用者が選んだとき。
  */
 
 import { createStore } from '@/core/store';
-import { roomScene } from '@/core/appState';
 import { shrinkForUpload } from '@/core/imageResize';
 import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
+import { addModel, modelNameFrom } from '@/core/modelLibrary';
 import { saveModel } from '@/platform/modelCache';
 import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCache';
 import { POLL_INTERVAL_MS, RUN_TIMEOUT_MS, TOTAL_TIMEOUT_MS } from '@/config/api';
 
-/**
- * 生成した家具の大きさ。
- *
- * 写真からは実寸が分からないので、いちばん長い辺が 1m に収まるようにする。
- * 縦横の比率はモデルのまま保たれる（modelLoader を参照）。
- */
-const GENERATED_SIZE: [number, number, number] = [1, 1, 1];
-
-/** 生成した家具の色。GLB が読めるまでの箱に使うだけ */
-const PLACEHOLDER_COLOR = '#bdb2a7';
-
 const STORAGE_KEY = 'roomplanner.generations';
 
-export type GenerationPhase =
-  | 'uploading'
-  | 'queued'
-  | 'running'
-  | 'placing'
-  | 'failed';
+export type GenerationPhase = 'uploading' | 'queued' | 'running' | 'saving' | 'failed';
 
 export interface GenerationJob {
   /** 端末内での識別子。サーバーの jobId が届く前から使う */
@@ -170,10 +155,11 @@ async function submit(id: string, file: File): Promise<void> {
  * 前回の続きを見に行く。起動時に一度だけ呼ぶ。
  *
  * アプリを閉じている間に生成が終わっていることもあるので、
- * 復帰した時点で完成していれば、そのまま部屋に置かれる。
+ * 復帰した時点で完成していれば、そのまま保管庫に入る。
  */
 export function resumeGeneration(): void {
-  let saved: Array<{ jobId?: string; fileName?: string; previewKey?: string; startedAt?: number }> = [];
+  let saved: Array<{ jobId?: string; fileName?: string; previewKey?: string; startedAt?: number }> =
+    [];
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
     saved = Array.isArray(value) ? value : [];
@@ -255,7 +241,7 @@ async function watch(id: string, jobId: string): Promise<void> {
     rememberProgress(id, status);
     if (status.state === 'queued' || status.state === 'running') continue;
 
-    await place(id, jobId, status.modelUrl);
+    await finish(id, jobId, status.modelUrl);
     return;
   }
 }
@@ -301,27 +287,23 @@ function rememberProgress(id: string, status: JobStatus): void {
   if (Object.keys(patch).length > 0) updateJob(id, patch);
 }
 
-/** 完成したモデルを端末に保存してから部屋に置く */
-async function place(id: string, jobId: string, modelUrl?: string): Promise<void> {
+/** 完成したモデルを端末に保存してから保管庫に入れる */
+async function finish(id: string, jobId: string, modelUrl?: string): Promise<void> {
   if (!modelUrl) {
     updateJob(id, { phase: 'failed', error: '完成したモデルの場所が分かりません' });
     return;
   }
-  updateJob(id, { phase: 'placing' });
+  updateJob(id, { phase: 'saving' });
   try {
-    // 署名付きURLは1時間で切れる。中身を先に保存してから置く
+    // 署名付きURLは1時間で切れる。中身を先に保存してから並べる
     const key = await saveModel(jobId, modelUrl);
     const job = generationState.get().jobs.find((item) => item.id === id);
-    roomScene.add({
+    addModel({
       id: crypto.randomUUID(),
-      typeId: 'generated',
-      name: '写真から作った家具',
-      position: roomScene.placementFor(GENERATED_SIZE),
-      rotationY: 0,
-      size: [...GENERATED_SIZE],
-      color: PLACEHOLDER_COLOR,
-      modelUrl: key,
-      sourceImageKey: job?.previewKey ?? undefined,
+      name: modelNameFrom(job?.fileName ?? ''),
+      modelKey: key,
+      previewKey: job?.previewKey ?? null,
+      createdAt: Date.now(),
     });
     removeJob(id);
   } catch (error) {

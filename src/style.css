@@ -411,7 +411,6 @@ body {
   color: #fff;
 }
 
-/* 生成パネル。8分待つ画面なので、状態が一目で分かることを優先する */
 .hint.is-error {
   color: var(--danger);
 }
@@ -483,48 +482,105 @@ body {
   gap: 14px;
 }
 
-.generation-jobs {
+/* 「3Dモデル」タブ。作る・作ったもの・基本のもの、を縦に並べる */
+.lib {
   display: grid;
+  gap: 12px;
   width: 100%;
-  gap: 8px;
 }
 
-.generation-job {
-  display: flex;
-  align-items: center;
+.lib__hint {
+  font-size: 12px;
+}
+
+.lib__label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #7a8388;
+}
+
+/* 失敗した作成は、サムネイルに収まらないので文で出す */
+.lib__failure {
+  flex-wrap: nowrap;
   justify-content: space-between;
-  gap: 8px;
+  margin-top: 6px;
+}
+
+/* 作ったモデルのサムネイル。横に並べて、はみ出したぶんは横スクロール */
+.thumbs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 6px 4px 0;
+  touch-action: pan-x;
+}
+
+.thumb {
+  position: relative;
+  flex: none;
+  width: 72px;
+}
+
+.thumb__button {
+  display: grid;
+  gap: 4px;
   width: 100%;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  touch-action: manipulation;
 }
 
-.generation-job__content {
-  min-width: 0;
+.thumb__button:disabled {
+  color: #7a8388;
 }
 
-.generation-job__visual {
+.thumb__img {
   display: flex;
   align-items: center;
-  min-width: 0;
-  gap: 10px;
-}
-
-.generation-job__thumbnail {
-  flex: 0 0 auto;
-  width: 52px;
-  height: 52px;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  object-fit: cover;
+  border-radius: 8px;
+  background: #e6e2dc center / cover no-repeat;
 }
 
-.generation-job__name {
+/* 作成中は写真を薄くして、上に円を重ねる */
+.thumb__img.is-running {
+  background-color: #eceff1;
+  background-blend-mode: luminosity;
+  opacity: 0.85;
+}
+
+.thumb .ring {
+  width: 56px;
+  height: 56px;
+}
+
+.thumb__name {
   overflow: hidden;
-  margin: 0 0 2px;
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 一覧から外す ×。角に浮かせる。押しても下のサムネイルには渡さない */
+.thumb__x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  touch-action: manipulation;
 }
