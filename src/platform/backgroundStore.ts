@@ -1,37 +1,46 @@
 /**
- * 写真モードの背景写真を端末に残す。
+ * 写真モードの背景写真と、隠す場所のマスクを端末に残す。
  *
- * 表示用に縮めた1枚（長辺 1600px の JPEG、数百KB）だけを持つ。
+ * 写真は表示用に縮めた1枚（長辺 1600px、数百KB）、マスクは塗った形の PNG。
  * localStorage には大きすぎるので IndexedDB に置く（生成のプレビューと同じ作り）。
- * 常に1枚だけなので、キーは固定。
+ * どちらも常に1枚だけなので、キーは固定。
  */
 
 const DATABASE_NAME = 'roomplanner-photo-background';
 const STORE_NAME = 'background';
-const KEY = 'current';
+const PHOTO_KEY = 'current';
+const MASK_KEY = 'mask';
 
-export async function saveBackground(blob: Blob): Promise<void> {
+export const saveBackground = (blob: Blob): Promise<void> => write(PHOTO_KEY, blob);
+export const readBackground = (): Promise<Blob | null> => read(PHOTO_KEY);
+export const deleteBackground = (): Promise<void> => remove(PHOTO_KEY);
+
+export const saveMask = (blob: Blob): Promise<void> => write(MASK_KEY, blob);
+export const readMask = (): Promise<Blob | null> => read(MASK_KEY);
+export const deleteMask = (): Promise<void> => remove(MASK_KEY);
+
+async function write(key: string, blob: Blob): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(STORE_NAME, 'readwrite');
-  transaction.objectStore(STORE_NAME).put(blob, KEY);
+  transaction.objectStore(STORE_NAME).put(blob, key);
   await transactionDone(transaction);
   database.close();
 }
 
-export async function readBackground(): Promise<Blob | null> {
+async function read(key: string): Promise<Blob | null> {
   const database = await openDatabase();
   const transaction = database.transaction(STORE_NAME, 'readonly');
-  const request = transaction.objectStore(STORE_NAME).get(KEY);
+  const request = transaction.objectStore(STORE_NAME).get(key);
   const result = await requestResult<Blob | undefined>(request);
   await transactionDone(transaction);
   database.close();
   return result ?? null;
 }
 
-export async function deleteBackground(): Promise<void> {
+async function remove(key: string): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(STORE_NAME, 'readwrite');
-  transaction.objectStore(STORE_NAME).delete(KEY);
+  transaction.objectStore(STORE_NAME).delete(key);
   await transactionDone(transaction);
   database.close();
 }

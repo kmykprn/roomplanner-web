@@ -15,7 +15,7 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
-import { deleteBackground, saveBackground } from '@/platform/backgroundStore';
+import { deleteBackground, deleteMask, saveBackground } from '@/platform/backgroundStore';
 import { clampPhotoView, DEFAULT_PHOTO_VIEW, type PhotoView } from '@/core/photoView';
 
 /**
@@ -25,6 +25,14 @@ import { clampPhotoView, DEFAULT_PHOTO_VIEW, type PhotoView } from '@/core/photo
  * 「黒いまま」としか分からず、原因の切り分けができない。
  */
 export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
+
+/** 隠す場所を塗る筆の設定 */
+export interface MaskTool {
+  /** 消しゴム。塗った場所を元に戻す */
+  erase: boolean;
+  /** 太い筆。広い面を手早く塗るためのもの */
+  thick: boolean;
+}
 
 export interface PhotoState extends FurnitureSceneState {
   /** 背景写真の表示用 URL（Blob URL）。未選択なら null */
@@ -37,6 +45,17 @@ export interface PhotoState extends FurnitureSceneState {
 
   /** 写真のどこを、どれだけ寄って見ているか。写真と 3D の両方がこれに従う */
   view: PhotoView;
+
+  /**
+   * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
+   *
+   * 塗った形をそのまま画像で持つ。写真をこの形で切り抜いて 3D の上に重ねると、
+   * その場所だけ写真が家具の手前に出る（3D 側は何も知らない）
+   */
+  maskUrl: string | null;
+  /** 隠す場所を塗っている最中か。この間は 1 本指が筆になる */
+  isMasking: boolean;
+  maskTool: MaskTool;
 }
 
 export const photoState = createStore<PhotoState>({
@@ -45,6 +64,9 @@ export const photoState = createStore<PhotoState>({
   backgroundStatus: 'idle',
   backgroundAspect: null,
   view: { ...DEFAULT_PHOTO_VIEW },
+  maskUrl: null,
+  isMasking: false,
+  maskTool: { erase: false, thick: false },
   furniture: [],
   selectedId: null,
 });
@@ -94,8 +116,10 @@ export async function setBackground(file: File): Promise<void> {
   // 置けなくても（容量・プライベートモード）いま見えているものは変わらない
   saveBackground(shrunk).catch(() => {});
 
-  // 前の写真で寄ったままだと、新しい写真がいきなり拡大された状態で出る
+  // 前の写真で寄ったままだと、新しい写真がいきなり拡大された状態で出る。
+  // 隠す場所も前の写真のものなので消す
   photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
+  clearMask();
 }
 
 /**
@@ -129,6 +153,32 @@ export function clearBackground(): void {
   });
   // 端末に残した1枚も捨てる。次に開いたときに戻ってこないように
   deleteBackground().catch(() => {});
+  clearMask();
+}
+
+/** 隠す場所を塗っている最中かを切り替える */
+export function setMasking(isMasking: boolean): void {
+  if (photoState.get().isMasking !== isMasking) photoState.set({ isMasking });
+}
+
+export function setMaskTool(patch: Partial<MaskTool>): void {
+  photoState.set({ maskTool: { ...photoState.get().maskTool, ...patch } });
+}
+
+/**
+ * マスク画像を差し替え、前の URL を解放する。
+ * 塗り終わるたび（interaction/maskPaint.ts）と、起動時に読み戻したときに呼ぶ
+ */
+export function setMaskUrl(url: string | null): void {
+  const previous = photoState.get().maskUrl;
+  if (previous && previous.startsWith('blob:')) URL.revokeObjectURL(previous);
+  photoState.set({ maskUrl: url });
+}
+
+/** 隠す場所をすべて消す。端末に残した分も捨てる */
+export function clearMask(): void {
+  setMaskUrl(null);
+  deleteMask().catch(() => {});
 }
 
 /**

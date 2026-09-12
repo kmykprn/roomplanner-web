@@ -21,6 +21,7 @@ import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
+import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { appState, roomScene } from '@/core/appState';
@@ -79,8 +80,13 @@ createFurnitureDrag(
     isPhotoMode()
       ? { scene: photoScene, layer: photoFurniture, surface: 'screen' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
-  cameraControls
+  cameraControls,
+  // 隠す場所を塗っている間は、1 本指の動きは筆のほうへ渡す
+  () => !photoState.get().isMasking
 );
+
+// 隠す場所を塗る。「隠す」タブを開いている間だけ効く
+createMaskPaint(viewer.canvas);
 
 // 写真に寄る操作。2本指のときだけ動くので、家具のドラッグとは取り合わない。
 // 写真がまだ無いうちは効かせない（寄る相手が無いのに3Dだけ拡大されると訳が分からない）
@@ -131,8 +137,20 @@ function applyMode(): void {
 }
 
 function applyBackground(): void {
-  const { backgroundUrl } = photoState.get();
-  viewer.photoLayer.style.backgroundImage = backgroundUrl ? `url("${backgroundUrl}")` : '';
+  const { backgroundUrl, maskUrl, isMasking } = photoState.get();
+  const image = backgroundUrl ? `url("${backgroundUrl}")` : '';
+  viewer.photoLayer.style.backgroundImage = image;
+
+  // 隠す層は同じ写真を、塗った形で切り抜いて重ねる。塗っていなければ出さない
+  // （切り抜きが無いと写真がまるごと家具の上に乗る）
+  const { maskLayer } = viewer;
+  maskLayer.style.backgroundImage = image;
+  const maskImage = maskUrl ? `url("${maskUrl}")` : 'none';
+  maskLayer.style.setProperty('mask-image', maskImage);
+  maskLayer.style.setProperty('-webkit-mask-image', maskImage);
+  maskLayer.classList.toggle('has-mask', Boolean(backgroundUrl && maskUrl));
+  // 塗っている間は塗った場所を色付きで見せる（写真の上に写真を重ねても見分けがつかない）
+  maskLayer.classList.toggle('is-editing', isMasking);
 }
 
 /**

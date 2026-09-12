@@ -38,7 +38,12 @@ export function createFurnitureDrag(
   camera: THREE.PerspectiveCamera,
   // 部屋と写真でシーンも3Dのレイヤーも変わる。掴んだ時点のものを使う
   resolveTarget: () => DragTarget,
-  cameraControls: CameraControls
+  cameraControls: CameraControls,
+  /**
+   * 家具の操作を受け付けるか。
+   * 隠す場所を塗っている間は、同じ 1 本指の動きを筆のほうが使う
+   */
+  isEnabled: () => boolean = () => true
 ): () => void {
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
@@ -92,6 +97,7 @@ export function createFurnitureDrag(
       releaseDrag();
       return;
     }
+    if (!isEnabled()) return;
 
     pressPosition = { x: event.clientX, y: event.clientY };
     toNdc(event);

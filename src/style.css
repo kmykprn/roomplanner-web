@@ -118,6 +118,30 @@ body {
   display: block;
 }
 
+/*
+ * 隠す場所の層。キャンバスの上に、写真を塗った形で切り抜いて重ねる。
+ * 指の操作は下のキャンバスへ通す。塗った形（mask-image）が無い間は出さない
+ */
+.viewport__mask {
+  display: none;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+}
+
+.viewport--photo .viewport__mask.has-mask {
+  display: block;
+}
+
+/* 塗っている間は、塗った場所に色を被せて見えるようにする（切り抜きの内側だけに乗る） */
+.viewport__mask.is-editing {
+  box-shadow: inset 0 0 0 100vmax rgba(10, 126, 164, 0.4);
+}
+
 .viewport canvas {
   display: block;
   width: 100%;
@@ -230,6 +254,56 @@ body {
   margin: 0;
   color: #7a8388;
   font-size: 14px;
+}
+
+/* 「隠す」タブ。筆の設定と案内 */
+.mask {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  align-content: start;
+}
+
+.mask__controls {
+  display: flex;
+  gap: 8px;
+}
+
+.mask__note {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 2つから選ぶ切り替え */
+.seg {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #e6e9ea;
+}
+
+.seg__item {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #5d6567;
+  font: inherit;
+  font-size: 14px;
+  touch-action: manipulation;
+}
+
+.seg__item.is-active {
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.seg__item:disabled {
+  opacity: 0.45;
 }
 
 /* 「操作」タブ。選択中の家具の向き・大きさ・高さを行ごとに並べる */
