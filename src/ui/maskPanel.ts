@@ -1,8 +1,9 @@
 /**
- * 写真モードの「手前」タブ。
+ * 「背景」タブの中の、手前の範囲を指定する姿。
  *
- * 写真の中で家具より手前にある物（机など）を指定してもらう。指定した部分は
- * 写真が家具の上にかぶさるので、後ろへ動かした家具が隠れる。
+ * 写真の中で 3D モデルより手前にある物（机など）を指定してもらう。指定した部分は
+ * 写真がモデルの上にかぶさるので、後ろへ動かしたモデルが隠れる。
+ * 「完了」で背景タブの通常の姿に戻る。
  *
  *   1 行目 … 見出し（何のためのタブか）
  *   2 行目 … 道具の切り替えと、どの道具でも使う「戻す」「全部消す」
@@ -13,9 +14,15 @@
  */
 
 import { maskEditor } from '@/core/maskEditor';
-import { clearMask, photoState, setMaskTool, type MaskToolKind } from '@/core/photoState';
+import {
+  clearMask,
+  photoState,
+  setMasking,
+  setMaskTool,
+  type MaskToolKind,
+} from '@/core/photoState';
 
-const HEADLINE = '背景の中で家具より手前に表示したいエリアを指定して下さい';
+const HEADLINE = '背景の中で3Dモデルより手前に表示したいエリアを指定して下さい';
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
@@ -56,7 +63,11 @@ export function createMaskPanel(): HTMLElement {
     () => maskEditor.closePolygon(),
     'button is-small'
   );
-  row.append(widthSwitch.element, closeButton);
+  // 「完了」は右端。指定を終えて背景タブの通常の姿に戻る
+  const spacer = document.createElement('span');
+  spacer.className = 'mask__spacer';
+  const doneButton = createButton('完了', () => setMasking(false), 'button is-small');
+  row.append(widthSwitch.element, closeButton, spacer, doneButton);
 
   panel.append(headline, toolbar, row);
 

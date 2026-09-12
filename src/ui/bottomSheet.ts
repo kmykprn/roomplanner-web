@@ -11,26 +11,24 @@
 import { FURNITURE_TYPES, type PlacedFurniture } from '@/config/furniture';
 import { createGenerationPanel } from '@/ui/generationPanel';
 import { createPhotoPanel } from '@/ui/photoPanel';
-import { createMaskPanel } from '@/ui/maskPanel';
 import { createRepeatButton } from '@/ui/repeatButton';
 import { deletePreview } from '@/platform/previewCache';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { photoState, setMasking } from '@/core/photoState';
 
-type TabId = 'background' | 'add' | 'mask' | 'generate' | 'manage';
+type TabId = 'background' | 'add' | 'generate' | 'manage';
 
 const TABS: Record<TabId, string> = {
   background: '背景',
   add: '設置',
-  mask: '手前',
   generate: '写真から',
   manage: '操作',
 };
 
 /** モードごとのタブの並び */
 const ROOM_TABS: TabId[] = ['add', 'generate', 'manage'];
-const PHOTO_TABS: TabId[] = ['background', 'add', 'mask', 'manage'];
+const PHOTO_TABS: TabId[] = ['background', 'add', 'manage'];
 
 /** 1 回のボタン操作で家具を回す角度 */
 const ROTATION_STEP = Math.PI / 12; // 15 度
@@ -63,7 +61,6 @@ export function createBottomSheet(container: HTMLElement): void {
   // 毎回作り直すと進行表示が途切れるので、1つ作って使い回す
   const generationPanel = createGenerationPanel();
   const photoPanel = createPhotoPanel();
-  const maskPanel = createMaskPanel();
 
   function visibleTabs(): TabId[] {
     return isPhotoMode() ? PHOTO_TABS : ROOM_TABS;
@@ -75,9 +72,9 @@ export function createBottomSheet(container: HTMLElement): void {
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
 
-    // 「手前」タブを開いている間だけ 1 本指が道具になる。
-    // 閉じたら家具のドラッグに戻す
-    setMasking(activeTab === 'mask');
+    // 手前の範囲の指定は「背景」タブの中で行う。タブを離れたら指定を終え、
+    // 1 本指を家具のドラッグに戻す
+    if (activeTab !== 'background') setMasking(false);
 
     tabBar.replaceChildren(
       ...tabs.map((tab) => {
@@ -101,7 +98,6 @@ export function createBottomSheet(container: HTMLElement): void {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
     if (activeTab === 'generate') return generationPanel;
     if (activeTab === 'background') return photoPanel;
-    if (activeTab === 'mask') return maskPanel;
     return renderManageTab();
   }
 
@@ -165,7 +161,7 @@ export function createBottomSheet(container: HTMLElement): void {
     if (!selected) {
       const hint = document.createElement('p');
       hint.className = 'hint';
-      hint.textContent = '3Dオブジェクトをタップすると選択できます';
+      hint.textContent = '3Dモデルをタップすると選択できます';
       wrapper.appendChild(hint);
       return wrapper;
     }
