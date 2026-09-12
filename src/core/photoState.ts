@@ -189,12 +189,12 @@ export function setMaskPolygon(maskPolygon: PhotoPoint[]): void {
 }
 
 /**
- * マスク画像を差し替え、前の URL を解放する。
- * 塗り終わるたび（interaction/maskPaint.ts）と、起動時に読み戻したときに呼ぶ
+ * マスク画像を差し替える。塗るたび（core/maskEditor.ts）と、起動時に読み戻したときに呼ぶ。
+ *
+ * **前の URL はここでは解放しない。** 表示側（main.ts）が新しい画像を読み込んでから
+ * 差し替えるので、その間は前の画像がまだ画面に出ている。解放は差し替えたあとに向こうでやる
  */
 export function setMaskUrl(url: string | null): void {
-  const previous = photoState.get().maskUrl;
-  if (previous && previous.startsWith('blob:')) URL.revokeObjectURL(previous);
   photoState.set({ maskUrl: url });
 }
 
