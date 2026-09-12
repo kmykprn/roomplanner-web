@@ -256,7 +256,7 @@ body {
   font-size: 14px;
 }
 
-/* 「隠す」タブ。筆の設定と案内 */
+/* 「手前」タブ。見出し・道具・道具ごとの設定・案内 */
 .mask {
   display: grid;
   gap: 8px;
@@ -264,19 +264,34 @@ body {
   align-content: start;
 }
 
-.mask__controls {
+/* 2 行目: 道具の切り替えと、どの道具でも使う「戻す」「全部消す」 */
+.mask__toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.mask__actions {
-  display: flex;
-  gap: 8px;
+.mask__toolbar .seg {
+  flex: 1;
 }
 
-.mask__note {
-  font-size: 12px;
-  line-height: 1.5;
+/* 3 行目: 道具ごとの設定。中身が入れ替わっても高さを変えない（写真が伸び縮みしないように） */
+.mask__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.mask__row .seg {
+  flex: 0 0 160px;
+}
+
+/* 小さめの補助ボタン。主のボタンより弱く見せる */
+.button.is-small {
+  padding: 7px 12px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 /* 2つから選ぶ切り替え */
