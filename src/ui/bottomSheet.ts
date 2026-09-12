@@ -23,7 +23,7 @@ type TabId = 'background' | 'add' | 'mask' | 'generate' | 'manage';
 const TABS: Record<TabId, string> = {
   background: '背景',
   add: '設置',
-  mask: '隠す',
+  mask: '手前',
   generate: '写真から',
   manage: '操作',
 };
@@ -74,7 +74,7 @@ export function createBottomSheet(container: HTMLElement): void {
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
 
-    // 「隠す」タブを開いている間だけ 1 本指が筆になる。
+    // 「手前」タブを開いている間だけ 1 本指が道具になる。
     // 閉じたら家具のドラッグに戻す
     setMasking(activeTab === 'mask');
 

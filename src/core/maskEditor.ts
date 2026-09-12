@@ -1,15 +1,15 @@
 /**
- * 隠す場所（マスク）を作る道具の中身。
+ * 手前にある物の指定（マスク）を作る道具の中身。
  *
- * 筆と囲うはどちらも**同じマスクに形を描くだけ**で、出口は1つ。
+ * なぞる・囲む・消しゴムはどれも**同じマスクに形を描くだけ**で、出口は1つ。
  * 描いた形を画像にして状態（photoState.maskUrl）へ渡し、表示側（core/viewer.ts）が
  * その画像で写真を切り抜いてキャンバスの上に重ねる。3D には何も教えない。
  *
  * 指の動きをどの道具に渡すかは interaction/maskPaint.ts、
- * ボタン（閉じて塗る・1つ戻す）は ui/maskPanel.ts。どちらもここを呼ぶ。
+ * ボタン（囲みを閉じる・戻す）は ui/maskPanel.ts。どちらもここを呼ぶ。
  */
 
-import { photoState, setMaskPolygon, setMaskUrl } from '@/core/photoState';
+import { photoState, setMaskPolygon, setMaskUndoDepth, setMaskUrl } from '@/core/photoState';
 import type { PhotoPoint } from '@/core/photoView';
 import { saveMask } from '@/platform/backgroundStore';
 
@@ -21,19 +21,28 @@ const MASK_LONG_EDGE = 1024;
  * 寄れば寄るほど写真の上では細くなるので、細部は寄って描く
  */
 const BRUSH_SCREEN_FRACTION = { thin: 0.012, thick: 0.035 };
-/** 囲う途中の線と、打った角の印 */
+/** 囲む途中の線と、打った角の印 */
 const OUTLINE_SCREEN_FRACTION = 0.004;
 const CORNER_SCREEN_FRACTION = 0.012;
+/** 最初の角からこの距離（画面の幅に対する割合）以内をタップしたら、囲みを閉じたとみなす */
+const CLOSE_TAP_SCREEN_FRACTION = 0.04;
+
+/** 「戻す」で戻れる回数。1回ぶんの控えはマスクの画素数と同じ大きさなので、増やしすぎない */
+const UNDO_LIMIT = 10;
 
 export interface MaskEditor {
-  /** 筆。なぞった通りに塗る */
+  /** なぞる・消しゴム。なぞった通りに塗る／消す（どちらかは道具で決まる） */
   beginStroke(point: PhotoPoint): void;
   extendStroke(point: PhotoPoint): void;
   endStroke(): void;
-  /** 囲う。角を打ち、閉じると中が塗られる */
+  /** 囲む。角を打ち、閉じると中が塗られる。最初の角をもう一度タップしても閉じる */
   addCorner(point: PhotoPoint): void;
-  undoCorner(): void;
   closePolygon(): void;
+  /**
+   * 1つ戻す。どの道具でも使える。
+   * 囲む途中の角があればそれを 1 つ、無ければ最後に描いた形（一筆・囲み・全部消す）を戻す
+   */
+  undo(): void;
 }
 
 function createMaskEditor(): MaskEditor {
@@ -50,6 +59,11 @@ function createMaskEditor(): MaskEditor {
   /** 描いている途中の見た目の更新は 1 フレームに 1 回にまとめる */
   let previewRequest = 0;
   let lastToolKind = photoState.get().maskTool.kind;
+  /**
+   * 「戻す」のための控え。形を描く前のマスクを、不透明度だけ取り出して積む
+   * （マスクは白か透明かしか無いので、不透明度だけで元に戻せる）
+   */
+  const history: Uint8ClampedArray[] = [];
 
   function toPixel(point: PhotoPoint): { x: number; y: number } {
     return { x: point.x * mask.width, y: point.y * mask.height };
@@ -60,9 +74,41 @@ function createMaskEditor(): MaskEditor {
     return (fraction / photoState.get().view.scale) * mask.width;
   }
 
-  /** 塗るか消すか。どの道具も同じ */
+  /** 塗るか消すか。消しゴムだけが消す */
   function compositeOperation(): GlobalCompositeOperation {
-    return photoState.get().maskTool.erase ? 'destination-out' : 'source-over';
+    return photoState.get().maskTool.kind === 'eraser' ? 'destination-out' : 'source-over';
+  }
+
+  /** いまのマスクの不透明度だけを取り出す。何か塗ってあるかも一緒に返す */
+  function captureAlpha(): { alpha: Uint8ClampedArray; painted: boolean } {
+    const { data } = context.getImageData(0, 0, mask.width, mask.height);
+    const alpha = new Uint8ClampedArray(mask.width * mask.height);
+    let painted = false;
+    for (let index = 0; index < alpha.length; index++) {
+      alpha[index] = data[index * 4 + 3];
+      if (alpha[index]) painted = true;
+    }
+    return { alpha, painted };
+  }
+
+  /** 形を描く前に、いまのマスクを控える。上限を超えたら古いものから捨てる */
+  function remember(alpha = captureAlpha().alpha): void {
+    history.push(alpha);
+    if (history.length > UNDO_LIMIT) history.shift();
+    setMaskUndoDepth(history.length);
+  }
+
+  /** 控えたマスクに戻す。白＋控えた不透明度で描き直す */
+  function restore(alpha: Uint8ClampedArray): void {
+    const image = new ImageData(mask.width, mask.height);
+    for (let index = 0; index < alpha.length; index++) {
+      const offset = index * 4;
+      image.data[offset] = 255;
+      image.data[offset + 1] = 255;
+      image.data[offset + 2] = 255;
+      image.data[offset + 3] = alpha[index];
+    }
+    context.putImageData(image, 0, 0);
   }
 
   /** 写真の縦横比に合わせてマスクを用意する。比が変わっていなければそのまま */
@@ -131,10 +177,11 @@ function createMaskEditor(): MaskEditor {
     });
   }
 
-  // --- 筆 ---
+  // --- なぞる・消しゴム ---
 
   function beginStroke(point: PhotoPoint): void {
     if (!ensureMaskSize()) return;
+    remember();
     const { thick } = photoState.get().maskTool;
     context.lineCap = 'round';
     context.lineJoin = 'round';
@@ -170,16 +217,23 @@ function createMaskEditor(): MaskEditor {
     commit();
   }
 
-  // --- 囲う ---
+  // --- 囲む ---
 
   function addCorner(point: PhotoPoint): void {
     if (!ensureMaskSize()) return;
-    setMaskPolygon([...photoState.get().maskPolygon, point]);
-    schedulePreview();
-  }
+    const corners = photoState.get().maskPolygon;
 
-  function undoCorner(): void {
-    setMaskPolygon(photoState.get().maskPolygon.slice(0, -1));
+    // 3 つ以上打ってあって、最初の角の近くをタップしたら「閉じる」の合図
+    if (corners.length >= 3) {
+      const first = corners[0];
+      const distance = Math.hypot(point.x - first.x, point.y - first.y);
+      if (distance <= CLOSE_TAP_SCREEN_FRACTION / photoState.get().view.scale) {
+        closePolygon();
+        return;
+      }
+    }
+
+    setMaskPolygon([...corners, point]);
     schedulePreview();
   }
 
@@ -190,6 +244,7 @@ function createMaskEditor(): MaskEditor {
       schedulePreview();
       return;
     }
+    remember();
     context.globalCompositeOperation = compositeOperation();
     context.fillStyle = '#fff';
     context.beginPath();
@@ -201,10 +256,26 @@ function createMaskEditor(): MaskEditor {
     commit();
   }
 
+  // --- 戻す ---
+
+  function undo(): void {
+    const { maskPolygon } = photoState.get();
+    if (maskPolygon.length > 0) {
+      setMaskPolygon(maskPolygon.slice(0, -1));
+      schedulePreview();
+      return;
+    }
+    const previous = history.pop();
+    if (!previous) return;
+    setMaskUndoDepth(history.length);
+    restore(previous);
+    commit();
+  }
+
   /**
    * よそで状態が変わったら合わせる。
    *   - マスクが差し替わった（起動時の読み戻し・全部消す）→ 塗る先も描き直す／白紙にする
-   *   - 道具を変えた・「隠す」タブを閉じた → 囲う途中の角は捨てる
+   *   - 道具を変えた・「手前」タブを閉じた → 囲む途中の角は捨てる
    */
   function followState(): void {
     const { maskUrl, maskTool, isMasking, maskPolygon } = photoState.get();
@@ -218,6 +289,12 @@ function createMaskEditor(): MaskEditor {
     if (maskUrl === producedUrl) return;
     producedUrl = maskUrl;
     if (!ensureMaskSize()) return;
+    // 「全部消す」も戻せるように、消す前に控える。何も塗っていなければ控えない
+    // （起動時の読み戻しは白紙から始まるので、ここには引っかからない）
+    if (!maskUrl) {
+      const current = captureAlpha();
+      if (current.painted) remember(current.alpha);
+    }
     context.globalCompositeOperation = 'source-over';
     context.clearRect(0, 0, mask.width, mask.height);
     if (!maskUrl) return;
@@ -233,7 +310,7 @@ function createMaskEditor(): MaskEditor {
   photoState.subscribe(followState);
   followState();
 
-  return { beginStroke, extendStroke, endStroke, addCorner, undoCorner, closePolygon };
+  return { beginStroke, extendStroke, endStroke, addCorner, closePolygon, undo };
 }
 
 export const maskEditor = createMaskEditor();

@@ -32,18 +32,17 @@ import {
 export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
 /**
- * 隠す場所を作る道具。
+ * 手前にある物を指定する道具。
  *
- *   brush   … 筆。なぞった通りに塗る
- *   polygon … 囲う。角を順にタップして閉じると中が塗られる。机や棚のような直線の物向け
+ *   brush   … なぞる。なぞった通りに塗る
+ *   polygon … 囲む。角を順にタップして閉じると中が塗られる。机や棚のような直線の物向け
+ *   eraser  … 消しゴム。なぞった場所の指定を消す
  */
-export type MaskToolKind = 'brush' | 'polygon';
+export type MaskToolKind = 'brush' | 'polygon' | 'eraser';
 
 export interface MaskTool {
   kind: MaskToolKind;
-  /** 消しゴム。どの道具でも、塗る代わりに塗った場所を元に戻す */
-  erase: boolean;
-  /** 太い筆。広い面を手早く塗るためのもの（筆のときだけ効く） */
+  /** 太い筆。広い面を手早く塗るためのもの（なぞる・消しゴムのときだけ効く） */
   thick: boolean;
 }
 
@@ -66,11 +65,13 @@ export interface PhotoState extends FurnitureSceneState {
    * その場所だけ写真が家具の手前に出る（3D 側は何も知らない）
    */
   maskUrl: string | null;
-  /** 隠す場所を塗っている最中か。この間は 1 本指が道具になる */
+  /** 手前にある物を指定している最中か。この間は 1 本指が道具になる */
   isMasking: boolean;
   maskTool: MaskTool;
-  /** 「囲う」で打っている途中の角。閉じると塗られて空になる */
+  /** 「囲む」で打っている途中の角。閉じると塗られて空になる */
   maskPolygon: PhotoPoint[];
+  /** 「戻す」で戻れる回数。0 なら押せない */
+  maskUndoDepth: number;
 }
 
 export const photoState = createStore<PhotoState>({
@@ -81,8 +82,9 @@ export const photoState = createStore<PhotoState>({
   view: { ...DEFAULT_PHOTO_VIEW },
   maskUrl: null,
   isMasking: false,
-  maskTool: { kind: 'brush', erase: false, thick: false },
+  maskTool: { kind: 'brush', thick: false },
   maskPolygon: [],
+  maskUndoDepth: 0,
   furniture: [],
   selectedId: null,
 });
@@ -183,6 +185,10 @@ export function setMaskTool(patch: Partial<MaskTool>): void {
 
 export function setMaskPolygon(maskPolygon: PhotoPoint[]): void {
   photoState.set({ maskPolygon });
+}
+
+export function setMaskUndoDepth(maskUndoDepth: number): void {
+  if (photoState.get().maskUndoDepth !== maskUndoDepth) photoState.set({ maskUndoDepth });
 }
 
 /**

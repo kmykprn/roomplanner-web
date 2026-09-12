@@ -1,97 +1,111 @@
 /**
- * 写真モードの「隠す」タブ。
+ * 写真モードの「手前」タブ。
  *
- * 写真の中で家具の手前にある物（机など）を、筆か囲うで塗ってもらう。
- * 塗った場所は写真が家具の手前に出るので、後ろへ動かした家具が隠れる。
+ * 写真の中で家具より手前にある物（机など）を指定してもらう。指定した部分は
+ * 写真が家具の上にかぶさるので、後ろへ動かした家具が隠れる。
  *
- * 道具ごとに要るものだけを出す。筆には太さ、囲うには「閉じて塗る」「1つ戻す」。
- * 塗る／消すはどの道具にも効く。
+ *   1 行目 … 見出し（何のためのタブか）
+ *   2 行目 … 道具の切り替えと、どの道具でも使う「戻す」「全部消す」
+ *   3 行目 … 道具ごとの設定（高さは固定。入れ替わっても写真が伸び縮みしない）
+ *   4 行目 … いま何をすればよいかの案内。囲むは打った角の数で変わる
+ *
  * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
 
 import { maskEditor } from '@/core/maskEditor';
 import { clearMask, photoState, setMaskTool, type MaskToolKind } from '@/core/photoState';
 
+const HEADLINE = '家具より手前にある物（机など）を指定します。指定した部分は家具の上にかぶさります';
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
-const GUIDES: Record<MaskToolKind, string> = {
-  brush: '家具の手前にある物を、写真の上でなぞってください',
-  polygon: '物の角を順にタップして囲い、「閉じて塗る」を押してください',
-};
-const HINT = '2本指で寄ると細かく作れます。塗った場所は青く見えます';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
-  ['brush', '筆'],
-  ['polygon', '囲う'],
+  ['brush', 'なぞる'],
+  ['polygon', '囲む'],
+  ['eraser', '消しゴム'],
 ];
+
+/** 囲みを閉じるのに要る角の数 */
+const MIN_CORNERS = 3;
 
 export function createMaskPanel(): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'mask';
 
-  const status = document.createElement('p');
-  status.className = 'hint';
+  const headline = document.createElement('p');
+  headline.className = 'hint';
 
+  // 2 行目
+  const toolbar = document.createElement('div');
+  toolbar.className = 'mask__toolbar';
   const toolSwitch = createSegment(
     TOOLS.map(([kind, label]) => [label, () => setMaskTool({ kind })])
   );
-  const modeSwitch = createSegment([
-    ['塗る', () => setMaskTool({ erase: false })],
-    ['消す', () => setMaskTool({ erase: true })],
-  ]);
+  const undoButton = createButton('戻す', () => maskEditor.undo(), 'button is-quiet is-small');
+  const clearButton = createButton('全部消す', clearMask, 'button is-quiet is-small');
+  toolbar.append(toolSwitch.element, undoButton, clearButton);
+
+  // 3 行目
+  const row = document.createElement('div');
+  row.className = 'mask__row';
   const widthSwitch = createSegment([
     ['細い', () => setMaskTool({ thick: false })],
     ['太い', () => setMaskTool({ thick: true })],
   ]);
+  const closeButton = createButton(
+    '囲みを閉じる',
+    () => maskEditor.closePolygon(),
+    'button is-small'
+  );
+  row.append(widthSwitch.element, closeButton);
 
-  const controls = document.createElement('div');
-  controls.className = 'mask__controls';
-  controls.append(modeSwitch.element, widthSwitch.element);
+  // 4 行目
+  const guide = document.createElement('p');
+  guide.className = 'hint';
 
-  // 囲う: 閉じる・戻す
-  const polygonActions = document.createElement('div');
-  polygonActions.className = 'mask__actions';
-  const closeButton = createButton('閉じて塗る', () => maskEditor.closePolygon(), 'button');
-  const undoButton = createButton('1つ戻す', () => maskEditor.undoCorner(), 'button is-quiet');
-  polygonActions.append(closeButton, undoButton);
-
-  const hint = document.createElement('p');
-  hint.className = 'hint mask__note';
-  hint.textContent = HINT;
-
-  const clearButton = createButton('全部消す', clearMask, 'button is-quiet');
-
-  panel.append(status, toolSwitch.element, controls, polygonActions, hint, clearButton);
+  panel.append(headline, toolbar, row, guide);
 
   function render(): void {
-    const { backgroundStatus, maskTool, maskUrl, maskPolygon } = photoState.get();
+    const { backgroundStatus, maskTool, maskUrl, maskPolygon, maskUndoDepth } = photoState.get();
     const hasPhoto = backgroundStatus === 'ready';
     const { kind } = maskTool;
 
-    status.textContent = hasPhoto ? GUIDES[kind] : NO_PHOTO;
-    hint.hidden = !hasPhoto;
+    headline.textContent = hasPhoto ? HEADLINE : NO_PHOTO;
 
     toolSwitch.setActive(TOOLS.findIndex(([id]) => id === kind));
     toolSwitch.setEnabled(hasPhoto);
-    modeSwitch.setActive(maskTool.erase ? 1 : 0);
-    modeSwitch.setEnabled(hasPhoto);
+    undoButton.disabled = !hasPhoto || (maskUndoDepth === 0 && maskPolygon.length === 0);
+    clearButton.disabled = !hasPhoto || !maskUrl;
 
-    // 道具ごとに要るものだけ出す。並ぶものを減らして、いま何を触っているか分かるように
-    widthSwitch.element.hidden = kind !== 'brush';
+    // 道具ごとに要るものだけ出す
+    widthSwitch.element.hidden = kind === 'polygon';
     widthSwitch.setActive(maskTool.thick ? 1 : 0);
     widthSwitch.setEnabled(hasPhoto);
+    closeButton.hidden = kind !== 'polygon';
+    closeButton.disabled = maskPolygon.length < MIN_CORNERS;
 
-    polygonActions.hidden = kind !== 'polygon';
-    closeButton.textContent =
-      maskPolygon.length > 0 ? `閉じて塗る（${maskPolygon.length}点）` : '閉じて塗る';
-    closeButton.disabled = maskPolygon.length < 3;
-    undoButton.disabled = maskPolygon.length === 0;
-
-    clearButton.disabled = !hasPhoto || !maskUrl;
+    guide.textContent = hasPhoto ? describe(kind, maskPolygon.length) : '';
+    guide.hidden = !hasPhoto;
   }
 
   render();
   photoState.subscribe(render);
   return panel;
+}
+
+/** いま何をすればよいか。囲むは、打った角の数で次の一手が変わる */
+function describe(kind: MaskToolKind, corners: number): string {
+  switch (kind) {
+    case 'brush':
+      return '机など、手前にある物の上をなぞってください';
+    case 'eraser':
+      return 'はみ出した部分をなぞって消します';
+    case 'polygon':
+      if (corners === 0)
+        return `物の角を順にタップしていきます（${MIN_CORNERS}つ以上で閉じられます）`;
+      if (corners < MIN_CORNERS)
+        return `次の角をタップ（あと ${MIN_CORNERS - corners} つで閉じられます）`;
+      return '角を続けるか、「囲みを閉じる」か最初の角をもう一度タップで中を塗ります';
+  }
 }
 
 function createButton(label: string, onClick: () => void, className: string): HTMLButtonElement {
