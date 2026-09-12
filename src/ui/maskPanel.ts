@@ -6,8 +6,8 @@
  *
  *   1 行目 … 見出し（何のためのタブか）
  *   2 行目 … 道具の切り替えと、どの道具でも使う「戻す」「全部消す」
- *   3 行目 … 道具ごとの設定（高さは固定。入れ替わっても写真が伸び縮みしない）
- *   4 行目 … いま何をすればよいかの案内。囲むは打った角の数で変わる
+ *   3 行目 … 道具ごとの設定（高さは固定。入れ替わっても写真が伸び縮みしない）。
+ *            囲むは「囲みを閉じる」ボタンの文字で、打った角の数と閉じられるかを伝える
  *
  * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
@@ -15,7 +15,7 @@
 import { maskEditor } from '@/core/maskEditor';
 import { clearMask, photoState, setMaskTool, type MaskToolKind } from '@/core/photoState';
 
-const HEADLINE = '背景の中で、家具より手前にしたい範囲を選んでください';
+const HEADLINE = '背景の中で家具より手前に表示したいエリアを指定して下さい';
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
@@ -58,11 +58,7 @@ export function createMaskPanel(): HTMLElement {
   );
   row.append(widthSwitch.element, closeButton);
 
-  // 4 行目
-  const guide = document.createElement('p');
-  guide.className = 'hint';
-
-  panel.append(headline, toolbar, row, guide);
+  panel.append(headline, toolbar, row);
 
   function render(): void {
     const { backgroundStatus, maskTool, maskUrl, maskPolygon, maskUndoDepth } = photoState.get();
@@ -82,9 +78,7 @@ export function createMaskPanel(): HTMLElement {
     widthSwitch.setEnabled(hasPhoto);
     closeButton.hidden = kind !== 'polygon';
     closeButton.disabled = maskPolygon.length < MIN_CORNERS;
-
-    guide.textContent = hasPhoto ? describe(kind, maskPolygon.length) : '';
-    guide.hidden = !hasPhoto;
+    closeButton.textContent = closeLabel(maskPolygon.length);
   }
 
   render();
@@ -92,20 +86,13 @@ export function createMaskPanel(): HTMLElement {
   return panel;
 }
 
-/** いま何をすればよいか。囲むは、打った角の数で次の一手が変わる */
-function describe(kind: MaskToolKind, corners: number): string {
-  switch (kind) {
-    case 'brush':
-      return '机など、手前にある物の上をなぞってください';
-    case 'eraser':
-      return 'はみ出した部分をなぞって消します';
-    case 'polygon':
-      if (corners === 0)
-        return `物の角を順にタップしていきます（${MIN_CORNERS}つ以上で閉じられます）`;
-      if (corners < MIN_CORNERS)
-        return `次の角をタップ（あと ${MIN_CORNERS - corners} つで閉じられます）`;
-      return '角を続けるか、「囲みを閉じる」か最初の角をもう一度タップで中を塗ります';
-  }
+/**
+ * 「囲みを閉じる」の文字。打った角の数と、閉じられるかをボタン自身で伝える。
+ * 足りない間は「あと N 点」、そろったら「囲みを閉じる（N点）」
+ */
+function closeLabel(corners: number): string {
+  if (corners < MIN_CORNERS) return `あと ${MIN_CORNERS - corners} 点タップで閉じられます`;
+  return `囲みを閉じる（${corners}点）`;
 }
 
 function createButton(label: string, onClick: () => void, className: string): HTMLButtonElement {
