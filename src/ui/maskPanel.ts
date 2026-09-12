@@ -1,16 +1,33 @@
 /**
  * 写真モードの「隠す」タブ。
  *
- * 写真の中で家具の手前にある物（机など）を指でなぞってもらう。
+ * 写真の中で家具の手前にある物（机など）を、3 つの道具のどれかで塗ってもらう。
  * 塗った場所は写真が家具の手前に出るので、後ろへ動かした家具が隠れる。
- * 塗る操作そのものは interaction/maskPaint.ts。ここは筆の設定と案内だけ。
+ *
+ * 道具ごとに要るものだけを出す。筆には太さ、似た色には許容の広さ、
+ * 囲うには「閉じて塗る」「1つ戻す」。塗る／消すはどの道具にも効く。
+ * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
 
-import { clearMask, photoState, setMaskTool } from '@/core/photoState';
+import { maskEditor } from '@/core/maskEditor';
+import { clearMask, photoState, setMaskTool, type MaskToolKind } from '@/core/photoState';
 
-const GUIDE = '家具の手前にある物（机など）を、写真の上でなぞってください';
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
-const HINT = '2本指で寄ると細かく塗れます。塗った場所は青く見えます';
+const GUIDES: Record<MaskToolKind, string> = {
+  brush: '家具の手前にある物を、写真の上でなぞってください',
+  polygon: '物の角を順にタップして囲い、「閉じて塗る」を押してください',
+  wand: '物の上をタップすると、似た色の範囲がまとめて塗られます',
+};
+const HINT = '2本指で寄ると細かく作れます。塗った場所は青く見えます';
+
+const TOOLS: Array<[MaskToolKind, string]> = [
+  ['brush', '筆'],
+  ['polygon', '囲う'],
+  ['wand', '似た色'],
+];
+
+/** 似た色の許容の広さ。狭すぎると点しか塗れず、広すぎると写真全体に及ぶ */
+const TOLERANCE_RANGE = { min: 0.05, max: 0.5, step: 0.05 };
 
 export function createMaskPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -19,6 +36,9 @@ export function createMaskPanel(): HTMLElement {
   const status = document.createElement('p');
   status.className = 'hint';
 
+  const toolSwitch = createSegment(
+    TOOLS.map(([kind, label]) => [label, () => setMaskTool({ kind })])
+  );
   const modeSwitch = createSegment([
     ['塗る', () => setMaskTool({ erase: false })],
     ['消す', () => setMaskTool({ erase: true })],
@@ -32,27 +52,72 @@ export function createMaskPanel(): HTMLElement {
   controls.className = 'mask__controls';
   controls.append(modeSwitch.element, widthSwitch.element);
 
+  // 似た色: 許容の広さ
+  const toleranceRow = document.createElement('label');
+  toleranceRow.className = 'mask__range';
+  const toleranceLabel = document.createElement('span');
+  toleranceLabel.textContent = '広さ';
+  const tolerance = document.createElement('input');
+  tolerance.type = 'range';
+  tolerance.min = String(TOLERANCE_RANGE.min);
+  tolerance.max = String(TOLERANCE_RANGE.max);
+  tolerance.step = String(TOLERANCE_RANGE.step);
+  tolerance.addEventListener('input', () => setMaskTool({ tolerance: Number(tolerance.value) }));
+  const toleranceValue = document.createElement('span');
+  toleranceRow.append(toleranceLabel, tolerance, toleranceValue);
+
+  // 囲う: 閉じる・戻す
+  const polygonActions = document.createElement('div');
+  polygonActions.className = 'mask__actions';
+  const closeButton = createButton('閉じて塗る', () => maskEditor.closePolygon(), 'button');
+  const undoButton = createButton('1つ戻す', () => maskEditor.undoCorner(), 'button is-quiet');
+  polygonActions.append(closeButton, undoButton);
+
   const hint = document.createElement('p');
   hint.className = 'hint mask__note';
   hint.textContent = HINT;
 
-  const clearButton = document.createElement('button');
-  clearButton.className = 'button is-quiet';
-  clearButton.textContent = '全部消す';
-  clearButton.addEventListener('click', clearMask);
+  const clearButton = createButton('全部消す', clearMask, 'button is-quiet');
 
-  panel.append(status, controls, hint, clearButton);
+  panel.append(
+    status,
+    toolSwitch.element,
+    controls,
+    toleranceRow,
+    polygonActions,
+    hint,
+    clearButton
+  );
 
   function render(): void {
-    const { backgroundStatus, maskTool, maskUrl } = photoState.get();
+    const { backgroundStatus, maskTool, maskUrl, maskPolygon } = photoState.get();
     const hasPhoto = backgroundStatus === 'ready';
+    const { kind } = maskTool;
 
-    status.textContent = hasPhoto ? GUIDE : NO_PHOTO;
+    status.textContent = hasPhoto ? GUIDES[kind] : NO_PHOTO;
     hint.hidden = !hasPhoto;
+
+    toolSwitch.setActive(TOOLS.findIndex(([id]) => id === kind));
+    toolSwitch.setEnabled(hasPhoto);
     modeSwitch.setActive(maskTool.erase ? 1 : 0);
-    widthSwitch.setActive(maskTool.thick ? 1 : 0);
     modeSwitch.setEnabled(hasPhoto);
+
+    // 道具ごとに要るものだけ出す。並ぶものを減らして、いま何を触っているか分かるように
+    widthSwitch.element.hidden = kind !== 'brush';
+    widthSwitch.setActive(maskTool.thick ? 1 : 0);
     widthSwitch.setEnabled(hasPhoto);
+
+    toleranceRow.hidden = kind !== 'wand';
+    tolerance.value = String(maskTool.tolerance);
+    tolerance.disabled = !hasPhoto;
+    toleranceValue.textContent = `${Math.round(maskTool.tolerance * 100)}`;
+
+    polygonActions.hidden = kind !== 'polygon';
+    closeButton.textContent =
+      maskPolygon.length > 0 ? `閉じて塗る（${maskPolygon.length}点）` : '閉じて塗る';
+    closeButton.disabled = maskPolygon.length < 3;
+    undoButton.disabled = maskPolygon.length === 0;
+
     clearButton.disabled = !hasPhoto || !maskUrl;
   }
 
@@ -61,7 +126,15 @@ export function createMaskPanel(): HTMLElement {
   return panel;
 }
 
-/** 2つから選ぶ切り替え。どちらが選ばれているかは状態から描く */
+function createButton(label: string, onClick: () => void, className: string): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+/** いくつかから 1 つ選ぶ切り替え。どれが選ばれているかは状態から描く */
 function createSegment(items: Array<[label: string, select: () => void]>): {
   element: HTMLElement;
   setActive(index: number): void;

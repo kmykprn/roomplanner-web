@@ -16,7 +16,12 @@ import {
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
 import { deleteBackground, deleteMask, saveBackground } from '@/platform/backgroundStore';
-import { clampPhotoView, DEFAULT_PHOTO_VIEW, type PhotoView } from '@/core/photoView';
+import {
+  clampPhotoView,
+  DEFAULT_PHOTO_VIEW,
+  type PhotoPoint,
+  type PhotoView,
+} from '@/core/photoView';
 
 /**
  * 背景写真の読み込み具合。
@@ -26,12 +31,23 @@ import { clampPhotoView, DEFAULT_PHOTO_VIEW, type PhotoView } from '@/core/photo
  */
 export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
-/** 隠す場所を塗る筆の設定 */
+/**
+ * 隠す場所を作る道具。
+ *
+ *   brush   … 筆。なぞった通りに塗る
+ *   polygon … 囲う。角を順にタップして閉じると中が塗られる。机や棚のような直線の物向け
+ *   wand    … 似た色。タップした点と似た色が続く範囲をまとめて塗る。一色の面向け
+ */
+export type MaskToolKind = 'brush' | 'polygon' | 'wand';
+
 export interface MaskTool {
-  /** 消しゴム。塗った場所を元に戻す */
+  kind: MaskToolKind;
+  /** 消しゴム。どの道具でも、塗る代わりに塗った場所を元に戻す */
   erase: boolean;
-  /** 太い筆。広い面を手早く塗るためのもの */
+  /** 太い筆。広い面を手早く塗るためのもの（筆のときだけ効く） */
   thick: boolean;
+  /** 似た色とみなす幅（0〜1）。大きいほど広く塗られる（似た色のときだけ効く） */
+  tolerance: number;
 }
 
 export interface PhotoState extends FurnitureSceneState {
@@ -53,9 +69,11 @@ export interface PhotoState extends FurnitureSceneState {
    * その場所だけ写真が家具の手前に出る（3D 側は何も知らない）
    */
   maskUrl: string | null;
-  /** 隠す場所を塗っている最中か。この間は 1 本指が筆になる */
+  /** 隠す場所を塗っている最中か。この間は 1 本指が道具になる */
   isMasking: boolean;
   maskTool: MaskTool;
+  /** 「囲う」で打っている途中の角。閉じると塗られて空になる */
+  maskPolygon: PhotoPoint[];
 }
 
 export const photoState = createStore<PhotoState>({
@@ -66,7 +84,8 @@ export const photoState = createStore<PhotoState>({
   view: { ...DEFAULT_PHOTO_VIEW },
   maskUrl: null,
   isMasking: false,
-  maskTool: { erase: false, thick: false },
+  maskTool: { kind: 'brush', erase: false, thick: false, tolerance: 0.15 },
+  maskPolygon: [],
   furniture: [],
   selectedId: null,
 });
@@ -163,6 +182,10 @@ export function setMasking(isMasking: boolean): void {
 
 export function setMaskTool(patch: Partial<MaskTool>): void {
   photoState.set({ maskTool: { ...photoState.get().maskTool, ...patch } });
+}
+
+export function setMaskPolygon(maskPolygon: PhotoPoint[]): void {
+  photoState.set({ maskPolygon });
 }
 
 /**

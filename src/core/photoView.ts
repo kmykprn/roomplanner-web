@@ -60,8 +60,14 @@ export function viewOrigin(view: PhotoView): { x: number; y: number } {
   return { x: view.centerX - half, y: view.centerY - half };
 }
 
+/** 写真の中の位置（割合）。左上が (0, 0)、右下が (1, 1) */
+export interface PhotoPoint {
+  x: number;
+  y: number;
+}
+
 /** 画面のこの位置に、写真のどこが写っているか */
-export function photoPointAt(view: PhotoView, point: ScreenPoint): { x: number; y: number } {
+export function photoPointAt(view: PhotoView, point: ScreenPoint): PhotoPoint {
   return {
     x: view.centerX + (point.u - 0.5) / view.scale,
     y: view.centerY + (point.v - 0.5) / view.scale,
@@ -76,7 +82,7 @@ export function photoPointAt(view: PhotoView, point: ScreenPoint): { x: number; 
  */
 export function viewAnchoredAt(
   scale: number,
-  photoPoint: { x: number; y: number },
+  photoPoint: PhotoPoint,
   point: ScreenPoint
 ): PhotoView {
   return clampPhotoView({
