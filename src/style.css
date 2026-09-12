@@ -13,6 +13,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * hidden 属性で隠したものは必ず隠す。
+ * display: flex などを当てた要素は、これが無いと hidden を付けても消えない
+ * （作った側の display がブラウザ既定の display: none に勝つため）
+ */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
