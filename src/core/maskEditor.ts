@@ -1,7 +1,7 @@
 /**
  * 隠す場所（マスク）を作る道具の中身。
  *
- * 筆・囲う・似た色、の3つはどれも**同じマスクに形を描くだけ**で、出口は1つ。
+ * 筆と囲うはどちらも**同じマスクに形を描くだけ**で、出口は1つ。
  * 描いた形を画像にして状態（photoState.maskUrl）へ渡し、表示側（core/viewer.ts）が
  * その画像で写真を切り抜いてキャンバスの上に重ねる。3D には何も教えない。
  *
@@ -34,8 +34,6 @@ export interface MaskEditor {
   addCorner(point: PhotoPoint): void;
   undoCorner(): void;
   closePolygon(): void;
-  /** 似た色。タップした点と似た色が続く範囲をまとめて塗る */
-  fillSimilar(point: PhotoPoint): Promise<void>;
 }
 
 function createMaskEditor(): MaskEditor {
@@ -51,8 +49,6 @@ function createMaskEditor(): MaskEditor {
   let previousPoint: { x: number; y: number } | null = null;
   /** 描いている途中の見た目の更新は 1 フレームに 1 回にまとめる */
   let previewRequest = 0;
-  /** 似た色に使う写真の画素。写真が変わるまで使い回す */
-  let photoPixels: { url: string; data: ImageData } | null = null;
   let lastToolKind = photoState.get().maskTool.kind;
 
   function toPixel(point: PhotoPoint): { x: number; y: number } {
@@ -205,60 +201,6 @@ function createMaskEditor(): MaskEditor {
     commit();
   }
 
-  // --- 似た色 ---
-
-  /** 写真をマスクと同じ大きさで読み、画素を取り出す。写真が変わるまで使い回す */
-  async function ensurePhotoPixels(): Promise<ImageData | null> {
-    const { backgroundUrl } = photoState.get();
-    if (!backgroundUrl || !ensureMaskSize()) return null;
-    if (photoPixels?.url === backgroundUrl) return photoPixels.data;
-
-    const image = await new Promise<HTMLImageElement | null>((resolve) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => resolve(null);
-      element.src = backgroundUrl;
-    });
-    if (!image) return null;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = mask.width;
-    canvas.height = mask.height;
-    const pixelContext = canvas.getContext('2d') as CanvasRenderingContext2D;
-    pixelContext.drawImage(image, 0, 0, mask.width, mask.height);
-    photoPixels = {
-      url: backgroundUrl,
-      data: pixelContext.getImageData(0, 0, mask.width, mask.height),
-    };
-    return photoPixels.data;
-  }
-
-  async function fillSimilar(point: PhotoPoint): Promise<void> {
-    const pixels = await ensurePhotoPixels();
-    if (!pixels) return;
-
-    const seed = toPixel(point);
-    const region = similarRegion(
-      pixels,
-      Math.floor(seed.x),
-      Math.floor(seed.y),
-      photoState.get().maskTool.tolerance
-    );
-
-    // 選ばれた画素だけ白（不透明）にした画像を作り、塗る／消すの決まりで重ねる
-    const patch = new ImageData(mask.width, mask.height);
-    for (let index = 0; index < region.length; index++) {
-      if (region[index]) patch.data[index * 4 + 3] = 255;
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = mask.width;
-    canvas.height = mask.height;
-    (canvas.getContext('2d') as CanvasRenderingContext2D).putImageData(patch, 0, 0);
-    context.globalCompositeOperation = compositeOperation();
-    context.drawImage(canvas, 0, 0);
-    commit();
-  }
-
   /**
    * よそで状態が変わったら合わせる。
    *   - マスクが差し替わった（起動時の読み戻し・全部消す）→ 塗る先も描き直す／白紙にする
@@ -291,48 +233,7 @@ function createMaskEditor(): MaskEditor {
   photoState.subscribe(followState);
   followState();
 
-  return { beginStroke, extendStroke, endStroke, addCorner, undoCorner, closePolygon, fillSimilar };
-}
-
-/**
- * タップした点と似た色が続く範囲（画像編集の「自動選択」）。
- *
- * 隣を辿りながら、**最初の点の色**と比べる。隣どうしで比べると、少しずつ色が
- * 変わる面（グラデーション）で際限なく広がってしまう
- */
-function similarRegion(
-  image: ImageData,
-  seedX: number,
-  seedY: number,
-  tolerance: number
-): Uint8Array {
-  const { width, height, data } = image;
-  const selected = new Uint8Array(width * height);
-  if (seedX < 0 || seedY < 0 || seedX >= width || seedY >= height) return selected;
-
-  const seedIndex = (seedY * width + seedX) * 4;
-  const [seedR, seedG, seedB] = [data[seedIndex], data[seedIndex + 1], data[seedIndex + 2]];
-  // 3 チャンネルの差の二乗平均が、許容（0〜1 を 0〜255 に伸ばしたもの）の二乗以内なら似ている
-  const limit = (tolerance * 255) ** 2 * 3;
-
-  const stack = [seedY * width + seedX];
-  while (stack.length > 0) {
-    const index = stack.pop() as number;
-    if (selected[index]) continue;
-    const offset = index * 4;
-    const dr = data[offset] - seedR;
-    const dg = data[offset + 1] - seedG;
-    const db = data[offset + 2] - seedB;
-    if (dr * dr + dg * dg + db * db > limit) continue;
-    selected[index] = 1;
-
-    const x = index % width;
-    if (x > 0) stack.push(index - 1);
-    if (x < width - 1) stack.push(index + 1);
-    if (index >= width) stack.push(index - width);
-    if (index + width < width * height) stack.push(index + width);
-  }
-  return selected;
+  return { beginStroke, extendStroke, endStroke, addCorner, undoCorner, closePolygon };
 }
 
 export const maskEditor = createMaskEditor();

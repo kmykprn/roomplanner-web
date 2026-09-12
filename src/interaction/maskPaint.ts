@@ -4,9 +4,8 @@
  * 「隠す」タブを開いている間だけ効く。1 本指が道具になり、2 本指は寄る操作のまま。
  * どの道具かは状態（maskTool.kind）が持ち、ここは指の動きを道具へ渡すだけ。
  *
- *   筆     … 押して動かした通りに塗る
- *   囲う   … タップで角を打つ（閉じるのはボタン）
- *   似た色 … タップした点から似た色をまとめて塗る
+ *   筆   … 押して動かした通りに塗る
+ *   囲う … タップで角を打つ（閉じるのはボタン）
  *
  * 形を描く中身は core/maskEditor.ts。
  */
@@ -66,14 +65,13 @@ export function createMaskPaint(canvas: HTMLCanvasElement): () => void {
       return;
     }
 
-    // 囲う・似た色はタップで効く。動かしていたら（寄る操作の名残など）何もしない
+    // 囲うはタップで角を打つ。動かしていたら（寄る操作の名残など）何もしない
     const { isMasking, maskTool, backgroundStatus } = photoState.get();
     if (!isMasking || !event.isPrimary || !wasOnlyFinger || backgroundStatus !== 'ready') return;
     const moved = Math.hypot(event.clientX - pressPosition.x, event.clientY - pressPosition.y);
     if (moved >= TAP_THRESHOLD_PX) return;
 
     if (maskTool.kind === 'polygon') maskEditor.addCorner(toPhotoPoint(event));
-    if (maskTool.kind === 'wand') void maskEditor.fillSimilar(toPhotoPoint(event));
   }
 
   canvas.addEventListener('pointerdown', onPointerDown);
