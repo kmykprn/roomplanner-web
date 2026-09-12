@@ -465,6 +465,33 @@ body {
   color: var(--danger);
 }
 
+/* 作成ボタンの下の一行。押す前からログインが要ることが分かるように */
+.lib__login-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ログインを求めるパネル。作成ボタンと同じ場所に出る */
+.login {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.login__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login__note {
+  font-size: 12px;
+}
+
 /* 利用者ID。限定公開のうち、許可リストに登録してもらうために出す。
    常に見えている必要はないので折りたたんでおく */
 .identity {
