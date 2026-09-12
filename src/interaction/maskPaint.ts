@@ -1,11 +1,11 @@
 /**
- * 隠す場所を指で作る。
+ * 手前にある物の指定を指で作る。
  *
- * 「隠す」タブを開いている間だけ効く。1 本指が道具になり、2 本指は寄る操作のまま。
+ * 「手前」タブを開いている間だけ効く。1 本指が道具になり、2 本指は寄る操作のまま。
  * どの道具かは状態（maskTool.kind）が持ち、ここは指の動きを道具へ渡すだけ。
  *
- *   筆   … 押して動かした通りに塗る
- *   囲う … タップで角を打つ（閉じるのはボタン）
+ *   なぞる・消しゴム … 押して動かした通りに塗る／消す
+ *   囲む             … タップで角を打つ（閉じるのはボタンか、最初の角をもう一度タップ）
  *
  * 形を描く中身は core/maskEditor.ts。
  */
@@ -44,7 +44,7 @@ export function createMaskPaint(canvas: HTMLCanvasElement): () => void {
     if (!isMasking || !event.isPrimary || backgroundStatus !== 'ready') return;
 
     pressPosition = { x: event.clientX, y: event.clientY };
-    if (maskTool.kind === 'brush') {
+    if (maskTool.kind === 'brush' || maskTool.kind === 'eraser') {
       strokePointer = event.pointerId;
       maskEditor.beginStroke(toPhotoPoint(event));
     }
@@ -65,7 +65,7 @@ export function createMaskPaint(canvas: HTMLCanvasElement): () => void {
       return;
     }
 
-    // 囲うはタップで角を打つ。動かしていたら（寄る操作の名残など）何もしない
+    // 囲むはタップで角を打つ。動かしていたら（寄る操作の名残など）何もしない
     const { isMasking, maskTool, backgroundStatus } = photoState.get();
     if (!isMasking || !event.isPrimary || !wasOnlyFinger || backgroundStatus !== 'ready') return;
     const moved = Math.hypot(event.clientX - pressPosition.x, event.clientY - pressPosition.y);
