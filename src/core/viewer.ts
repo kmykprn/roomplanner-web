@@ -24,6 +24,12 @@ export interface Viewer {
    */
   photoLayer: HTMLElement;
   /**
+   * 隠す場所の層。キャンバスの**上**に、写真をマスクで切り抜いて重ねる。
+   * 位置・大きさ・引き伸ばし方は写真の層とまったく同じにする。ずれると、
+   * 隠した縁だけ写真が二重に見える
+   */
+  maskLayer: HTMLElement;
+  /**
    * 描画範囲を指定の縦横比に収める。null で画面いっぱいに戻す。
    *
    * 写真モードで要る。写真は画面いっぱいには収まらない（縦横比が違う）ので
@@ -59,10 +65,13 @@ export function createViewer(container: HTMLElement): Viewer {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
 
-  // 写真はキャンバスの下に敷く。キャンバスは alpha: true なので透けて見える
+  // 写真はキャンバスの下に敷く。キャンバスは alpha: true なので透けて見える。
+  // 隠す場所の層はキャンバスの上。指の操作はキャンバスに通す（pointer-events: none）
   const photoLayer = document.createElement('div');
   photoLayer.className = 'viewport__photo';
-  container.append(photoLayer, renderer.domElement);
+  const maskLayer = document.createElement('div');
+  maskLayer.className = 'viewport__mask';
+  container.append(photoLayer, renderer.domElement, maskLayer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(THEME.background);
@@ -105,7 +114,7 @@ export function createViewer(container: HTMLElement): Viewer {
 
     // キャンバスと写真の層を、同じ大きさ・同じ場所に重ねる。
     // 入れ物の中央に寄せる（CSS の 100% 指定より、ここで入れる値が優先される）
-    for (const element of [renderer.domElement, photoLayer]) {
+    for (const element of [renderer.domElement, photoLayer, maskLayer]) {
       const style = element.style;
       style.position = 'absolute';
       style.left = `${(width - drawWidth) / 2}px`;
@@ -127,8 +136,8 @@ export function createViewer(container: HTMLElement): Viewer {
   function applyPhotoView(): void {
     if (!photoView) {
       camera.clearViewOffset(); // updateProjectionMatrix も中で呼ばれる
-      photoLayer.style.backgroundSize = '';
-      photoLayer.style.backgroundPosition = '';
+      setImageFit(photoLayer, '', '');
+      setImageFit(maskLayer, '', '');
       return;
     }
 
@@ -140,8 +149,25 @@ export function createViewer(container: HTMLElement): Viewer {
 
     // 縦横の両方を指定する。片方を auto にすると、丸めの分だけ枠に隙間が出る
     const percent = `${photoView.scale * 100}%`;
-    photoLayer.style.backgroundSize = `${percent} ${percent}`;
-    photoLayer.style.backgroundPosition = `${-x * photoView.scale * drawWidth}px ${-y * photoView.scale * drawHeight}px`;
+    const size = `${percent} ${percent}`;
+    const position = `${-x * photoView.scale * drawWidth}px ${-y * photoView.scale * drawHeight}px`;
+    setImageFit(photoLayer, size, position);
+    setImageFit(maskLayer, size, position);
+  }
+
+  /**
+   * 写真の引き伸ばし方を層に入れる。
+   * マスクの層は、写真（background）と切り抜き（mask）の両方を同じ値で動かす。
+   * mask-* は Safari では接頭辞付きでしか効かない版があるので、両方入れる
+   */
+  function setImageFit(element: HTMLElement, size: string, position: string): void {
+    const style = element.style;
+    style.backgroundSize = size;
+    style.backgroundPosition = position;
+    for (const prefix of ['', '-webkit-']) {
+      style.setProperty(`${prefix}mask-size`, size);
+      style.setProperty(`${prefix}mask-position`, position);
+    }
   }
 
   // コンテナのサイズ変化に追従する（画面回転・アドレスバーの伸縮に対応）
@@ -163,6 +189,7 @@ export function createViewer(container: HTMLElement): Viewer {
     camera,
     canvas: renderer.domElement,
     photoLayer,
+    maskLayer,
     setContentAspect(aspect) {
       // 角をドラッグするたびに呼ばれる。変わっていないなら測り直さない
       if (contentAspect === aspect) return;
@@ -187,6 +214,7 @@ export function createViewer(container: HTMLElement): Viewer {
       renderer.dispose();
       renderer.domElement.remove();
       photoLayer.remove();
+      maskLayer.remove();
     },
   };
 }

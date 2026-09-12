@@ -11,8 +11,8 @@
  */
 
 import { appState, type AppState } from '@/core/appState';
-import { photoState, showBackground, type PhotoState } from '@/core/photoState';
-import { readBackground } from '@/platform/backgroundStore';
+import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
+import { readBackground, readMask } from '@/platform/backgroundStore';
 
 const STORAGE_KEY = 'roomplanner.room';
 const PHOTO_STORAGE_KEY = 'roomplanner.photo';
@@ -57,10 +57,16 @@ export function restorePhoto(): void {
   });
 
   readBackground()
-    .then((blob) => {
-      if (blob) return showBackground(blob);
-      // 名前だけ残って写真が無い状態にしない
-      photoState.set({ backgroundName: null });
+    .then(async (blob) => {
+      if (!blob) {
+        // 名前だけ残って写真が無い状態にしない
+        photoState.set({ backgroundName: null });
+        return;
+      }
+      if (!(await showBackground(blob))) return;
+      // 隠す場所は写真に付いているものなので、写真が出せたときだけ戻す
+      const mask = await readMask();
+      if (mask) setMaskUrl(URL.createObjectURL(mask));
     })
     .catch(() => {
       // 読めなくても起動は続ける。写真を選び直せばよい
