@@ -13,7 +13,8 @@ import type { EditableScene } from '@/core/furnitureScene';
 
 export type Mode = 'room' | 'photo';
 
-export const modeState = createStore<{ mode: Mode }>({ mode: 'room' });
+/** 起動時は写真モード。写真の上に置くのが主な使い方なので、そちらを先に出す */
+export const modeState = createStore<{ mode: Mode }>({ mode: 'photo' });
 
 export function setMode(mode: Mode): void {
   if (modeState.get().mode !== mode) modeState.set({ mode });

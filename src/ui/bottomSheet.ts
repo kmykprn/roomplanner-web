@@ -44,7 +44,8 @@ const SIZE_LIMITS = { min: 0.1, max: 5 };
 const HEIGHT_STEP = 0.05;
 
 export function createBottomSheet(container: HTMLElement): void {
-  let activeTab: TabId = 'add';
+  // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
+  let activeTab: TabId = (isPhotoMode() ? PHOTO_TABS : ROOM_TABS)[0];
 
   const sheet = document.createElement('div');
   sheet.className = 'sheet';
@@ -121,6 +122,9 @@ export function createBottomSheet(container: HTMLElement): void {
       button.addEventListener('click', () => {
         const scene = activeScene();
         const id = crypto.randomUUID();
+        // 置いた直後は選択状態になるが、「操作」タブへは移らない。
+        // 続けて置きたいときに、置くたびにタブが変わると邪魔になる
+        justPlacedId = id;
         scene.add({
           id,
           typeId: type.id,
@@ -161,7 +165,7 @@ export function createBottomSheet(container: HTMLElement): void {
     if (!selected) {
       const hint = document.createElement('p');
       hint.className = 'hint';
-      hint.textContent = '家具をタップすると選択できます';
+      hint.textContent = '3Dオブジェクトをタップすると選択できます';
       wrapper.appendChild(hint);
       return wrapper;
     }
@@ -304,12 +308,33 @@ export function createBottomSheet(container: HTMLElement): void {
     return button;
   }
 
+  /** 「設置」で置いた直後の家具。これを選んだときはタブを移さない */
+  let justPlacedId: string | null = null;
+  /** 直前に選ばれていた家具。選択が「無し → あり」に変わった瞬間を捉えるために持つ */
+  let previousSelectedId: string | null = activeScene().state().selectedId;
+
   // 選択状態が変わったら「操作」タブの中身を描き直す必要がある。
   // どちらのモードの家具が変わったかは問わない（表示中のほうだけ描き直せばよい）。
   // 同じ家具を触っている間は行を残し、値だけ書き替える（上の manageView を参照）
-  const redrawManageTab = (): void => {
-    if (activeTab !== 'manage') return;
+  const followSelection = (): void => {
     const { selectedId, furniture } = activeScene().state();
+
+    // タップで家具を選んだら「操作」タブへ移る。すぐ動かしたり回したりできるように。
+    // 置いた直後の自動選択では移らない
+    const newlySelected = selectedId !== null && selectedId !== previousSelectedId;
+    // 置いた直後の家具から選択が外れたら、その後のタップは普通の選択として扱う。
+    // 「置く」は add → select の 2 段階で届くので、select が来る前に忘れないよう、
+    // 「選ばれていた状態から外れた」ときだけ忘れる
+    const leftJustPlaced = previousSelectedId === justPlacedId && selectedId !== justPlacedId;
+    previousSelectedId = selectedId;
+    if (leftJustPlaced) justPlacedId = null;
+    if (newlySelected && selectedId !== justPlacedId && activeTab !== 'manage') {
+      activeTab = 'manage';
+      render();
+      return;
+    }
+
+    if (activeTab !== 'manage') return;
     const shown = manageView && furniture.find((f) => f.id === manageView?.itemId);
     if (shown && shown.id === selectedId) {
       manageView?.refresh(shown);
@@ -317,14 +342,15 @@ export function createBottomSheet(container: HTMLElement): void {
     }
     render();
   };
-  appState.subscribe(redrawManageTab);
-  photoState.subscribe(redrawManageTab);
+  appState.subscribe(followSelection);
+  photoState.subscribe(followSelection);
 
   // モードが変わったら、そのモードの最初のタブへ戻す。
   // 設置タブは両方にあるので、そのままだと写真モードに入っても設置が開いたままになり、
   // 先にやるべき「背景の写真を選ぶ」に辿り着けない
   modeState.subscribe(() => {
     activeTab = visibleTabs()[0];
+    previousSelectedId = activeScene().state().selectedId;
     render();
   });
 
