@@ -296,6 +296,23 @@ body {
   flex: 0 0 160px;
 }
 
+/* 「完了」を右端へ押しやる */
+.mask__spacer {
+  flex: 1;
+}
+
+/* 背景タブ。通常の姿と、手前の範囲を指定する姿を切り替える */
+.photo,
+.photo__normal {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.photo__note {
+  font-size: 12px;
+}
+
 /* 小さめの補助ボタン。主のボタンより弱く見せる */
 .button.is-small {
   padding: 7px 12px;
