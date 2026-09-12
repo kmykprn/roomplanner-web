@@ -141,16 +141,61 @@ function applyBackground(): void {
   const image = backgroundUrl ? `url("${backgroundUrl}")` : '';
   viewer.photoLayer.style.backgroundImage = image;
 
-  // 隠す層は同じ写真を、塗った形で切り抜いて重ねる。塗っていなければ出さない
-  // （切り抜きが無いと写真がまるごと家具の上に乗る）
+  // 隠す層は同じ写真を、塗った形で切り抜いて重ねる
   const { maskLayer } = viewer;
   maskLayer.style.backgroundImage = image;
-  const maskImage = maskUrl ? `url("${maskUrl}")` : 'none';
-  maskLayer.style.setProperty('mask-image', maskImage);
-  maskLayer.style.setProperty('-webkit-mask-image', maskImage);
-  maskLayer.classList.toggle('has-mask', Boolean(backgroundUrl && maskUrl));
+  applyMaskImage(maskUrl);
   // 塗っている間は塗った場所を色付きで見せる（写真の上に写真を重ねても見分けがつかない）
   maskLayer.classList.toggle('is-editing', isMasking);
+}
+
+/** いま隠す層に当てている切り抜き。差し替えたあとに前のものを解放するために覚えておく */
+let appliedMaskUrl: string | null = null;
+/**
+ * 読み込み待ちの切り抜き。読み込み中にまた差し替わったら、古いほうは当てない。
+ * undefined は「待っているものが無い」。null は「無し（消す）」を待っている、の意味で区別する
+ */
+let pendingMaskUrl: string | null | undefined = undefined;
+
+/**
+ * 切り抜きの画像を隠す層に当てる。
+ *
+ * **先に読み込んでから差し替える。** 読み込む前に差し替えると、読み終わるまでの
+ * 一瞬だけ切り抜きが空になり、塗っている間ずっとチラつく（毎フレーム差し替えるため）。
+ * 読み込み済みの画像なら、差し替えはその場で終わり途切れない
+ */
+function applyMaskImage(url: string | null): void {
+  // いま向かっている先（読み込み待ちがあればそれ、無ければ当てているもの）と同じなら何もしない
+  const heading = pendingMaskUrl === undefined ? appliedMaskUrl : pendingMaskUrl;
+  if (url === heading) return;
+  pendingMaskUrl = url;
+
+  if (!url) {
+    swapMaskImage(null);
+    return;
+  }
+  const image = new Image();
+  image.onload = () => {
+    if (pendingMaskUrl === url) swapMaskImage(url);
+  };
+  image.onerror = () => {
+    if (pendingMaskUrl === url) swapMaskImage(null);
+  };
+  image.src = url;
+}
+
+function swapMaskImage(url: string | null): void {
+  const { maskLayer } = viewer;
+  const maskImage = url ? `url("${url}")` : 'none';
+  maskLayer.style.setProperty('mask-image', maskImage);
+  maskLayer.style.setProperty('-webkit-mask-image', maskImage);
+  // 切り抜きが無い間は出さない（無いと写真がまるごと家具の上に乗る）
+  maskLayer.classList.toggle('has-mask', Boolean(url));
+
+  // 前のものはここで解放する。差し替える前に解放すると、表示中の切り抜きが消える
+  if (appliedMaskUrl?.startsWith('blob:')) URL.revokeObjectURL(appliedMaskUrl);
+  appliedMaskUrl = url;
+  pendingMaskUrl = undefined;
 }
 
 /**
