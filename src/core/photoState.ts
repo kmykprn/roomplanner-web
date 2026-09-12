@@ -36,9 +36,8 @@ export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
  *
  *   brush   … 筆。なぞった通りに塗る
  *   polygon … 囲う。角を順にタップして閉じると中が塗られる。机や棚のような直線の物向け
- *   wand    … 似た色。タップした点と似た色が続く範囲をまとめて塗る。一色の面向け
  */
-export type MaskToolKind = 'brush' | 'polygon' | 'wand';
+export type MaskToolKind = 'brush' | 'polygon';
 
 export interface MaskTool {
   kind: MaskToolKind;
@@ -46,8 +45,6 @@ export interface MaskTool {
   erase: boolean;
   /** 太い筆。広い面を手早く塗るためのもの（筆のときだけ効く） */
   thick: boolean;
-  /** 似た色とみなす幅（0〜1）。大きいほど広く塗られる（似た色のときだけ効く） */
-  tolerance: number;
 }
 
 export interface PhotoState extends FurnitureSceneState {
@@ -84,7 +81,7 @@ export const photoState = createStore<PhotoState>({
   view: { ...DEFAULT_PHOTO_VIEW },
   maskUrl: null,
   isMasking: false,
-  maskTool: { kind: 'brush', erase: false, thick: false, tolerance: 0.15 },
+  maskTool: { kind: 'brush', erase: false, thick: false },
   maskPolygon: [],
   furniture: [],
   selectedId: null,

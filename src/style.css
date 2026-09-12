@@ -269,20 +269,6 @@ body {
   gap: 8px;
 }
 
-/* 似た色の許容の広さ。つまみと値を横に並べる */
-.mask__range {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: #5d6567;
-}
-
-.mask__range input {
-  flex: 1;
-  accent-color: var(--primary);
-}
-
 .mask__actions {
   display: flex;
   gap: 8px;
