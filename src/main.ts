@@ -34,6 +34,7 @@ import {
   restoreRoom,
 } from '@/core/persistence';
 import { resumeGeneration } from '@/core/generation';
+import { restoreModelLibrary } from '@/core/modelLibrary';
 import { THEME } from '@/config/theme';
 
 /** 起動に必須の要素を取る。無ければどれが無いのか分かる形で止める */
@@ -50,6 +51,8 @@ const header = requireElement('.header');
 // シーンを組み立てる前に読み戻す。あとからだと部屋の大きさが二重に反映される
 restoreRoom();
 restorePhoto();
+// 作ったモデルの保管庫。置いてある家具を見て取り込むので、部屋と写真のあと
+restoreModelLibrary();
 
 const viewer = createViewer(viewport);
 const { room } = appState.get();
@@ -227,7 +230,7 @@ createBottomSheet(app);
 // --- 端末に残す ---
 persistRoomOnChange();
 persistPhotoOnChange();
-// 前回の生成が終わっていれば、ここで部屋に置かれる
+// 前回の生成が終わっていれば、ここで保管庫に入る
 resumeGeneration();
 
 // --- 毎フレームの処理 ---

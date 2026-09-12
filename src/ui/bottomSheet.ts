@@ -4,31 +4,30 @@
  *
  * UI は DOM。3D の上に重ねるだけなので three.js とは完全に切り離せる。
  *
- * **タブの並びはモードで変わる。** 部屋モードには写真からの生成があり、
- * 写真モードには背景の選択がある。設置と操作は両方にある。
+ * **タブの並びはモードで変わる。** 写真モードには背景の選択がある。
+ * 3Dモデル（置く・写真から作る）と操作は両方にある。
  */
 
-import { FURNITURE_TYPES, type PlacedFurniture } from '@/config/furniture';
-import { createGenerationPanel } from '@/ui/generationPanel';
+import type { PlacedFurniture } from '@/config/furniture';
+import { createModelPanel } from '@/ui/modelPanel';
 import { createPhotoPanel } from '@/ui/photoPanel';
 import { createRepeatButton } from '@/ui/repeatButton';
-import { deletePreview } from '@/platform/previewCache';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
+import { releaseFurnitureAssets } from '@/core/modelLibrary';
 import { photoState, setMasking } from '@/core/photoState';
 
-type TabId = 'background' | 'add' | 'generate' | 'manage';
+type TabId = 'background' | 'models' | 'manage';
 
 const TABS: Record<TabId, string> = {
   background: '背景',
-  add: '設置',
-  generate: '写真から',
+  models: '3Dモデル',
   manage: '操作',
 };
 
 /** モードごとのタブの並び */
-const ROOM_TABS: TabId[] = ['add', 'generate', 'manage'];
-const PHOTO_TABS: TabId[] = ['background', 'add', 'manage'];
+const ROOM_TABS: TabId[] = ['models', 'manage'];
+const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
 
 /** 1 回のボタン操作で家具を回す角度 */
 const ROTATION_STEP = Math.PI / 12; // 15 度
@@ -57,9 +56,18 @@ export function createBottomSheet(container: HTMLElement): void {
   body.className = 'sheet__body';
   sheet.appendChild(body);
 
+  /** 「3Dモデル」で置いた直後の家具。これを選んだときはタブを移さない */
+  let justPlacedId: string | null = null;
+
   // 生成は8分かかり、その間もタブを行き来できる必要がある。
-  // 毎回作り直すと進行表示が途切れるので、1つ作って使い回す
-  const generationPanel = createGenerationPanel();
+  // 毎回作り直すと進行表示が途切れるので、1つ作って使い回す。
+  // 置いた直後は選択状態になるが、「操作」タブへは移らない。
+  // 続けて置きたいときに、置くたびにタブが変わると邪魔になる
+  const modelPanel = createModelPanel({
+    onPlaced: (id) => {
+      justPlacedId = id;
+    },
+  });
   const photoPanel = createPhotoPanel();
 
   function visibleTabs(): TabId[] {
@@ -94,49 +102,10 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   function renderActiveTab(): HTMLElement {
-    if (activeTab === 'add') return renderAddTab();
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
-    if (activeTab === 'generate') return generationPanel;
+    if (activeTab === 'models') return modelPanel;
     if (activeTab === 'background') return photoPanel;
     return renderManageTab();
-  }
-
-  /** 家具の一覧。押すと空いている場所に置く */
-  function renderAddTab(): HTMLElement {
-    const grid = document.createElement('div');
-    grid.className = 'grid';
-
-    for (const type of FURNITURE_TYPES) {
-      const button = document.createElement('button');
-      button.className = 'chip';
-
-      const swatch = document.createElement('span');
-      swatch.className = 'chip__swatch';
-      swatch.style.background = type.color;
-      button.append(swatch, type.name);
-
-      button.addEventListener('click', () => {
-        const scene = activeScene();
-        const id = crypto.randomUUID();
-        // 置いた直後は選択状態になるが、「操作」タブへは移らない。
-        // 続けて置きたいときに、置くたびにタブが変わると邪魔になる
-        justPlacedId = id;
-        scene.add({
-          id,
-          typeId: type.id,
-          // 底面基準なので y = 0 が床置き。既存の家具に埋まらない場所を選ぶ
-          position: scene.placementFor(type.defaultSize),
-          rotationY: 0,
-          size: [...type.defaultSize],
-          color: type.color,
-        });
-        scene.select(id);
-      });
-
-      grid.appendChild(button);
-    }
-
-    return grid;
   }
 
   /**
@@ -185,8 +154,9 @@ export function createBottomSheet(container: HTMLElement): void {
     wrapper.append(
       ...rows.map((row) => row.element),
       createButton('削除', () => {
-        if (selected.sourceImageKey) void deletePreview(selected.sourceImageKey);
         scene.remove(id);
+        // 写真から作ったモデルの中身は、保管庫にも残っていなければここで捨てる
+        releaseFurnitureAssets(selected);
       }, 'is-danger manage__delete')
     );
 
@@ -304,8 +274,6 @@ export function createBottomSheet(container: HTMLElement): void {
     return button;
   }
 
-  /** 「設置」で置いた直後の家具。これを選んだときはタブを移さない */
-  let justPlacedId: string | null = null;
   /** 直前に選ばれていた家具。選択が「無し → あり」に変わった瞬間を捉えるために持つ */
   let previousSelectedId: string | null = activeScene().state().selectedId;
 
@@ -342,7 +310,7 @@ export function createBottomSheet(container: HTMLElement): void {
   photoState.subscribe(followSelection);
 
   // モードが変わったら、そのモードの最初のタブへ戻す。
-  // 設置タブは両方にあるので、そのままだと写真モードに入っても設置が開いたままになり、
+  // 3Dモデルタブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
   // 先にやるべき「背景の写真を選ぶ」に辿り着けない
   modeState.subscribe(() => {
     activeTab = visibleTabs()[0];
