@@ -15,7 +15,7 @@
 import { maskEditor } from '@/core/maskEditor';
 import { clearMask, photoState, setMaskTool, type MaskToolKind } from '@/core/photoState';
 
-const HEADLINE = '家具より手前にある物（机など）を指定します。指定した部分は家具の上にかぶさります';
+const HEADLINE = '背景の中で、家具より手前にしたい物を選んでください';
 const NO_PHOTO = '先に「背景」タブで写真を選んでください';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
