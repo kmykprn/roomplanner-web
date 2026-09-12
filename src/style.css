@@ -305,12 +305,62 @@ body {
 .photo,
 .photo__normal {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
   width: 100%;
 }
 
 .photo__note {
+  margin-top: 8px;
   font-size: 12px;
+}
+
+/* 設定画面のような「見出し・いまの値・右端」の 1 行。行ごとボタンにもなる */
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 4px 10px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.setting:first-child {
+  border-top: none;
+}
+
+.setting__label {
+  flex: 0 0 96px;
+}
+
+.setting__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #7a8388;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setting__value.is-set {
+  color: var(--primary);
+}
+
+.setting__buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.setting__chevron {
+  color: #7a8388;
+  font-size: 18px;
+  line-height: 1;
 }
 
 /* 小さめの補助ボタン。主のボタンより弱く見せる */
@@ -485,12 +535,20 @@ body {
 /* 「3Dモデル」タブ。作る・作ったもの・基本のもの、を縦に並べる */
 .lib {
   display: grid;
+  /* 列を幅に固定する。auto のままだと長い一文に合わせて列が横に伸び、シートからはみ出す */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   width: 100%;
 }
 
-.lib__hint {
-  font-size: 12px;
+.lib__generate + .hint {
+  margin-top: 8px;
+}
+
+/* 主役の操作なので横いっぱいに */
+.lib__generate {
+  width: 100%;
+  text-align: center;
 }
 
 .lib__label {
