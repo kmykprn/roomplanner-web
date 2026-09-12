@@ -32,9 +32,6 @@ import { pickImages } from '@/platform/picker';
 import { resolvePreview } from '@/platform/previewCache';
 import { createProgressRing } from '@/ui/progressRing';
 
-/** 何も作っていないときの案内。所要時間は工程の表示に任せる */
-const IDLE_MESSAGE = '家具の写真から3Dモデルを作れます';
-
 export interface ModelPanelOptions {
   /** モデルを置いた直後に呼ぶ。タブの移動を抑える判断に使う */
   onPlaced(id: string): void;
@@ -44,19 +41,20 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'lib';
 
-  // --- 1 段目: 写真から作る ---
+  // --- 1 段目: 写真から作る。ボタンの文字が説明を兼ねるので、案内は出さない ---
   const generateRow = document.createElement('div');
-  generateRow.className = 'row';
   const generateButton = document.createElement('button');
-  generateButton.className = 'button';
-  generateButton.textContent = '＋ 写真から作る';
+  generateButton.className = 'button lib__generate';
+  generateButton.textContent = '＋ 写真から3Dモデルを作成';
   generateButton.addEventListener('click', async () => {
     const files = await pickImages();
     if (files.length > 0) void startGeneration(files);
   });
-  const status = document.createElement('p');
-  status.className = 'hint lib__hint';
-  generateRow.append(generateButton, status);
+  /** 認証できないときだけ出す。押せない理由が無いと、壊れているように見える */
+  const authNote = document.createElement('p');
+  authNote.className = 'hint is-error';
+  authNote.hidden = true;
+  generateRow.append(generateButton, authNote);
 
   // --- 2 段目: 作ったモデル ---
   const made = document.createElement('div');
@@ -114,8 +112,8 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     const { models } = modelLibrary.get();
 
     generateButton.disabled = authFailed;
-    status.classList.toggle('is-error', authFailed);
-    status.textContent = authFailed ? authFailureMessage() : IDLE_MESSAGE;
+    authNote.hidden = !authFailed;
+    authNote.textContent = authFailed ? authFailureMessage() : '';
 
     // 作成中のものを先頭に、できあがったものを新しい順に並べる
     const running = jobs.filter((job) => job.phase !== 'failed');
