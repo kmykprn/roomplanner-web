@@ -11,14 +11,18 @@ const REPEAT_DELAY_MS = 350;
 const REPEAT_INTERVAL_MS = 70;
 
 export function createRepeatButton(
-  mark: string,
-  /** 読み上げ用の説明。記号だけでは向きが分からないため */
+  /** 見せる中身。文字でも、アイコンの要素でもよい */
+  content: string | Node,
+  /** 読み上げ用の説明。アイコンだけでは向きが分からないため */
   label: string,
-  act: () => void
+  act: () => void,
+  /** 見た目のクラス。押している間の色などは呼ぶ側の CSS が持つ */
+  className: string
 ): HTMLButtonElement {
   const button = document.createElement('button');
-  button.className = 'nudge';
-  button.textContent = mark;
+  button.type = 'button';
+  button.className = className;
+  button.append(content);
   button.setAttribute('aria-label', label);
 
   let delayTimer = 0;

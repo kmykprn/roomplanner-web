@@ -505,61 +505,99 @@ body {
 /* 「操作」タブ。選択中の家具の向き・大きさ・高さを行ごとに並べる */
 .manage {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   align-content: start;
 }
 
+/* 見出しと、右側のステッパー（減らす｜値｜増やす） */
 .manage__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .manage__label {
-  flex: 0 0 auto;
-  min-width: 44px;
-  font-size: 14px;
-}
-
-.manage__value {
-  flex: 1;
-  overflow: hidden;
+  font-size: 12px;
   color: #7a8388;
-  font-size: 13px;
-  /* 数字が伸び縮みしても位置がずれないようにする */
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-align: right;
-  text-overflow: ellipsis;
+  letter-spacing: 0.04em;
 }
 
-.manage__delete {
-  justify-self: start;
-  margin-top: 4px;
-}
-
-/* 押しっぱなしで動き続けるボタン。指で押せる大きさを確保する */
-.nudge {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 34px;
+/* 減らす・値・増やすを 1 つの部品に見せる。角は外枠だけ丸め、中は仕切り線で分ける */
+.manage__control {
+  display: inline-grid;
+  grid-template-columns: 40px minmax(76px, auto) 40px;
+  align-items: stretch;
+  height: 36px;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
+}
+
+.manage__button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--primary);
   font: inherit;
-  font-size: 17px;
-  line-height: 1;
   touch-action: manipulation;
   /* 押しっぱなしで動かしたときに、文字が選択されるのを防ぐ */
   user-select: none;
 }
-
-.nudge:active {
+.manage__button:active {
   background: var(--primary);
   color: #fff;
 }
+
+.manage__value {
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  /* 数字が伸び縮みしても位置がずれないようにする */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.manage__foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+/* 削除は枠線だけの赤。アイコンと文字を並べる */
+.manage__delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.manage__delete .ic {
+  width: 18px;
+  height: 18px;
+}
+
+/* 線のアイコン（ui/icons.ts）。アプリのアイコンと同じ「丸い端・丸い角」。色は置いた場所の文字色 */
+.ic {
+  display: block;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 押しっぱなしで動き続けるボタン。指で押せる大きさを確保する */
 
 .hint.is-error {
   color: var(--danger);
