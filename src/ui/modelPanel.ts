@@ -4,7 +4,8 @@
  *   1 段目 … 「＋ 写真から3Dモデルを作成」。押したあとはタブを離れても、アプリを閉じても進行は続く。
  *            匿名のままなら、写真を選んだあとにログインを求める（ui/loginPanel.ts）
  *   2 段目 … 作ったモデル。作成中はその場で円が進み、できあがると押せる姿になる。
- *            × で保管庫から外す（置いてある家具はそのまま）
+ *            右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。× で即消せるのは
+ *            簡単すぎたので、削除は編集の中で二段階にした
  *   3 段目 … 基本のモデル（椅子・テーブル…）
  *
  * 生成に約8分かかるので、**待たせる画面ではなく、待たせない画面**にする。
@@ -26,11 +27,13 @@ import {
   PLACEHOLDER_COLOR,
   modelLibrary,
   removeModel,
+  renamePlacedCopies,
+  updateModel,
   type GeneratedModel,
 } from '@/core/modelLibrary';
 import { authState, redirectLogin } from '@/platform/auth';
-import { pickImages } from '@/platform/picker';
-import { resolvePreview } from '@/platform/previewCache';
+import { pickImage, pickImages } from '@/platform/picker';
+import { resolvePreview, savePreview } from '@/platform/previewCache';
 import { createLoginPanel } from '@/ui/loginPanel';
 import { createProgressRing } from '@/ui/progressRing';
 
@@ -105,7 +108,19 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   basicLabel.textContent = '基本のモデル';
   basic.append(basicLabel, createBasicGrid(place));
 
-  panel.append(generateRow, loginPanel.element, made, basic, createIdentity());
+  /** 通常の姿。編集の間は引っ込める（「手前の範囲」と同じ作り） */
+  const normal = document.createElement('div');
+  normal.className = 'lib__normal';
+  normal.append(generateRow, loginPanel.element, made, basic, createIdentity());
+  const editor = createModelEditor(() => {
+    normal.hidden = false;
+  });
+  panel.append(normal, editor.element);
+
+  function openEditor(model: GeneratedModel): void {
+    normal.hidden = true;
+    editor.open(model);
+  }
 
   /** 押したモデルをいまのモードの空いている場所に置く。置いた直後は選択状態にする */
   function place(item: Omit<PlacedFurniture, 'id' | 'position' | 'rotationY'>): void {
@@ -157,41 +172,18 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     const failed = jobs.filter((job) => job.phase === 'failed');
     made.hidden = running.length === 0 && failed.length === 0 && models.length === 0;
 
-    const wanted = new Set<string>();
     const ordered: HTMLElement[] = [];
-    for (const job of running) {
-      const key = `job:${job.id}`;
-      wanted.add(key);
-      let node = thumbNodes.get(key);
-      if (!node) {
-        node = createJobThumb(job);
-        thumbNodes.set(key, node);
-      }
-      node.update?.(job);
-      ordered.push(node.element);
-    }
-    for (const model of [...models].reverse()) {
-      const key = `model:${model.id}`;
-      wanted.add(key);
-      let node = thumbNodes.get(key);
-      if (!node) {
-        node = createModelThumb(model, placeGenerated);
-        thumbNodes.set(key, node);
-      }
-      ordered.push(node.element);
-    }
-    for (const [key, node] of thumbNodes) {
-      if (!wanted.has(key)) {
-        node.dispose();
-        thumbNodes.delete(key);
-      }
-    }
+    ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
+    ordered.push(...syncThumbs(modelNodes, [...models].reverse(), (model) =>
+      createModelThumb(model, placeGenerated, openEditor)
+    ));
     thumbs.replaceChildren(...ordered);
     failures.replaceChildren(...failed.map(createFailure));
   }
 
-  /** 表示中のサムネイル。キーは job:<id> か model:<id> */
-  const thumbNodes = new Map<string, ThumbNode>();
+  /** 表示中のサムネイル。作成中と、できあがったもので別に持つ */
+  const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
+  const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
 
   render();
   generationState.subscribe(render);
@@ -237,52 +229,269 @@ function createBasicGrid(
 }
 
 /** できあがったモデル。押すと置く。× で保管庫から外す */
-/** 使い回すサムネイル。update は作成中のものだけが持つ。dispose で画像の URL を解放する */
-interface ThumbNode {
+/** 使い回すサムネイル。update で変わった部分だけ描き直し、dispose で画像の URL を解放する */
+interface ThumbNode<T> {
   element: HTMLElement;
-  update?(job: GenerationJob): void;
+  update(item: T): void;
   dispose(): void;
 }
 
-function createModelThumb(model: GeneratedModel, place: (model: GeneratedModel) => void): ThumbNode {
-  const thumb = createThumb(model.name);
-  thumb.button.addEventListener('click', () => place(model));
-  // 画像は一度だけ読む。Blob URL はこのサムネイルを外すときに解放する
-  let previewUrl: string | null = null;
-  let disposed = false;
-  if (model.previewKey) {
-    void resolvePreview(model.previewKey).then((url) => {
-      if (!url) return;
-      if (disposed) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-      previewUrl = url;
-      thumb.image.style.backgroundImage = `url("${url}")`;
-    });
+/**
+ * id で使い回しながら、並び順どおりの要素を返す。無くなったものは捨てる。
+ * 作り直さないのは、作成中の状態更新のたびに画像が読み直されてちらつくため
+ */
+function syncThumbs<T extends { id: string }>(
+  nodes: Map<string, ThumbNode<T>>,
+  items: T[],
+  create: (item: T) => ThumbNode<T>
+): HTMLElement[] {
+  const wanted = new Set<string>();
+  const ordered: HTMLElement[] = [];
+  for (const item of items) {
+    wanted.add(item.id);
+    let node = nodes.get(item.id);
+    if (!node) {
+      node = create(item);
+      nodes.set(item.id, node);
+    }
+    node.update(item);
+    ordered.push(node.element);
   }
+  for (const [id, node] of nodes) {
+    if (!wanted.has(id)) {
+      node.dispose();
+      nodes.delete(id);
+    }
+  }
+  return ordered;
+}
 
-  const remove = document.createElement('button');
-  remove.className = 'thumb__x';
-  remove.textContent = '×';
-  remove.setAttribute('aria-label', `${model.name} を一覧から外す`);
-  remove.addEventListener('click', (event) => {
-    // 外すだけで置いてしまわないよう、下のボタンには渡さない
-    event.stopPropagation();
-    removeModel(model.id);
-  });
-  thumb.element.append(remove);
+/**
+ * アイコンの画像を、キーが変わったときだけ読み直す。Blob URL は次の読み直しか dispose で解放する。
+ * 作ったモデルのサムネイルと、編集の姿のアイコンで同じものを使う
+ */
+function createPreviewImage(target: HTMLElement): { show(key: string | null): void; dispose(): void } {
+  let shownKey: string | null | undefined;
+  let url: string | null = null;
+  let disposed = false;
+  function release(): void {
+    if (url) URL.revokeObjectURL(url);
+    url = null;
+    target.style.backgroundImage = '';
+  }
   return {
-    element: thumb.element,
+    show(key) {
+      if (key === shownKey) return;
+      shownKey = key;
+      release();
+      if (!key) return;
+      void resolvePreview(key).then((resolved) => {
+        if (!resolved) return;
+        // 待っている間に別のキーへ変わったか、捨てられたなら使わない
+        if (disposed || shownKey !== key) {
+          URL.revokeObjectURL(resolved);
+          return;
+        }
+        url = resolved;
+        target.style.backgroundImage = `url("${resolved}")`;
+      });
+    },
     dispose() {
       disposed = true;
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      release();
     },
   };
 }
 
+function createModelThumb(
+  model: GeneratedModel,
+  place: (model: GeneratedModel) => void,
+  edit: (model: GeneratedModel) => void
+): ThumbNode<GeneratedModel> {
+  const thumb = createThumb(model.name);
+  let current = model;
+  thumb.button.addEventListener('click', () => place(current));
+  const preview = createPreviewImage(thumb.image);
+
+  // 右上の「⋯」で編集へ。押しても置いてしまわないよう、下のボタンには渡さない
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'thumb__more';
+  more.textContent = '⋯';
+  more.setAttribute('aria-label', `${model.name} を編集`);
+  more.addEventListener('click', (event) => {
+    event.stopPropagation();
+    edit(current);
+  });
+  thumb.image.append(more);
+
+  function update(next: GeneratedModel): void {
+    current = next;
+    thumb.name.textContent = next.name;
+    more.setAttribute('aria-label', `${next.name} を編集`);
+    preview.show(next.previewKey);
+  }
+  update(model);
+  return { element: thumb.element, update, dispose: preview.dispose };
+}
+
+/**
+ * 作ったモデルの編集の姿。名前とアイコンを変え、削除もここから。
+ *
+ * 削除は「このモデルを削除」→ 確認 → 「削除する」の二段階。確認にはアイコンも出し、
+ * 同じ名前のモデルがあっても取り違えないようにする。
+ * 一覧から外すだけで、置いてある家具はそのまま残る（removeModel の挙動）
+ */
+function createModelEditor(onClose: () => void): { element: HTMLElement; open(model: GeneratedModel): void } {
+  const element = document.createElement('div');
+  element.className = 'lib__edit';
+  element.hidden = true;
+  let current: GeneratedModel | null = null;
+
+  const head = document.createElement('div');
+  head.className = 'edit__head';
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'button is-text is-small';
+  back.textContent = '‹ 戻る';
+  back.addEventListener('click', close);
+  const title = document.createElement('span');
+  title.className = 'edit__title';
+  title.textContent = 'モデルの編集';
+  const headSpacer = document.createElement('span');
+  headSpacer.className = 'edit__spacer';
+  head.append(back, title, headSpacer);
+
+  const iconRow = document.createElement('div');
+  iconRow.className = 'edit__row';
+  const icon = document.createElement('span');
+  icon.className = 'thumb__img edit__icon';
+  const iconPreview = createPreviewImage(icon);
+  const iconField = document.createElement('div');
+  iconField.className = 'field';
+  const iconLabel = document.createElement('span');
+  iconLabel.className = 'field__label';
+  iconLabel.textContent = 'アイコン';
+  const iconButton = document.createElement('button');
+  iconButton.type = 'button';
+  iconButton.className = 'button is-quiet is-small';
+  iconButton.textContent = 'アイコンを選び直す';
+  iconButton.addEventListener('click', async () => {
+    if (!current) return;
+    const file = await pickImage();
+    if (!file) return;
+    // 新しいキーで保存する。同じキーに上書きすると、置いてある家具が見ている前の画像まで変わる
+    const saved = await savePreview(crypto.randomUUID(), file);
+    if (!saved) return;
+    URL.revokeObjectURL(saved.url);
+    updateModel(current.id, { previewKey: saved.key });
+    current = { ...current, previewKey: saved.key };
+    iconPreview.show(saved.key);
+  });
+  iconField.append(iconLabel, iconButton);
+  iconRow.append(icon, iconField);
+
+  const nameField = document.createElement('div');
+  nameField.className = 'field';
+  const nameLabel = document.createElement('label');
+  nameLabel.className = 'field__label';
+  nameLabel.textContent = '名前';
+  nameLabel.htmlFor = 'model-editor-name';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.id = 'model-editor-name';
+  nameInput.className = 'field__input';
+  nameInput.maxLength = 40;
+  nameField.append(nameLabel, nameInput);
+
+  const actions = document.createElement('div');
+  actions.className = 'edit__actions';
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'button is-small';
+  save.textContent = '保存';
+  save.addEventListener('click', () => {
+    if (!current) return;
+    const name = nameInput.value.trim();
+    if (name && name !== current.name) {
+      updateModel(current.id, { name });
+      renamePlacedCopies(current.modelKey, name);
+    }
+    close();
+  });
+  actions.append(save);
+
+  const divider = document.createElement('div');
+  divider.className = 'divider';
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'button is-quiet is-small is-danger-outline';
+  remove.textContent = 'このモデルを削除';
+  remove.addEventListener('click', () => {
+    confirm.hidden = false;
+    remove.hidden = true;
+  });
+
+  const confirm = document.createElement('div');
+  confirm.className = 'confirm';
+  confirm.hidden = true;
+  const confirmRow = document.createElement('div');
+  confirmRow.className = 'confirm__what';
+  const confirmIcon = document.createElement('span');
+  confirmIcon.className = 'thumb__img confirm__icon';
+  const confirmIconPreview = createPreviewImage(confirmIcon);
+  const confirmText = document.createElement('span');
+  confirmRow.append(confirmIcon, confirmText);
+  const confirmNote = document.createElement('p');
+  confirmNote.className = 'hint';
+  confirmNote.textContent = '置いてある家具はそのまま残ります';
+  const confirmButtons = document.createElement('div');
+  confirmButtons.className = 'confirm__buttons';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'button is-quiet is-small';
+  cancel.textContent = 'やめる';
+  cancel.addEventListener('click', () => {
+    confirm.hidden = true;
+    remove.hidden = false;
+  });
+  const doRemove = document.createElement('button');
+  doRemove.type = 'button';
+  doRemove.className = 'button is-danger is-small';
+  doRemove.textContent = '削除する';
+  doRemove.addEventListener('click', () => {
+    if (!current) return;
+    removeModel(current.id);
+    close();
+  });
+  confirmButtons.append(cancel, doRemove);
+  confirm.append(confirmRow, confirmNote, confirmButtons);
+
+  element.append(head, iconRow, nameField, actions, divider, remove, confirm);
+
+  function open(model: GeneratedModel): void {
+    current = model;
+    nameInput.value = model.name;
+    iconPreview.show(model.previewKey);
+    confirmIconPreview.show(model.previewKey);
+    confirmText.textContent = `「${model.name}」を削除します。よろしいですか？`;
+    confirm.hidden = true;
+    remove.hidden = false;
+    element.hidden = false;
+  }
+
+  function close(): void {
+    current = null;
+    element.hidden = true;
+    onClose();
+  }
+
+  return { element, open };
+}
+
 /** 作成中のモデル。円で進み具合を出す。まだ押しても何も起きない */
-function createJobThumb(job: GenerationJob): ThumbNode {
+function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
   const thumb = createThumb(describe(job));
   thumb.button.disabled = true;
   thumb.image.classList.add('is-running');

@@ -753,19 +753,110 @@ body {
 }
 
 /* 一覧から外す ×。角に浮かせる。押しても下のサムネイルには渡さない */
-.thumb__x {
+/* サムネイル右上の「⋯」。編集の姿へ */
+.thumb__more {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: 4px;
+  right: 4px;
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: 1px;
+  touch-action: manipulation;
+}
+
+/* 作ったモデルの編集の姿。通常の姿と入れ替わりで出る */
+.lib__edit {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  align-content: start;
+}
+.edit__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.edit__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+/* 「‹ 戻る」と同じ幅の空き。題を中央に置くため */
+.edit__spacer {
+  width: 56px;
+}
+.edit__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.edit__icon {
+  width: 64px;
+  height: 64px;
+  flex: none;
+}
+.field {
+  display: grid;
+  gap: 4px;
+}
+.field__label {
+  font-size: 12px;
+  color: #7a8388;
+}
+.field__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
-  line-height: 20px;
-  touch-action: manipulation;
+  font-size: 14px;
+}
+.edit__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+.button.is-danger-outline {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* 削除の確認。赤みのある地で、ここだけ雰囲気を変える */
+.confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f8e9e7;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+.confirm__what {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.confirm__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  flex: none;
+}
+.confirm__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

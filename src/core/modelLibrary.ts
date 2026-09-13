@@ -118,6 +118,39 @@ export function addModel(model: GeneratedModel): void {
  * 保管庫から外す。すでに置いてある家具はそのまま残る。
  * GLB とプレビューは、置いた家具からも使われていなければ捨てる
  */
+/**
+ * 名前かアイコンを変える。
+ *
+ * アイコンを差し替えたとき、前のプレビューがどこからも使われていなければ捨てる。
+ * 名前は保管庫の項目だけを変える。置いてある家具への追随は renamePlacedCopies
+ */
+export function updateModel(
+  id: string,
+  patch: Partial<Pick<GeneratedModel, 'name' | 'previewKey'>>
+): void {
+  const model = modelLibrary.get().models.find((item) => item.id === id);
+  if (!model) return;
+  setModels(modelLibrary.get().models.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const previous = model.previewKey;
+  if (patch.previewKey !== undefined && previous && previous !== patch.previewKey) {
+    void releaseAssets(null, previous);
+  }
+}
+
+/**
+ * 置いてある同じモデルの名前をそろえる。
+ *
+ * 置いた家具は置いた時点の名前を写しているので、保管庫で名前を変えただけだと
+ * 一覧と部屋で名前が食い違う。同じ GLB（modelKey）を使っている家具を、両方のモードで書き換える
+ */
+export function renamePlacedCopies(modelKey: string, name: string): void {
+  for (const scene of [roomScene, photoScene]) {
+    for (const item of scene.state().furniture) {
+      if (item.modelUrl === modelKey && item.name !== name) scene.update(item.id, { name });
+    }
+  }
+}
+
 export function removeModel(id: string): void {
   const model = modelLibrary.get().models.find((item) => item.id === id);
   if (!model) return;
@@ -134,19 +167,21 @@ export function releaseFurnitureAssets(item: PlacedFurniture): void {
   void releaseAssets(item.modelUrl, item.sourceImageKey ?? null);
 }
 
-/** 保管庫からも置いた家具からも参照されなくなったものだけ捨てる */
-async function releaseAssets(modelKey: string, previewKey: string | null): Promise<void> {
+/** 保管庫からも置いた家具からも参照されなくなったものだけ捨てる。modelKey が null なら GLB は見ない */
+async function releaseAssets(modelKey: string | null, previewKey: string | null): Promise<void> {
   const models = modelLibrary.get().models;
   const placed = placedGenerated();
   const modelInUse =
-    models.some((m) => m.modelKey === modelKey) || placed.some((f) => f.modelUrl === modelKey);
+    modelKey === null ||
+    models.some((m) => m.modelKey === modelKey) ||
+    placed.some((f) => f.modelUrl === modelKey);
   const previewInUse =
     previewKey !== null &&
     (models.some((m) => m.previewKey === previewKey) ||
       placed.some((f) => f.sourceImageKey === previewKey));
 
   try {
-    if (!modelInUse) await deleteModel(modelKey);
+    if (modelKey !== null && !modelInUse) await deleteModel(modelKey);
     if (previewKey && !previewInUse) await deletePreview(previewKey);
   } catch {
     // 片付けに失敗しても、消す操作そのものは妨げない
