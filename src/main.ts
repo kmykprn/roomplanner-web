@@ -57,10 +57,6 @@ restoreModelLibrary();
 const viewer = createViewer(viewport);
 const { room } = appState.get();
 
-// 写真モードはカメラの画角を写真に合わせて変える。
-// 戻すときのために、部屋モードの画角をここで控えておく
-const roomFov = viewer.camera.fov;
-
 // --- シーンを組み立てる ---
 const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
@@ -130,12 +126,11 @@ function applyMode(): void {
   if (photo) {
     applyPhotoView();
   } else {
-    // 写真モードは描画範囲も画角も切り取りも変えるので、すべて戻す。
-    // 切り取りを残すと、部屋モードの描画まで寄ったままになる
+    // 写真モードは描画範囲も切り取りも変えるので、両方戻す。
+    // 切り取りを残すと、部屋モードの描画まで寄ったままになる。
+    // 画角は描画領域の高さから viewer が決め直すので、ここでは触らない
     viewer.setPhotoView(null);
     viewer.setContentAspect(null);
-    viewer.camera.fov = roomFov;
-    viewer.camera.updateProjectionMatrix();
   }
 }
 

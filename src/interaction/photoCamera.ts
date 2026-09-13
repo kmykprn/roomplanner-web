@@ -9,15 +9,12 @@
 
 import * as THREE from 'three';
 
-/** 画角（度）。使う人には出さない */
-const FIXED_FOV = 50;
-
 /** 床（y = 0）を見下ろす目の位置。立って部屋を撮ったときに近いあたり */
 const EYE_HEIGHT = 1.4;
 const EYE_DISTANCE = 4;
 
+/** 画角はここでは決めない。描画領域の高さに合わせて viewer が持つ（core/viewer.ts） */
 export function applyPhotoCamera(camera: THREE.PerspectiveCamera): void {
-  camera.fov = FIXED_FOV;
   camera.position.set(0, EYE_HEIGHT, EYE_DISTANCE);
   // 正面を向いたまま。傾けると床の水平が写真と合わなくなる
   camera.rotation.set(0, 0, 0);
