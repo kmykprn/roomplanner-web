@@ -314,6 +314,47 @@ body {
   background: #e6f2ea;
   background: color-mix(in srgb, #2e8b57 12%, var(--surface));
 }
+/* 1 行目: 題と「完了」。完了は文字だけの青（iOS の画面右上の「完了」と同じ扱い） */
+.mask__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mask__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.button.is-text {
+  padding: 6px 4px;
+  background: none;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* 「戻す」「全部消す」の組。同じ高さ・同じ枠で角を共有し、1 つの物として見せる */
+.pair {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.pair .button {
+  padding: 7px 12px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: #5d6567;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pair .button + .button {
+  border-left: 1px solid var(--border);
+}
+.pair .button:disabled {
+  opacity: 0.45;
+}
+
 .mask__spacer {
   flex: 1;
 }
