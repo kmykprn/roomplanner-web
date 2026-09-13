@@ -374,6 +374,17 @@ body {
   font-weight: 600;
 }
 
+/* 「完了」。塗りつぶしの青にチェックのアイコン */
+.mask__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mask__done .ic {
+  width: 18px;
+  height: 18px;
+}
+
 /* 「戻す」「全部消す」の組。同じ高さ・同じ枠で角を共有し、1 つの物として見せる */
 .pair {
   display: inline-flex;
@@ -572,13 +583,11 @@ body {
   margin-top: 2px;
 }
 
-/* 削除は枠線だけの赤。アイコンと文字を並べる */
+/* 削除は塗りつぶしの赤（.button.is-danger）。アイコンと文字を並べる */
 .manage__delete {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--danger);
-  border-color: var(--danger);
 }
 .manage__delete .ic {
   width: 18px;

@@ -6,7 +6,8 @@
  * 「完了」で背景タブの通常の姿に戻る。
  *
  *   1 行目 … 題「手前の範囲」と「完了」。完了は「この画面を出る」操作なので、道具や設定と
- *            同じ段に混ぜず、iOS の画面右上と同じ位置に文字だけの青で置く
+ *            同じ段に混ぜず、iOS の画面右上と同じ位置に置く。文字だけだとタブ名の青と
+ *            見分けにくかったので、塗りつぶしの青にチェックを添える
  *   2 行目 … 案内。**今なにをすればいいか**を、道具と進み具合に合わせて 1 文で出す。
  *            「なぜ」は背景タブの行の下（ui/photoPanel.ts）に任せ、ここは「どうするか」だけ
  *   3 行目 … 道具の切り替えだけ。名前は動作で書く（「点をつないで囲む」）。「角」は伝わらなかった
@@ -18,6 +19,7 @@
  */
 
 import { MIN_CORNERS, maskEditor } from '@/core/maskEditor';
+import { createIcon } from '@/ui/icons';
 import {
   clearMask,
   photoState,
@@ -76,7 +78,8 @@ export function createMaskPanel(): HTMLElement {
   const title = document.createElement('span');
   title.className = 'mask__title';
   title.textContent = '手前の範囲';
-  const doneButton = createButton('完了', () => setMasking(false), 'button is-text is-small');
+  const doneButton = createButton('完了', () => setMasking(false), 'button is-small mask__done');
+  doneButton.prepend(createIcon('check'));
   head.append(title, doneButton);
 
   // 2 行目
