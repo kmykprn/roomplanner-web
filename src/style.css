@@ -297,6 +297,23 @@ body {
 }
 
 /* 「完了」を右端へ押しやる */
+/* 「今なにをすればいいか」の 1 文。薄い主色の地で、パネルの中でここだけ目に入るようにする。
+   is-done は「もう次に進める」状態（塗った後・囲みを閉じられる）。
+   color-mix が無いブラウザ向けに、先に固定色を置いておく */
+.mask__guide {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #e7f2f6;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.mask__guide.is-done {
+  background: #e6f2ea;
+  background: color-mix(in srgb, #2e8b57 12%, var(--surface));
+}
 .mask__spacer {
   flex: 1;
 }
