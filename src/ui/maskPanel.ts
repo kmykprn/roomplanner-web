@@ -1,7 +1,7 @@
 /**
  * 「背景」タブの中の、手前の範囲を指定する姿。
  *
- * 写真の中で 3D モデルより手前にある物（机など）を指定してもらう。指定した部分は
+ * 写真の中で家具より手前にある物（机など）を指定してもらう。指定した部分は
  * 写真がモデルの上にかぶさるので、後ろへ動かしたモデルが隠れる。
  * 「完了」で背景タブの通常の姿に戻る。
  *
@@ -48,7 +48,7 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } {
   switch (kind) {
     case 'brush':
-      return { text: '写真の上を指でなぞると、なぞった部分が3Dモデルの手前になります', done: false };
+      return { text: '写真の上を指でなぞると、なぞった部分が家具の手前になります', done: false };
     case 'eraser':
       return { text: '消したい部分を指でなぞると、手前の指定が消えます', done: false };
     case 'polygon':
@@ -62,7 +62,7 @@ function guideFor(kind: MaskToolKind, corners: number): { text: string; done: bo
         return { text: `あと ${MIN_CORNERS - corners} 点。物のふちに沿ってタップしてください`, done: false };
       }
       return {
-        text: '最初の点をもう一度タップするか「囲みを閉じる」で、囲んだ中が3Dモデルの手前になります',
+        text: '最初の点をもう一度タップするか「囲みを閉じる」で、囲んだ中が家具の手前になります',
         done: true,
       };
   }

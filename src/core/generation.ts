@@ -302,6 +302,7 @@ async function finish(id: string, jobId: string, modelUrl?: string): Promise<voi
       id: crypto.randomUUID(),
       name: modelNameFrom(job?.fileName ?? ''),
       modelKey: key,
+      imageKey: null,
       previewKey: job?.previewKey ?? null,
       createdAt: Date.now(),
     });

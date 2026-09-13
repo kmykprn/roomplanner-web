@@ -171,7 +171,7 @@ linkWithPopup(currentUser, googleProvider)
 
 ## 手順3: 動線に繋ぐ【完了】
 
-ボタンは「＋ 写真から3Dモデルを作成」、パネルは `src/ui/loginPanel.ts`。
+ボタンは「＋ 写真から家具を作る」（3D は「3D モデルとして作る」）、パネルは `src/ui/loginPanel.ts`。
 ヘッドレスでは Firebase の認証エンドポイントを偽装して、匿名→パネル→やめる／失敗、
 紐づき済み→そのまま作成、を確認してある。本物のポップアップは手順4。
 

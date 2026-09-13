@@ -725,6 +725,14 @@ body {
   text-align: center;
 }
 
+/* 3D モデルの作成への入口。主役の下に小さく、中央に */
+.lib__generate-3d {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  text-align: center;
+}
+
 .lib__label {
   margin: 0 0 6px;
   font-size: 12px;

@@ -13,6 +13,8 @@
  * そこで jobId から作った**変わらないキー**で自分で入れる。
  */
 
+import { deleteAsset, resolveAssetUrl, saveAsset } from '@/platform/assetCache';
+
 const CACHE_NAME = 'generated-models';
 
 /** appState に保存するキー。URLの形にしておくと Cache Storage がそのまま扱える */
@@ -27,9 +29,7 @@ export async function saveModel(jobId: string, signedUrl: string): Promise<strin
     throw new Error(`生成物を取得できませんでした (${response.status})`);
   }
   const key = modelKey(jobId);
-  const cache = await caches.open(CACHE_NAME);
-  // Response は一度読むと使えないので、保存用に複製してから渡す
-  await cache.put(key, new Response(await response.blob()));
+  await saveAsset(CACHE_NAME, key, await response.blob());
   return key;
 }
 
@@ -39,15 +39,11 @@ export async function saveModel(jobId: string, signedUrl: string): Promise<strin
  * GLTFLoader は URL しか受け取らないので、Blob から一時的なURLを作る。
  * 見つからなければ null（端末のデータが消された場合など）。
  */
-export async function resolveModelUrl(key: string): Promise<string | null> {
-  const cache = await caches.open(CACHE_NAME);
-  const hit = await cache.match(key);
-  if (!hit) return null;
-  return URL.createObjectURL(await hit.blob());
+export function resolveModelUrl(key: string): Promise<string | null> {
+  return resolveAssetUrl(CACHE_NAME, key);
 }
 
 /** 家具を消したときに中身も捨てる。GLBは1件4〜5MBあるので溜めない */
-export async function deleteModel(key: string): Promise<void> {
-  const cache = await caches.open(CACHE_NAME);
-  await cache.delete(key);
+export function deleteModel(key: string): Promise<void> {
+  return deleteAsset(CACHE_NAME, key);
 }

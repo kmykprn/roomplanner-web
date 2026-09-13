@@ -14,9 +14,21 @@ export function previewKey(id: string): string {
   return `preview-${id}`;
 }
 
+export interface PreviewOptions {
+  /**
+   * 下地の色。透過画像（切り抜き）を縮めるときに敷く。
+   * JPEG は透過を持てないので、敷かないと透明な部分が黒く潰れる
+   */
+  background?: string;
+}
+
 /** 元画像を長辺160pxのJPEGにして保存する。読めない形式では何もしない。 */
-export async function savePreview(id: string, file: File): Promise<SavedPreview | null> {
-  const thumbnail = await createThumbnail(file);
+export async function savePreview(
+  id: string,
+  file: Blob,
+  options: PreviewOptions = {}
+): Promise<SavedPreview | null> {
+  const thumbnail = await createThumbnail(file, options);
   if (!thumbnail) return null;
 
   const key = previewKey(id);
@@ -51,7 +63,7 @@ export async function deletePreview(key: string): Promise<void> {
   }
 }
 
-async function createThumbnail(file: File): Promise<Blob | null> {
+async function createThumbnail(file: Blob, { background }: PreviewOptions): Promise<Blob | null> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -67,6 +79,10 @@ async function createThumbnail(file: File): Promise<Blob | null> {
   if (!context) {
     bitmap.close();
     return null;
+  }
+  if (background) {
+    context.fillStyle = background;
+    context.fillRect(0, 0, canvas.width, canvas.height);
   }
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();

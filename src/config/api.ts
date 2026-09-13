@@ -6,8 +6,22 @@
  * 隠したつもりになるほうが危険なので、公開される前提を明示しておく。
  */
 
-/** 生成APIの入口。詳細は Hunyuan3D-2GP の api/SPEC.md */
+/** 3D 生成APIの入口。詳細は Hunyuan3D-2GP の api/SPEC.md */
 export const API_BASE = 'https://hunyuan3d-api-yvl3t4jpxa-as.a.run.app';
+
+/**
+ * 切り抜きAPIの入口。詳細は Hunyuan3D-2GP の cutout/SPEC.md。
+ *
+ * 3D 生成とは別のサービス。あちらはジョブを投げて数分待つ非同期、
+ * こちらは数秒で透過 PNG が返る同期
+ */
+export const CUTOUT_BASE = 'https://cutout-yvl3t4jpxa-as.a.run.app';
+
+/**
+ * 切り抜きの応答を待つ上限。サーバーは 60 秒で打ち切るので、それより少し長く取る。
+ * 実測は 5〜7 秒。コールドスタート（モデルの読み込み）が乗ると 15 秒ほど
+ */
+export const CUTOUT_TIMEOUT_MS = 70_000;
 
 /**
  * Firebase の設定。

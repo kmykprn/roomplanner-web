@@ -5,7 +5,7 @@
  * UI は DOM。3D の上に重ねるだけなので three.js とは完全に切り離せる。
  *
  * **タブの並びはモードで変わる。** 写真モードには背景の選択がある。
- * 3Dモデル（置く・写真から作る）と操作は両方にある。
+ * 家具（置く・写真から作る）と操作は両方にある。
  */
 
 import type { PlacedFurniture } from '@/config/furniture';
@@ -22,7 +22,7 @@ type TabId = 'background' | 'models' | 'manage';
 
 const TABS: Record<TabId, string> = {
   background: '背景',
-  models: '3Dモデル',
+  models: '家具',
   manage: '操作',
 };
 
@@ -57,7 +57,7 @@ export function createBottomSheet(container: HTMLElement): void {
   body.className = 'sheet__body';
   sheet.appendChild(body);
 
-  /** 「3Dモデル」で置いた直後の家具。これを選んだときはタブを移さない */
+  /** 「家具」で置いた直後の家具。これを選んだときはタブを移さない */
   let justPlacedId: string | null = null;
 
   // 生成は8分かかり、その間もタブを行き来できる必要がある。
@@ -131,7 +131,7 @@ export function createBottomSheet(container: HTMLElement): void {
     if (!selected) {
       const hint = document.createElement('p');
       hint.className = 'hint';
-      hint.textContent = '3Dモデルをタップすると選択できます';
+      hint.textContent = '家具をタップすると選択できます';
       wrapper.appendChild(hint);
       return wrapper;
     }
@@ -158,7 +158,7 @@ export function createBottomSheet(container: HTMLElement): void {
     foot.className = 'manage__foot';
     const remove = createButton('削除', () => {
       scene.remove(id);
-      // 写真から作ったモデルの中身は、保管庫にも残っていなければここで捨てる
+      // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる
       releaseFurnitureAssets(selected);
     }, 'is-danger is-small manage__delete');
     remove.prepend(createIcon('trash'));
@@ -322,7 +322,7 @@ export function createBottomSheet(container: HTMLElement): void {
   photoState.subscribe(followSelection);
 
   // モードが変わったら、そのモードの最初のタブへ戻す。
-  // 3Dモデルタブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
+  // 家具タブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
   // 先にやるべき「背景の写真を選ぶ」に辿り着けない
   modeState.subscribe(() => {
     activeTab = visibleTabs()[0];
