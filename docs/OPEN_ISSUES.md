@@ -148,18 +148,19 @@ export async function deleteModel(key: string): Promise<void> {
 
 `src/ui/bottomSheet.ts` の削除ボタンで `deletePreview` と並べて呼べばよい。
 
-### 5. Blob URL が解放されていない
+### 5. Blob URL が解放されていない（一部対処）
 
-`URL.createObjectURL` が3箇所にあるが、`URL.revokeObjectURL` は**0箇所**。
+`URL.createObjectURL` が3箇所にあるが、`URL.revokeObjectURL` は**「作ったモデル」のサムネイルを
+外すときだけ**（2026-09-13、ちらつき対策と同時に入れた）。
 
-| 場所 | 用途 |
-|---|---|
-| `modelCache.ts:46` | GLB を three.js に渡す |
-| `previewCache.ts:25` | 保存直後のサムネイル |
-| `previewCache.ts:35` | 復元したサムネイル |
+| 場所 | 用途 | 解放 |
+|---|---|---|
+| `modelCache.ts:46` | GLB を three.js に渡す | **未** |
+| `previewCache.ts:25` | 保存直後のサムネイル | **未** |
+| `previewCache.ts:35` | 復元したサムネイル | 一覧から外すとき（`modelPanel.ts` の `dispose`） |
 
 Blob URL はドキュメントが生きている限り元の Blob をメモリに固定する。
-サムネイルは小さいが、**GLB は1件4〜5MB** なので効いてくる。
+サムネイルは小さいが、**GLB は1件4〜5MB** なので効いてくる。残るのは GLB 側。
 
 ### 6. README の「今後の予定」が実態とずれている
 
@@ -171,9 +172,25 @@ Blob URL はドキュメントが生きている限り元の Blob をメモリ�
 
 ---
 
+### 7. 作ったモデルと部屋の状態は端末ごと。別の端末には引き継がれない
+
+同じ Google でログインすれば **uid は別の端末でも同じになる**（2026-09-13 に iPhone の
+Safari と Chrome で確認）。しかし「作ったモデル」の一覧（Cache Storage）と部屋・背景の状態
+（localStorage / IndexedDB）は**その端末のブラウザにしか無い**。2 台目でログインしても一覧は空のまま。
+
+サーバー側にも「その uid のジョブ一覧を返す API」が無く（`GET /jobs/{id}` のみ）、
+GLB は 30 日で消える。引き継ぐには少なくとも次が要る。
+
+1. API に `GET /jobs?mine`（uid で絞った一覧）を足す
+2. クライアントがログイン直後に一覧を取り、無いものを Cache Storage に落とす
+3. 部屋・背景の状態をサーバー（uid ごとの小さな JSON）に置き、起動時に突き合わせる
+
+3 は設計の話になる（端末間で同時に編集したらどちらを取るか）。**知り合いに配る段階では
+「作り直せる」で割り切り、本登録や課金と一緒に決める**のが妥当。
+
 ## 方針が決まっていないもの
 
-### 7. Capacitor / App Store をやるかどうか
+### 8. Capacitor / App Store をやるかどうか
 
 README の「今後の予定」5 に「Capacitor 8 で iOS アプリ化 → App Store」がある。
 `vite.config.ts` にも Capacitor 向けのベースパス分岐が入っている。
