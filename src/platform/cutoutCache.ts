@@ -6,7 +6,7 @@
  * 1 件 100KB〜1MB。GLB（modelCache.ts）と同じ作りで、キャッシュ名だけ分ける
  */
 
-import { deleteAsset, resolveAssetUrl, saveAsset } from '@/platform/assetCache';
+import { deleteAsset, readAsset, resolveAssetUrl, saveAsset } from '@/platform/assetCache';
 
 const CACHE_NAME = 'generated-cutouts';
 
@@ -24,6 +24,11 @@ export async function saveCutout(id: string, png: Blob): Promise<string> {
 /** 保存した切り抜きを three.js の TextureLoader や img が読める URL にして返す */
 export function resolveCutoutUrl(key: string): Promise<string | null> {
   return resolveAssetUrl(CACHE_NAME, key);
+}
+
+/** 切り抜きを Blob のまま返す。8 方向の画像を頼むときの入力に使う */
+export function readCutout(key: string): Promise<Blob | null> {
+  return readAsset(CACHE_NAME, key);
 }
 
 export function deleteCutout(key: string): Promise<void> {

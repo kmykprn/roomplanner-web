@@ -28,7 +28,8 @@ interface Step {
   readonly label: string;
 }
 
-const STEPS: readonly Step[] = [
+/** 3D モデル（kind=model）の工程 */
+const MODEL_STEPS: readonly Step[] = [
   { phase: null, seconds: 25, label: '順番を待っています' },
   { phase: 'preparing', seconds: 15, label: '写真を読み込んでいます' },
   // ここから3つは同じ文言にしてある。利用者から見ればどれも「形ができるのを
@@ -43,14 +44,42 @@ const STEPS: readonly Step[] = [
   { phase: 'finishing', seconds: 20, label: 'もうすぐできあがります' },
 ];
 
-/** 全工程の合計。円の持ち分の分母になる */
-const TOTAL_SECONDS = STEPS.reduce((sum, step) => sum + step.seconds, 0);
+/**
+ * 8 方向の画像（kind=views）の工程。3D より短い。
+ * 重みの写し（10GB）が読み込みの大半で、描くのは 1 分ほど
+ */
+const VIEW_STEPS: readonly Step[] = [
+  { phase: null, seconds: 25, label: '順番を待っています' },
+  { phase: 'preparing', seconds: 15, label: '写真を読み込んでいます' },
+  { phase: 'loading_views_model', seconds: 120, label: '準備しています' },
+  { phase: 'generating_views', seconds: 60, label: '8 方向の絵を描いています' },
+  { phase: 'cutting_views', seconds: 40, label: '背景を抜いています' },
+  { phase: 'finishing', seconds: 15, label: 'もうすぐできあがります' },
+];
 
-/** 各工程が始まる時点までの累計秒。`STEPS` から一度だけ作る（手で書くとずれる） */
-const STARTS_AT: readonly number[] = STEPS.reduce<number[]>((acc, _step, index) => {
-  acc.push(index === 0 ? 0 : acc[index - 1] + STEPS[index - 1].seconds);
-  return acc;
-}, []);
+/** 何を作っているか。工程の表が変わる */
+export type ProgressKind = 'model' | 'views';
+
+interface Timeline {
+  steps: readonly Step[];
+  /** 全工程の合計。円の持ち分の分母になる */
+  total: number;
+  /** 各工程が始まる時点までの累計秒。steps から一度だけ作る（手で書くとずれる） */
+  startsAt: readonly number[];
+}
+
+function timelineOf(steps: readonly Step[]): Timeline {
+  const startsAt = steps.reduce<number[]>((acc, _step, index) => {
+    acc.push(index === 0 ? 0 : acc[index - 1] + steps[index - 1].seconds);
+    return acc;
+  }, []);
+  return { steps, total: steps.reduce((sum, step) => sum + step.seconds, 0), startsAt };
+}
+
+const TIMELINES: Record<ProgressKind, Timeline> = {
+  model: timelineOf(MODEL_STEPS),
+  views: timelineOf(VIEW_STEPS),
+};
 
 /**
  * 円を満杯にしない上限。
@@ -78,20 +107,25 @@ export interface Progress {
  * @param phase サーバーが返した工程。まだ無ければ null
  * @param elapsedInPhaseSec その工程に入ってからの経過秒
  */
-export function progressFor(phase: string | null, elapsedInPhaseSec: number): Progress {
-  const index = STEPS.findIndex((step) => step.phase === phase);
+export function progressFor(
+  phase: string | null,
+  elapsedInPhaseSec: number,
+  kind: ProgressKind = 'model'
+): Progress {
+  const { steps, total, startsAt } = TIMELINES[kind];
+  const index = steps.findIndex((step) => step.phase === phase);
   if (index < 0) {
     // 知らない工程。サーバーが工程を増やしても画面が壊れないようにする
     return unknownPhase(phase);
   }
 
-  const step = STEPS[index];
+  const step = steps[index];
   const within = clamp(elapsedInPhaseSec, 0, step.seconds);
-  const done = STARTS_AT[index] + within;
+  const done = startsAt[index] + within;
 
   return {
-    ratio: Math.min(done / TOTAL_SECONDS, MAX_RATIO),
-    centerText: remainingText(TOTAL_SECONDS - done),
+    ratio: Math.min(done / total, MAX_RATIO),
+    centerText: remainingText(total - done),
     label: step.label,
   };
 }

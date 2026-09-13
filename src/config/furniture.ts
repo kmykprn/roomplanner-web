@@ -29,6 +29,9 @@ export function findFurnitureType(id: string): FurnitureType | undefined {
   return FURNITURE_TYPES.find((t) => t.id === id);
 }
 
+/** 方位角（度、"0"〜"315"）→ 画像の置き場。45° 刻み 8 方向 */
+export type ViewSet = Record<string, string>;
+
 /** 部屋に配置された家具 1 個ぶんの状態 */
 export interface PlacedFurniture {
   id: string; // インスタンス ID
@@ -51,6 +54,13 @@ export interface PlacedFurniture {
    * （切り抜きを後から 3D にしたとき、置いてある家具もそのまま 3D に差し替わる）
    */
   imageUrl?: string;
+  /**
+   * 45° 刻み 8 方向の画像（`cutoutCache` のキー）。方位角（度）の文字列がキー。
+   *
+   * これがあると、板は向き（rotationY）とカメラの位置から一番近い方向の絵を出す。
+   * 無ければ切り抜き 1 枚を左右反転で済ませる
+   */
+  views?: ViewSet;
   /**
    * 切り抜きの板の傾き（ラジアン）。画面の中で回す。斜めに撮った写真を水平に直す用途。
    * 3D モデルには効かない（3D は rotationY で向きを変える）

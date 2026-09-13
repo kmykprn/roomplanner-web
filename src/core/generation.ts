@@ -9,11 +9,20 @@
 
 import { createStore } from '@/core/store';
 import { shrinkForUpload } from '@/core/imageResize';
-import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
+import { ApiError, createJob, getJob, type JobKind, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
-import { addModel, modelNameFrom } from '@/core/modelLibrary';
+import {
+  addModel,
+  modelLibrary,
+  modelNameFrom,
+  updateModel,
+  upgradePlacedCopies,
+  type GeneratedModel,
+} from '@/core/modelLibrary';
 import { saveModel } from '@/platform/modelCache';
+import { deleteCutout, readCutout, saveCutout } from '@/platform/cutoutCache';
 import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCache';
+import type { ViewSet } from '@/config/furniture';
 import { POLL_INTERVAL_MS, RUN_TIMEOUT_MS, TOTAL_TIMEOUT_MS } from '@/config/api';
 
 const STORAGE_KEY = 'roomplanner.generations';
@@ -24,8 +33,18 @@ export interface GenerationJob {
   /** 端末内での識別子。サーバーの jobId が届く前から使う */
   id: string;
   jobId: string | null;
+  /** 何を作っているか。3D（model）か 8 方向の画像（views）か */
+  kind: JobKind;
+  /**
+   * views のとき、できあがった画像を足す先の保管庫の項目。
+   * model のときは null（できあがったら新しい項目として足す）
+   */
+  targetModelId: string | null;
   fileName: string;
-  /** 元写真の縮小プレビュー。端末に保存したキーと表示用URLを分けて持つ */
+  /**
+   * 元写真の縮小プレビュー。端末に保存したキーと表示用URLを分けて持つ。
+   * views のとき previewKey は null（アイコンは項目のものを借りて出すだけで、この作成のものではない）
+   */
   previewKey: string | null;
   previewUrl: string | null;
   phase: GenerationPhase;
@@ -74,8 +93,10 @@ function persist(state: GenerationState): void {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(
-          pending.map(({ jobId, fileName, previewKey, startedAt }) => ({
+          pending.map(({ jobId, kind, targetModelId, fileName, previewKey, startedAt }) => ({
             jobId,
+            kind,
+            targetModelId,
             fileName,
             previewKey,
             startedAt,
@@ -115,6 +136,8 @@ export async function startGeneration(files: File[]): Promise<void> {
   const jobs = files.map<GenerationJob>((file) => ({
     id: crypto.randomUUID(),
     jobId: null,
+    kind: 'model',
+    targetModelId: null,
     fileName: file.name,
     previewKey: null,
     previewUrl: null,
@@ -143,12 +166,57 @@ async function submit(id: string, file: File): Promise<void> {
     const preview = await savePreview(id, file);
     if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
     const image = await shrinkForUpload(file);
-    const jobId = await createJob(image);
+    const jobId = await createJob(image, 'model');
     updateJob(id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
     void watch(id, jobId);
   } catch (error) {
     updateJob(id, { phase: 'failed', error: toMessage(error) });
   }
+}
+
+/**
+ * 保管庫の切り抜きから、45° 刻み 8 方向の画像を頼む。
+ *
+ * 入力は端末に保存してある切り抜き PNG そのもの。できあがったら新しい項目にはせず、
+ * 同じ項目に views を足し、置いてある家具も差し替える（finishViews）
+ */
+export async function startViewsGeneration(model: GeneratedModel): Promise<void> {
+  if (!model.imageKey) return;
+  const id = crypto.randomUUID();
+  const job: GenerationJob = {
+    id,
+    jobId: null,
+    kind: 'views',
+    targetModelId: model.id,
+    fileName: model.name,
+    previewKey: null,
+    previewUrl: null,
+    phase: 'uploading',
+    startedAt: null,
+    startedRunningAt: null,
+    serverPhase: null,
+    serverPhaseStartedAt: null,
+    error: null,
+  };
+  setState({ jobs: [...generationState.get().jobs, job] });
+  if (model.previewKey) void restorePreview(id, model.previewKey);
+  try {
+    await ensureRegistered();
+    const cutout = await readCutout(model.imageKey);
+    if (!cutout) throw new Error('切り抜きが端末に残っていません');
+    const jobId = await createJob(cutout, 'views');
+    updateJob(id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
+    void watch(id, jobId);
+  } catch (error) {
+    updateJob(id, { phase: 'failed', error: toMessage(error) });
+  }
+}
+
+/** この項目の 8 方向を作っている最中か。編集の姿でボタンを押せなくするのに使う */
+export function viewsJobFor(modelId: string): GenerationJob | undefined {
+  return generationState
+    .get()
+    .jobs.find((job) => job.kind === 'views' && job.targetModelId === modelId && job.phase !== 'failed');
 }
 
 /**
@@ -158,8 +226,14 @@ async function submit(id: string, file: File): Promise<void> {
  * 復帰した時点で完成していれば、そのまま保管庫に入る。
  */
 export function resumeGeneration(): void {
-  let saved: Array<{ jobId?: string; fileName?: string; previewKey?: string; startedAt?: number }> =
-    [];
+  let saved: Array<{
+    jobId?: string;
+    kind?: JobKind;
+    targetModelId?: string | null;
+    fileName?: string;
+    previewKey?: string;
+    startedAt?: number;
+  }> = [];
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
     saved = Array.isArray(value) ? value : [];
@@ -171,6 +245,9 @@ export function resumeGeneration(): void {
     .map<GenerationJob>((job) => ({
       id: crypto.randomUUID(),
       jobId: job.jobId,
+      // 種類の記録が無いのは 8 方向ができる前の待ち。3D として扱う
+      kind: job.kind ?? 'model',
+      targetModelId: job.targetModelId ?? null,
       fileName: job.fileName || '写真から作成した家具',
       previewKey: job.previewKey ?? null,
       previewUrl: null,
@@ -186,7 +263,11 @@ export function resumeGeneration(): void {
 
   setState({ jobs: [...generationState.get().jobs, ...jobs] });
   for (const job of jobs) {
-    if (job.previewKey) void restorePreview(job.id, job.previewKey);
+    // views の待ちはアイコンを項目から借りる。項目が消えていれば無いまま
+    const previewKey =
+      job.previewKey ??
+      (job.targetModelId ? modelLibrary.get().models.find((m) => m.id === job.targetModelId)?.previewKey : null);
+    if (previewKey) void restorePreview(job.id, previewKey);
     void watch(job.id, job.jobId!);
   }
 }
@@ -241,7 +322,8 @@ async function watch(id: string, jobId: string): Promise<void> {
     rememberProgress(id, status);
     if (status.state === 'queued' || status.state === 'running') continue;
 
-    await finish(id, jobId, status.modelUrl);
+    if (current.kind === 'views') await finishViews(id, status.viewUrls);
+    else await finish(id, jobId, status.modelUrl);
     return;
   }
 }
@@ -312,11 +394,49 @@ async function finish(id: string, jobId: string, modelUrl?: string): Promise<voi
   }
 }
 
+/**
+ * できあがった 8 方向の画像を端末に保存して、頼んだ項目に足す。
+ *
+ * 置いてある家具も同じ切り抜きを使っていれば差し替える。項目が消されていたら
+ * 保存したものは捨てる（置いてある家具は項目が消えても残るので、そちらには足す）
+ */
+async function finishViews(id: string, viewUrls?: Record<string, string>): Promise<void> {
+  if (!viewUrls || Object.keys(viewUrls).length === 0) {
+    updateJob(id, { phase: 'failed', error: '完成した画像の場所が分かりません' });
+    return;
+  }
+  updateJob(id, { phase: 'saving' });
+  const views: ViewSet = {};
+  try {
+    // 署名付きURLは1時間で切れる。中身を先に保存する
+    for (const [azimuth, url] of Object.entries(viewUrls)) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`画像を取得できませんでした (${response.status})`);
+      views[azimuth] = await saveCutout(crypto.randomUUID(), await response.blob());
+    }
+    const job = generationState.get().jobs.find((item) => item.id === id);
+    const model = modelLibrary.get().models.find((m) => m.id === job?.targetModelId);
+    if (model) {
+      updateModel(model.id, { views });
+      upgradePlacedCopies(model, views);
+    } else {
+      for (const key of Object.values(views)) void deleteCutout(key);
+    }
+    const previewUrl = job?.previewUrl;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    removeJob(id);
+  } catch (error) {
+    for (const key of Object.values(views)) void deleteCutout(key);
+    updateJob(id, { phase: 'failed', error: toMessage(error) });
+  }
+}
+
 /** 指定した失敗表示だけを閉じる。他の作成は続ける。 */
 export function dismissError(id: string): void {
   const job = generationState.get().jobs.find((item) => item.id === id);
   if (job?.phase !== 'failed') return;
   if (job.previewKey) void deletePreview(job.previewKey);
+  if (job.previewUrl) URL.revokeObjectURL(job.previewUrl);
   removeJob(id);
 }
 

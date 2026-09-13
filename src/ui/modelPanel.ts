@@ -21,6 +21,8 @@ import {
   dismissError,
   generationState,
   startGeneration,
+  startViewsGeneration,
+  viewsJobFor,
   type GenerationJob,
 } from '@/core/generation';
 import {
@@ -404,6 +406,26 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   nameInput.maxLength = 40;
   nameField.append(nameLabel, nameInput);
 
+  // 8 方向の画像。切り抜きだけの項目に出す。向きを変えられるようにする（3D は自由に回せるので不要）
+  const viewsField = document.createElement('div');
+  viewsField.className = 'field';
+  const viewsLabel = document.createElement('span');
+  viewsLabel.className = 'field__label';
+  viewsLabel.textContent = '向き';
+  const viewsButton = document.createElement('button');
+  viewsButton.type = 'button';
+  viewsButton.className = 'button is-quiet is-small';
+  viewsButton.textContent = '8 方向の画像を作る（約 4 分）';
+  const viewsNote = document.createElement('p');
+  viewsNote.className = 'hint';
+  viewsButton.addEventListener('click', () => {
+    if (!current) return;
+    void startViewsGeneration(current);
+    // 進み具合は一覧のサムネイルに出るので、編集の姿は閉じる
+    close();
+  });
+  viewsField.append(viewsLabel, viewsButton, viewsNote);
+
   const actions = document.createElement('div');
   actions.className = 'edit__actions';
   const save = document.createElement('button');
@@ -468,11 +490,19 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   confirmButtons.append(cancel, doRemove);
   confirm.append(confirmRow, confirmNote, confirmButtons);
 
-  element.append(head, iconRow, nameField, actions, divider, remove, confirm);
+  element.append(head, iconRow, nameField, viewsField, actions, divider, remove, confirm);
 
   function open(model: GeneratedModel): void {
     current = model;
     nameInput.value = model.name;
+    // 8 方向: 切り抜きだけの項目に。できていれば案内、作っている最中なら押せない
+    viewsField.hidden = !model.imageKey || Boolean(model.modelKey);
+    const making = viewsJobFor(model.id);
+    viewsButton.hidden = Boolean(model.views) || Boolean(making);
+    viewsNote.hidden = !model.views && !making;
+    viewsNote.textContent = model.views
+      ? '8 方向の画像があります。操作タブの「向き」で回せます'
+      : '8 方向の画像を作っています。一覧に進み具合が出ます';
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
     confirmText.textContent = `「${model.name}」を削除します。よろしいですか？`;
@@ -525,10 +555,11 @@ function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
   thumb.image.append(ring.element);
 
   function update(current: GenerationJob): void {
+    if (current.previewUrl) thumb.image.style.backgroundImage = `url("${current.previewUrl}")`;
     thumb.name.textContent = describe(current);
     ring.update(
       current.phase === 'running'
-        ? progressFor(current.serverPhase, elapsedInPhase(current)).ratio
+        ? progressFor(current.serverPhase, elapsedInPhase(current), current.kind).ratio
         : 0,
       ''
     );
@@ -616,7 +647,7 @@ function describe(job: GenerationJob): string {
       return '順番待ち';
     case 'running':
       // 「あと5分」「まもなく」。見込みであって約束ではない（core/progress.ts）
-      return progressFor(job.serverPhase, elapsedInPhase(job)).centerText;
+      return progressFor(job.serverPhase, elapsedInPhase(job), job.kind).centerText;
     case 'saving':
       return '保存しています';
     case 'failed':

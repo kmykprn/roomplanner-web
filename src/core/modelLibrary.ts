@@ -9,6 +9,7 @@
  * 1 つの項目が、切り抜き（imageKey）と 3D モデル（modelKey）の**どちらか、または両方**を持つ。
  *
  *   切り抜きだけ … 数秒でできる基本の姿。板（ビルボード）として置く
+ *   切り抜き + 8 方向（views） … 板が向きに応じて絵を替える。裏側も見せられる
  *   3D モデルだけ … 切り抜きができる前に作った項目（古い記録）
  *   両方         … 切り抜きを後から 3D にしたもの。描くときは 3D を優先する
  *
@@ -30,7 +31,7 @@ import { photoScene } from '@/core/photoState';
 import { deleteModel } from '@/platform/modelCache';
 import { deleteCutout } from '@/platform/cutoutCache';
 import { deletePreview } from '@/platform/previewCache';
-import type { PlacedFurniture } from '@/config/furniture';
+import type { PlacedFurniture, ViewSet } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.models';
 
@@ -53,6 +54,8 @@ export interface GeneratedModel {
   modelKey: string | null;
   /** 切り抜き PNG の置き場（cutoutCache のキー）。切り抜きができる前の記録では null */
   imageKey: string | null;
+  /** 45° 刻み 8 方向の画像（cutoutCache のキー）。作っていなければ無い */
+  views?: ViewSet;
   /** アイコンの縮小画像（previewCache のキー）。作れなかったときは null */
   previewKey: string | null;
   createdAt: number;
@@ -116,6 +119,7 @@ function importPlaced(): GeneratedModel[] {
       name: item.name ?? '写真から作った家具',
       modelKey: item.modelUrl ?? null,
       imageKey: item.imageUrl ?? null,
+      views: item.views,
       previewKey: item.sourceImageKey ?? null,
       createdAt: 0,
     });
@@ -151,7 +155,7 @@ export function addModel(model: GeneratedModel): void {
  */
 export function updateModel(
   id: string,
-  patch: Partial<Pick<GeneratedModel, 'name' | 'previewKey'>>
+  patch: Partial<Pick<GeneratedModel, 'name' | 'previewKey' | 'views'>>
 ): void {
   const model = modelLibrary.get().models.find((item) => item.id === id);
   if (!model) return;
@@ -172,6 +176,20 @@ export function renamePlacedCopies(model: GeneratedModel, name: string): void {
   for (const scene of [roomScene, photoScene]) {
     for (const item of scene.state().furniture) {
       if (isCopyOf(item, model) && item.name !== name) scene.update(item.id, { name });
+    }
+  }
+}
+
+/**
+ * 置いてある同じ家具に、新しくできた表現（8 方向の画像）を足す。
+ *
+ * 置いた家具は置いた時点の中身を写しているので、保管庫に表現が増えても
+ * そのままでは板が変わらない。同じ切り抜きを使っている家具を、両方のモードで書き換える
+ */
+export function upgradePlacedCopies(model: GeneratedModel, views: ViewSet): void {
+  for (const scene of [roomScene, photoScene]) {
+    for (const item of scene.state().furniture) {
+      if (isCopyOf(item, model)) scene.update(item.id, { views });
     }
   }
 }
@@ -200,15 +218,16 @@ export function releaseFurnitureAssets(item: PlacedFurniture): void {
   void releaseAssets({
     modelKey: item.modelUrl ?? null,
     imageKey: item.imageUrl ?? null,
+    views: item.views,
     previewKey: item.sourceImageKey ?? null,
   });
 }
 
 /** 捨てる候補。渡さなかった（undefined / null の）ものは見ない */
-type Assets = Partial<Pick<GeneratedModel, 'modelKey' | 'imageKey' | 'previewKey'>>;
+type Assets = Partial<Pick<GeneratedModel, 'modelKey' | 'imageKey' | 'views' | 'previewKey'>>;
 
 /** 保管庫からも置いた家具からも参照されなくなったものだけ捨てる */
-async function releaseAssets({ modelKey, imageKey, previewKey }: Assets): Promise<void> {
+async function releaseAssets({ modelKey, imageKey, views, previewKey }: Assets): Promise<void> {
   const models = modelLibrary.get().models;
   const placed = placedGenerated();
   const modelInUse =
@@ -223,11 +242,18 @@ async function releaseAssets({ modelKey, imageKey, previewKey }: Assets): Promis
     !previewKey ||
     models.some((m) => m.previewKey === previewKey) ||
     placed.some((f) => f.sourceImageKey === previewKey);
+  // 8 方向の画像は 1 枚ずつ見る。同じ画像を別の項目が持つことは無いが、置いた家具は持つ
+  const viewKeysInUse = new Set<string>();
+  for (const m of models) for (const key of Object.values(m.views ?? {})) viewKeysInUse.add(key);
+  for (const f of placed) for (const key of Object.values(f.views ?? {})) viewKeysInUse.add(key);
 
   try {
     if (modelKey && !modelInUse) await deleteModel(modelKey);
     if (imageKey && !imageInUse) await deleteCutout(imageKey);
     if (previewKey && !previewInUse) await deletePreview(previewKey);
+    for (const key of Object.values(views ?? {})) {
+      if (!viewKeysInUse.has(key)) await deleteCutout(key);
+    }
   } catch {
     // 片付けに失敗しても、消す操作そのものは妨げない
   }

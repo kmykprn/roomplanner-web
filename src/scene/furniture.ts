@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
 import { SCENE_COLORS, SURFACES } from '@/config/theme';
 import { loadFurnitureModel } from '@/scene/modelLoader';
-import { BILLBOARD_NAME, faceCamera, loadBillboard } from '@/scene/billboard';
+import { BILLBOARD_NAME, disposeViewTextures, faceCamera, loadBillboard } from '@/scene/billboard';
 import { resolveModelUrl } from '@/platform/modelCache';
 import { resolveCutoutUrl } from '@/platform/cutoutCache';
 
@@ -43,6 +43,14 @@ export function createFurnitureLayer(): FurnitureLayer {
 
     for (const item of furniture) {
       let object = objects.get(item.id);
+      // 中身（3D・切り抜き・8 方向）が後から変わったら作り直す。
+      // 切り抜きを置いたあとに 8 方向ができたときがこれ
+      if (object && object.userData.contentKey !== contentKeyOf(item)) {
+        group.remove(object);
+        disposeObject(object);
+        objects.delete(item.id);
+        object = undefined;
+      }
       if (!object) {
         object = createFurnitureObject(item);
         objects.set(item.id, object);
@@ -91,11 +99,17 @@ function applySize(object: THREE.Group, size: [number, number, number]): void {
   object.scale.setScalar(size[0] / builtWidth);
 }
 
+/** 家具の中身を表す文字列。変わったら 3D のオブジェクトを作り直す */
+function contentKeyOf(item: PlacedFurniture): string {
+  return `${item.modelUrl ?? ''}|${item.imageUrl ?? ''}|${Object.keys(item.views ?? {}).length}`;
+}
+
 function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   const object = new THREE.Group();
   const [width, height, depth] = item.size;
   // 拡大率の基準。あとで大きさが変わったとき、これとの比で拡大する
   object.userData.builtWidth = width;
+  object.userData.contentKey = contentKeyOf(item);
 
   const geometry = new THREE.BoxGeometry(width, height, depth);
   const mesh = new THREE.Mesh(
@@ -131,8 +145,9 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
       // 見つからなければ箱のまま。端末のデータが消された場合など
     });
   } else if (item.imageUrl) {
-    resolveCutoutUrl(item.imageUrl).then((url) => {
-      if (url) replaceWithBillboard(object, mesh, outline, url, item);
+    Promise.all([resolveCutoutUrl(item.imageUrl), resolveViewUrls(item.views)]).then(([url, viewUrls]) => {
+      if (url) replaceWithBillboard(object, mesh, outline, url, viewUrls, item);
+      else for (const viewUrl of Object.values(viewUrls)) URL.revokeObjectURL(viewUrl);
     });
   } else {
     const type = findFurnitureType(item.typeId);
@@ -180,16 +195,31 @@ function replaceWithModel(
  * 細長い家具の横の何も無い場所を押しても選ばれてしまう。
  * 前の URL は読み終わったら解放する（テクスチャは GPU に上がっている）
  */
+/** 8 方向の画像を、方位角ごとの Blob URL にする。端末に無いものは飛ばす */
+async function resolveViewUrls(views: PlacedFurniture['views']): Promise<Record<string, string>> {
+  const urls: Record<string, string> = {};
+  for (const [azimuth, key] of Object.entries(views ?? {})) {
+    const url = await resolveCutoutUrl(key);
+    if (url) urls[azimuth] = url;
+  }
+  return urls;
+}
+
 function replaceWithBillboard(
   object: THREE.Group,
   placeholder: THREE.Mesh,
   boxOutline: THREE.Object3D,
   url: string,
+  viewUrls: Record<string, string>,
   item: PlacedFurniture
 ): void {
-  loadBillboard(url, item.size)
+  const release = (): void => {
+    URL.revokeObjectURL(url);
+    for (const viewUrl of Object.values(viewUrls)) URL.revokeObjectURL(viewUrl);
+  };
+  loadBillboard(url, item.size, viewUrls)
     .then((billboard) => {
-      URL.revokeObjectURL(url);
+      release();
       // 読み込み中に家具が消されていたら、シーンに足さず捨てる
       if (!object.parent) return;
 
@@ -207,7 +237,7 @@ function replaceWithBillboard(
       object.add(billboard);
     })
     .catch((error) => {
-      URL.revokeObjectURL(url);
+      release();
       console.error(`切り抜きの読み込みに失敗しました: ${item.imageUrl}`, error);
     });
 }
@@ -216,6 +246,7 @@ function replaceWithBillboard(
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.LineSegments)) return;
+    disposeViewTextures(child);
     child.geometry.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     for (const material of materials) {

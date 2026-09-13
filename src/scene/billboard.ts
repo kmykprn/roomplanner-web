@@ -8,6 +8,9 @@
  * 向き（rotationY）は 3D と同じ値を持つが、板では**左右反転**として効く。
  * 90°〜270° の側を向いているなら裏返す。これで「向きを変える」操作が板でも意味を持つ。
  *
+ * 8 方向の画像（views）があるときは反転の代わりに、向きとカメラの位置から
+ * 一番近い方向の絵に貼り替える。裏側も見せられる。
+ *
  * 足元にぼかした楕円を敷く。板は影を落とさない（薄いので落としても線にしかならない）ので、
  * 代わりの接地感。写真モードでも同じものが写真の上に乗る
  */
@@ -24,6 +27,18 @@ const SHADOW_OPACITY = 0.35;
 /** 板の名前。faceCamera と outline の付け替えで探すのに使う */
 export const BILLBOARD_NAME = 'billboard';
 
+/** 8 方向の画像の方位角（度）。サーバーが作る順と同じ */
+const VIEW_AZIMUTHS = [0, 45, 90, 135, 180, 225, 270, 315];
+
+/**
+ * 方位角の向き。生成側（MV-Adapter）の「45°」が家具のどちら側から見た絵かで決まる。
+ * 実物で確かめて合わせる。+1 なら「カメラが家具の右へ回る」= 板の rotationY が減る側
+ */
+const VIEW_AZIMUTH_SIGN = 1;
+
+/** 方向ごとのテクスチャ。板の userData に持たせる */
+type ViewTextures = Map<number, THREE.Texture>;
+
 /**
  * 切り抜き画像を読み、指定の箱に収めた板を返す。
  *
@@ -32,14 +47,18 @@ export const BILLBOARD_NAME = 'billboard';
  */
 export async function loadBillboard(
   url: string,
-  fitSize: [number, number, number]
+  fitSize: [number, number, number],
+  viewUrls: Record<string, string> = {}
 ): Promise<THREE.Group> {
-  const texture = await textureLoader.loadAsync(url);
-  // 写真の色をそのまま出す。既定の LinearSRGB のままだと白っぽく浮く
-  texture.colorSpace = THREE.SRGBColorSpace;
-  // 縮小時のギザつきを抑える。ミップマップは透過の縁をにじませるので使わない
-  texture.generateMipmaps = false;
-  texture.minFilter = THREE.LinearFilter;
+  // 8 方向があれば正面もその「0°」を使う。元の切り抜きと生成した絵は枠の取り方が違うので、
+  // 回したときに大きさが跳ばないよう、揃った 8 枚だけで描く
+  const viewTextures: ViewTextures = new Map();
+  for (const azimuth of VIEW_AZIMUTHS) {
+    const viewUrl = viewUrls[String(azimuth)];
+    if (viewUrl) viewTextures.set(azimuth, await loadTexture(viewUrl));
+  }
+  const hasViews = viewTextures.has(0);
+  const texture = hasViews ? viewTextures.get(0)! : await loadTexture(url);
 
   const aspect = texture.image.width / texture.image.height;
   const scale = Math.min(fitSize[0] / aspect, fitSize[1]);
@@ -64,6 +83,7 @@ export async function loadBillboard(
   // 底面基準。足元が y = 0 に来る
   plane.position.y = height / 2;
   plane.name = 'billboard-plane';
+  if (hasViews) plane.userData.viewTextures = viewTextures;
   group.add(plane);
 
   const outline = new THREE.LineSegments(
@@ -78,6 +98,24 @@ export async function loadBillboard(
   group.add(createFloorShadow(width));
 
   return group;
+}
+
+async function loadTexture(url: string): Promise<THREE.Texture> {
+  const texture = await textureLoader.loadAsync(url);
+  // 写真の色をそのまま出す。既定の LinearSRGB のままだと白っぽく浮く
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // 縮小時のギザつきを抑える。ミップマップは透過の縁をにじませるので使わない
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  return texture;
+}
+
+/** 板が持つ 8 方向のテクスチャを全部捨てる（捨てる側の disposeObject から呼ぶ） */
+export function disposeViewTextures(object: THREE.Object3D): void {
+  const textures = object.userData.viewTextures as ViewTextures | undefined;
+  if (!textures) return;
+  for (const texture of textures.values()) texture.dispose();
+  textures.clear();
 }
 
 /** 足元のぼかした楕円。中心が濃く、縁へ向かって消える */
@@ -140,6 +178,27 @@ export function faceCamera(billboard: THREE.Object3D, camera: THREE.Camera, tilt
   const toCamera = camera.position.clone().sub(position);
   const yaw = Math.atan2(toCamera.x, toCamera.z);
   billboard.rotation.set(0, yaw - parent.rotation.y, tilt);
+
+  const plane = billboard.getObjectByName('billboard-plane') as THREE.Mesh | undefined;
+  const textures = plane?.userData.viewTextures as ViewTextures | undefined;
+  if (plane && textures) {
+    // 家具の正面（rotationY の向き）から見て、カメラがどの方向にいるか
+    const relative = THREE.MathUtils.radToDeg(yaw - parent.rotation.y) * VIEW_AZIMUTH_SIGN;
+    showView(plane, textures, ((Math.round(relative / 45) * 45) % 360 + 360) % 360);
+    billboard.scale.x = 1;
+    return;
+  }
   // 「向き」が 90°〜270° の側なら裏返す。cos の符号で見れば範囲の折り返しを考えずに済む
   billboard.scale.x = Math.cos(parent.rotation.y) < 0 ? -1 : 1;
+}
+
+/** 方向の絵に貼り替える。同じ方向なら何もしない（毎フレーム呼ばれる） */
+function showView(plane: THREE.Mesh, textures: ViewTextures, azimuth: number): void {
+  if (plane.userData.shownView === azimuth) return;
+  const texture = textures.get(azimuth);
+  if (!texture) return;
+  const material = plane.material as THREE.MeshBasicMaterial;
+  material.map = texture;
+  material.needsUpdate = true;
+  plane.userData.shownView = azimuth;
 }

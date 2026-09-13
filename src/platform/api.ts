@@ -13,8 +13,16 @@ import { getIdToken } from '@/platform/auth';
 /** 生成の進み方。サーバー側の state をそのまま写している */
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed';
 
+/**
+ * 何を作るか。同じ GPU ワーカー・同じ待機列で、入力から作るものが違う。
+ *   model … 3D モデル（約 9 分）
+ *   views … 45° 刻み 8 方向の画像（約 3 分）。切り抜きを向きを変えて置くためのもの
+ */
+export type JobKind = 'model' | 'views';
+
 export interface JobStatus {
   state: JobState;
+  kind?: JobKind;
   /**
    * いまサーバーが何をしているか。
    *
@@ -28,8 +36,10 @@ export interface JobStatus {
    * 時刻ではなく経過秒を受け取るのは、端末の時計のずれを持ち込まないため
    */
   phaseElapsedSeconds?: number;
-  /** 完成した GLB の場所。succeeded のときだけ入る。1時間で切れる */
+  /** 完成した GLB の場所。kind=model の succeeded のときだけ入る。1時間で切れる */
   modelUrl?: string;
+  /** 8 方向の画像の場所。kind=views の succeeded のときだけ入る。方位角（度）がキー。1時間で切れる */
+  viewUrls?: Record<string, string>;
   /** failed のときの理由 */
   error?: string;
 }
@@ -91,11 +101,12 @@ function toCutoutError(response: Response): ApiError {
  *
  * @returns jobId。以後この番号で状態を見に行く
  */
-export async function createJob(image: Blob): Promise<string> {
+export async function createJob(image: Blob, kind: JobKind = 'model'): Promise<string> {
   const body = new FormData();
   // 拡張子はサーバー側の判定に使われない（中身をデコードして判定している）が、
   // 付けないと一部のブラウザが filename を空にして multipart が崩れる
   body.append('image', image, 'photo.jpg');
+  body.append('kind', kind);
 
   const response = await fetch(`${API_BASE}/jobs`, {
     method: 'POST',
