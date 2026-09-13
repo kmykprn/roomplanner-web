@@ -51,6 +51,11 @@ export interface PlacedFurniture {
    * （切り抜きを後から 3D にしたとき、置いてある家具もそのまま 3D に差し替わる）
    */
   imageUrl?: string;
+  /**
+   * 切り抜きの板の傾き（ラジアン）。画面の中で回す。斜めに撮った写真を水平に直す用途。
+   * 3D モデルには効かない（3D は rotationY で向きを変える）
+   */
+  tilt?: number;
   /** 生成した家具の表示名。一覧に無い種類なので自前で持つ */
   name?: string;
   /**

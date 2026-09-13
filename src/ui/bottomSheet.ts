@@ -8,8 +8,9 @@
  * 家具（置く・写真から作る）と操作は両方にある。
  */
 
-import type { PlacedFurniture } from '@/config/furniture';
+import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
 import { createModelPanel } from '@/ui/modelPanel';
+import { createPreviewImage } from '@/ui/previewImage';
 import { createPhotoPanel } from '@/ui/photoPanel';
 import { createIcon, type IconName } from '@/ui/icons';
 import { createRepeatButton } from '@/ui/repeatButton';
@@ -40,6 +41,9 @@ const SIZE_LIMITS = { min: 0.1, max: 5 };
 
 /** 1 回のボタン操作で家具を上下させる量（メートル） */
 const HEIGHT_STEP = 0.05;
+
+/** 1 回のボタン操作で切り抜きの板を傾ける角度 */
+const TILT_STEP = Math.PI / 36; // 5 度
 
 export function createBottomSheet(container: HTMLElement): void {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
@@ -129,10 +133,7 @@ export function createBottomSheet(container: HTMLElement): void {
     const selected = furniture.find((f) => f.id === selectedId);
 
     if (!selected) {
-      const hint = document.createElement('p');
-      hint.className = 'hint';
-      hint.textContent = '家具をタップすると選択できます';
-      wrapper.appendChild(hint);
+      wrapper.append(createFurnitureList(furniture));
       return wrapper;
     }
 
@@ -151,6 +152,15 @@ export function createBottomSheet(container: HTMLElement): void {
         ['up', '上げる', () => lift(id, HEIGHT_STEP)],
       ], (item) => formatHeight(item.position[1])),
     ];
+    // 傾きは切り抜きの板にだけ意味がある（3D は向きで回す）
+    if (isBillboard(selected)) {
+      rows.push(
+        createManageRow('傾き', [
+          ['rotateLeft', '左に傾ける', () => tilt(id, TILT_STEP)],
+          ['rotateRight', '右に傾ける', () => tilt(id, -TILT_STEP)],
+        ], (item) => formatTilt(item.tilt ?? 0))
+      );
+    }
 
     // 削除は右下に寄せる（誤タップを避ける）。塗りつぶしの赤で「消せる」ことをはっきり出す。
     // 赤はここ 1 つだけなので、青のステッパーと並んでも主従は崩れない
@@ -212,6 +222,81 @@ export function createBottomSheet(container: HTMLElement): void {
         value.textContent = format(item);
       },
     };
+  }
+
+  /**
+   * 置いてある家具の一覧。何も選んでいないときに出す。
+   *
+   * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
+   * 選べない。一覧からなら選べるし、消せる。行を押すと選択になり、操作の行に切り替わる
+   */
+  function createFurnitureList(furniture: PlacedFurniture[]): HTMLElement {
+    const list = document.createElement('div');
+    list.className = 'manage__list';
+    if (furniture.length === 0) {
+      const hint = document.createElement('p');
+      hint.className = 'hint';
+      hint.textContent = '「家具」タブから置くと、ここに並びます';
+      list.append(hint);
+      return list;
+    }
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = '家具をタップすると選択できます。画面の外に出た家具はここから';
+    list.append(hint);
+
+    const scene = activeScene();
+    for (const item of furniture) {
+      const row = document.createElement('div');
+      row.className = 'manage__item';
+
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'manage__pick';
+      const icon = document.createElement('span');
+      icon.className = 'manage__icon';
+      if (item.sourceImageKey) {
+        createPreviewImage(icon).show(item.sourceImageKey);
+      } else {
+        icon.style.background = item.color;
+      }
+      const name = document.createElement('span');
+      name.className = 'manage__name';
+      name.textContent = item.name ?? findFurnitureType(item.typeId)?.name ?? item.typeId;
+      pick.append(icon, name);
+      pick.addEventListener('click', () => scene.select(item.id));
+
+      const remove = createButton('', () => {
+        scene.remove(item.id);
+        releaseFurnitureAssets(item);
+      }, 'is-danger is-small manage__delete');
+      remove.setAttribute('aria-label', `${name.textContent} を削除`);
+      remove.append(createIcon('trash'));
+
+      row.append(pick, remove);
+      list.append(row);
+    }
+    return list;
+  }
+
+  /** 切り抜きの板か（3D を持たず、切り抜きだけを持つ家具） */
+  function isBillboard(item: PlacedFurniture): boolean {
+    return Boolean(item.imageUrl) && !item.modelUrl;
+  }
+
+  /** 切り抜きの板を画面の中で回す。上限は無し（逆さまにしたい人もいる） */
+  function tilt(id: string, step: number): void {
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
+    if (!item) return;
+    scene.update(id, { tilt: (item.tilt ?? 0) + step });
+  }
+
+  /** 傾き。左が正。0 は「0°」、それ以外は符号付きで出す */
+  function formatTilt(radians: number): string {
+    const degrees = Math.round((radians * 180) / Math.PI);
+    const sign = degrees > 0 ? '+' : degrees < 0 ? '−' : '';
+    return `${sign}${Math.abs(degrees)}°`;
   }
 
   /**
