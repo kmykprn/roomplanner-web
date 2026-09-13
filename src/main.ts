@@ -233,6 +233,9 @@ resumeGeneration();
 
 // --- 毎フレームの処理 ---
 viewer.onFrame(() => {
+  // 切り抜きの板はカメラのほうを向く。写真モードはカメラが固定なので向きは変わらないが、
+  // 置いた直後や向きを変えた直後に正面を向かせるのはここ
+  (isPhotoMode() ? photoFurniture : roomFurniture).faceCamera(viewer.camera);
   if (isPhotoMode()) return; // 写真モードのカメラは固定なので、追従させるものが無い
   cameraControls.update();
   updateWallVisibility(); // カメラが動いたぶんだけ壁の透過を追従させる

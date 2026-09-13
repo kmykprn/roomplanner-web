@@ -44,6 +44,13 @@ export interface PlacedFurniture {
    * この値があるときは種類ではなくこちらを見る。
    */
   modelUrl?: string;
+  /**
+   * 写真から切り抜いた透過 PNG の置き場（`cutoutCache` のキー）。
+   *
+   * これがあるときは板（ビルボード）として描く。modelUrl と両方あれば modelUrl を優先する
+   * （切り抜きを後から 3D にしたとき、置いてある家具もそのまま 3D に差し替わる）
+   */
+  imageUrl?: string;
   /** 生成した家具の表示名。一覧に無い種類なので自前で持つ */
   name?: string;
   /**

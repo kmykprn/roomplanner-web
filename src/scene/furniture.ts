@@ -13,13 +13,17 @@ import * as THREE from 'three';
 import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
 import { SCENE_COLORS, SURFACES } from '@/config/theme';
 import { loadFurnitureModel } from '@/scene/modelLoader';
+import { BILLBOARD_NAME, faceCamera, loadBillboard } from '@/scene/billboard';
 import { resolveModelUrl } from '@/platform/modelCache';
+import { resolveCutoutUrl } from '@/platform/cutoutCache';
 
 export interface FurnitureLayer {
   group: THREE.Group;
   /** レイキャスト対象にする家具本体のメッシュ一覧 */
   pickables(): THREE.Object3D[];
   sync(furniture: PlacedFurniture[], selectedId: string | null): void;
+  /** 切り抜きの板をカメラのほうへ向ける。毎フレーム呼ぶ。板が無ければ何もしない */
+  faceCamera(camera: THREE.Camera): void;
 }
 
 export function createFurnitureLayer(): FurnitureLayer {
@@ -57,8 +61,18 @@ export function createFurnitureLayer(): FurnitureLayer {
 
   return {
     group,
-    pickables: () => [...objects.values()].map((object) => object.children[0]),
+    // 当たり判定は基本は仮の箱。切り抜きの板は箱より細いので、板が入ったらそちらに替える
+    pickables: () =>
+      [...objects.values()].map(
+        (object) => (object.userData.pickable as THREE.Object3D | undefined) ?? object.children[0]
+      ),
     sync,
+    faceCamera(camera) {
+      for (const object of objects.values()) {
+        const billboard = object.getObjectByName(BILLBOARD_NAME);
+        if (billboard) faceCamera(billboard, camera);
+      }
+    },
   };
 }
 
@@ -105,13 +119,18 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   outline.visible = false;
   object.add(outline);
 
-  // GLB を持つ家具は、読み込めたら箱と差し替える。
-  // 読み込みを待たずに箱を先に見せるので、置いた瞬間の反応が遅くならない
+  // GLB や切り抜きを持つ家具は、読み込めたら箱と差し替える。
+  // 読み込みを待たずに箱を先に見せるので、置いた瞬間の反応が遅くならない。
+  // 両方あれば 3D を優先する（切り抜きを後から 3D にしたもの）
   if (item.modelUrl) {
     // 写真から生成した家具。端末に保存した中身を URL にしてから読む
     resolveModelUrl(item.modelUrl).then((url) => {
       if (url) replaceWithModel(object, mesh, url, item.size);
       // 見つからなければ箱のまま。端末のデータが消された場合など
+    });
+  } else if (item.imageUrl) {
+    resolveCutoutUrl(item.imageUrl).then((url) => {
+      if (url) replaceWithBillboard(object, mesh, outline, url, item);
     });
   } else {
     const type = findFurnitureType(item.typeId);
@@ -152,13 +171,55 @@ function replaceWithModel(
     });
 }
 
+/**
+ * 仮の箱を切り抜きの板に差し替える。
+ *
+ * 3D と違い、当たり判定も選択枠も板のものに替える。箱（1m 四方）のままだと、
+ * 細長い家具の横の何も無い場所を押しても選ばれてしまう。
+ * 前の URL は読み終わったら解放する（テクスチャは GPU に上がっている）
+ */
+function replaceWithBillboard(
+  object: THREE.Group,
+  placeholder: THREE.Mesh,
+  boxOutline: THREE.Object3D,
+  url: string,
+  item: PlacedFurniture
+): void {
+  loadBillboard(url, item.size)
+    .then((billboard) => {
+      URL.revokeObjectURL(url);
+      // 読み込み中に家具が消されていたら、シーンに足さず捨てる
+      if (!object.parent) return;
+
+      placeholder.visible = false;
+      placeholder.castShadow = false;
+      placeholder.receiveShadow = false;
+      // 選択枠は板のものに替える。箱の枠は名前を外して、sync が板の枠を見つけられるようにする
+      boxOutline.visible = false;
+      boxOutline.name = '';
+      const plane = billboard.getObjectByName('billboard-plane');
+      if (plane) {
+        plane.userData.furnitureId = item.id;
+        object.userData.pickable = plane;
+      }
+      object.add(billboard);
+    })
+    .catch((error) => {
+      URL.revokeObjectURL(url);
+      console.error(`切り抜きの読み込みに失敗しました: ${item.imageUrl}`, error);
+    });
+}
+
 /** GPU 上のメモリを解放する。消しっぱなしにすると使用量が増え続ける */
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.LineSegments)) return;
     child.geometry.dispose();
-    const material = child.material;
-    if (Array.isArray(material)) material.forEach((m) => m.dispose());
-    else material.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      // 切り抜きのテクスチャは家具ごとに持っている（使い回していない）ので、ここで捨てる
+      if ('map' in material && material.map instanceof THREE.Texture) material.map.dispose();
+      material.dispose();
+    }
   });
 }

@@ -1,7 +1,7 @@
 /**
- * ログインを求める小さなパネル。「3Dモデル」タブの作成ボタンの場所に出す。
+ * ログインを求める小さなパネル。「家具」タブの作成ボタンの場所に出す。
  *
- * 匿名のまま「＋ 写真から3Dモデルを作成」を押したら、**写真を選ぶ前に**これを出す。
+ * 匿名のまま「＋ 写真から家具を作る」を押したら、**写真を選ぶ前に**これを出す。
  * ログインできたら閉じ、利用者はもう一度ボタンを押して写真を選ぶ。
  *
  * 以前は写真を選んだあとにログインを求め、選んだ写真を持ったまま作成に進んでいた。
@@ -48,7 +48,7 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
 
   const title = document.createElement('p');
   title.className = 'login__title';
-  title.textContent = '3Dモデルの作成には Google ログインが必要です';
+  title.textContent = '家具の作成には Google ログインが必要です';
 
   const note = document.createElement('p');
   note.className = 'hint login__note';

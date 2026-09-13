@@ -14,7 +14,7 @@ import { photoState, setBackground } from '@/core/photoState';
 import { pickImage } from '@/platform/picker';
 import { FAILED_MESSAGE } from '@/ui/photoPanel';
 
-const IDLE_MESSAGE = '写真の上に3Dモデルを置けます';
+const IDLE_MESSAGE = '写真の上に家具を置けます';
 
 export function createPhotoEmpty(): HTMLElement {
   const element = document.createElement('div');

@@ -1,15 +1,16 @@
 /**
- * 「3Dモデル」タブ。置ける 3D モデルを並べ、押すといまのモード（部屋／写真）に置く。
+ * 「家具」タブ。置ける家具を並べ、押すといまのモード（部屋／写真）に置く。
  *
- *   1 段目 … 「＋ 写真から3Dモデルを作成」。押したあとはタブを離れても、アプリを閉じても進行は続く。
- *            匿名のままなら、写真を選んだあとにログインを求める（ui/loginPanel.ts）
- *   2 段目 … 作ったモデル。作成中はその場で円が進み、できあがると押せる姿になる。
+ *   1 段目 … 「＋ 写真から家具を作る」。写真から家具だけを切り抜く（数秒）。
+ *            その下に、時間のかかる 3D モデルの作成（約 9 分）への入口を小さく置く。
+ *            どちらも匿名のままなら、写真を選ぶ前にログインを求める（ui/loginPanel.ts）
+ *   2 段目 … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *            右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。× で即消せるのは
  *            簡単すぎたので、削除は編集の中で二段階にした
- *   3 段目 … 基本のモデル（椅子・テーブル…）
+ *   3 段目 … 基本の家具（椅子・テーブル…）
  *
- * 生成に約8分かかるので、**待たせる画面ではなく、待たせない画面**にする。
- * ここは進み具合を映すだけで、進行そのものは core/generation.ts が持っている。
+ * 3D 生成は約 8 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
+ * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
  */
 
 import { FURNITURE_TYPES, type PlacedFurniture } from '@/config/furniture';
@@ -22,6 +23,13 @@ import {
   startGeneration,
   type GenerationJob,
 } from '@/core/generation';
+import {
+  cutoutState,
+  dismissCutoutError,
+  EXPECTED_SECONDS,
+  startCutout,
+  type CutoutJob,
+} from '@/core/cutout';
 import {
   GENERATED_SIZE,
   PLACEHOLDER_COLOR,
@@ -50,17 +58,27 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const generateRow = document.createElement('div');
   const generateButton = document.createElement('button');
   generateButton.className = 'button lib__generate';
-  generateButton.textContent = '＋ 写真から3Dモデルを作成';
-  generateButton.addEventListener('click', async () => {
+  generateButton.textContent = '＋ 写真から家具を作る';
+  generateButton.addEventListener('click', () => void pickAndStart(startCutout));
+  /**
+   * 3D モデルの作成への入口。切り抜きが基本で、こちらは時間と費用がかかるので小さく出す。
+   * 切り抜きでは向きを変えられない（左右反転だけ）ので、回したい人向け
+   */
+  const generate3dButton = document.createElement('button');
+  generate3dButton.className = 'button is-text is-small lib__generate-3d';
+  generate3dButton.textContent = '3D モデルとして作る（約 9 分）';
+  generate3dButton.addEventListener('click', () => void pickAndStart(startGeneration));
+
+  /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
+  async function pickAndStart(start: (files: File[]) => Promise<void>): Promise<void> {
     signedInNote.hidden = true;
-    // 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため
     if (authState.get().anonymous) {
       loginPanel.open();
       return;
     }
     const files = await pickImages();
-    if (files.length > 0) void startGeneration(files);
-  });
+    if (files.length > 0) void start(files);
+  }
   /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
   const loginHint = document.createElement('p');
   loginHint.className = 'hint lib__login-hint';
@@ -77,7 +95,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const signedInNote = document.createElement('p');
   signedInNote.className = 'hint';
   signedInNote.hidden = true;
-  generateRow.append(generateButton, loginHint, authNote, signedInNote);
+  generateRow.append(generateButton, generate3dButton, loginHint, authNote, signedInNote);
 
   // ログインを求めるパネル。作成ボタンの場所と入れ替わりで出る
   const loginPanel = createLoginPanel(() => showSignedIn());
@@ -85,15 +103,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   function showSignedIn(error: string | null = null): void {
     signedInNote.classList.toggle('is-error', error !== null);
     signedInNote.textContent =
-      error ?? 'ログインできました。もう一度「＋ 写真から3Dモデルを作成」を押して写真を選んでください';
+      error ?? 'ログインできました。もう一度「＋ 写真から家具を作る」を押して写真を選んでください';
     signedInNote.hidden = false;
   }
 
-  // --- 2 段目: 作ったモデル ---
+  // --- 2 段目: 作った家具 ---
   const made = document.createElement('div');
   const madeLabel = document.createElement('p');
   madeLabel.className = 'lib__label';
-  madeLabel.textContent = '作ったモデル';
+  madeLabel.textContent = '作った家具';
   const thumbs = document.createElement('div');
   thumbs.className = 'thumbs';
   /** 失敗した作成。サムネイルには収まらないので、下に文で出す */
@@ -101,11 +119,11 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   failures.className = 'lib__failures';
   made.append(madeLabel, thumbs, failures);
 
-  // --- 3 段目: 基本のモデル ---
+  // --- 3 段目: 基本の家具 ---
   const basic = document.createElement('div');
   const basicLabel = document.createElement('p');
   basicLabel.className = 'lib__label';
-  basicLabel.textContent = '基本のモデル';
+  basicLabel.textContent = '基本の家具';
   basic.append(basicLabel, createBasicGrid(place));
 
   /** 通常の姿。編集の間は引っ込める（「手前の範囲」と同じ作り） */
@@ -143,7 +161,8 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
       name: model.name,
       size: [...GENERATED_SIZE],
       color: PLACEHOLDER_COLOR,
-      modelUrl: model.modelKey,
+      modelUrl: model.modelKey ?? undefined,
+      imageUrl: model.imageKey ?? undefined,
       sourceImageKey: model.previewKey ?? undefined,
     });
   }
@@ -157,6 +176,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     // 黙って止まると原因が分からないので、ボタンの下に出す
     const authFailed = status === 'failed';
     generateButton.disabled = authFailed;
+    generate3dButton.disabled = authFailed;
     authNote.hidden = !authFailed;
     authNote.textContent = authFailed ? authFailureMessage() : '';
     loginHint.hidden = authFailed || !anonymous;
@@ -168,25 +188,36 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     // **サムネイルは作り直さず、id で使い回す。** 作成中は 15 秒ごとの状態更新で
     // ここが呼ばれる。毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの
     // 一覧がちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
+    const cutouts = cutoutState.get().jobs;
     const running = jobs.filter((job) => job.phase !== 'failed');
+    const cutting = cutouts.filter((job) => job.phase !== 'failed');
     const failed = jobs.filter((job) => job.phase === 'failed');
-    made.hidden = running.length === 0 && failed.length === 0 && models.length === 0;
+    const failedCutouts = cutouts.filter((job) => job.phase === 'failed');
+    made.hidden =
+      running.length + cutting.length + failed.length + failedCutouts.length + models.length === 0;
 
     const ordered: HTMLElement[] = [];
+    // 切り抜きは数秒で終わるので先頭。3D の作成はその後ろで長く待つ
+    ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(modelNodes, [...models].reverse(), (model) =>
       createModelThumb(model, placeGenerated, openEditor)
     ));
     thumbs.replaceChildren(...ordered);
-    failures.replaceChildren(...failed.map(createFailure));
+    failures.replaceChildren(
+      ...failedCutouts.map((job) => createFailure(job.fileName, job.error, () => dismissCutoutError(job.id))),
+      ...failed.map((job) => createFailure(job.fileName, job.error, () => dismissError(job.id)))
+    );
   }
 
-  /** 表示中のサムネイル。作成中と、できあがったもので別に持つ */
+  /** 表示中のサムネイル。切り抜き中・作成中・できあがったもので別に持つ */
+  const cutoutNodes = new Map<string, ThumbNode<CutoutJob>>();
   const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
   const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
 
   render();
   generationState.subscribe(render);
+  cutoutState.subscribe(render);
   modelLibrary.subscribe(render);
   authState.subscribe(render);
   redirectLogin.subscribe((state) => {
@@ -201,7 +232,12 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   // 待っている間、状態そのものは変わらないので購読だけでは経過時間が止まる。
   // 8分待たせる画面で数字が動かないと、固まったように見える
   setInterval(() => {
-    if (generationState.get().jobs.some((job) => job.phase === 'running')) render();
+    if (
+      generationState.get().jobs.some((job) => job.phase === 'running') ||
+      cutoutState.get().jobs.some((job) => job.phase !== 'failed')
+    ) {
+      render();
+    }
   }, 1000);
 
   return panel;
@@ -357,7 +393,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   back.addEventListener('click', close);
   const title = document.createElement('span');
   title.className = 'edit__title';
-  title.textContent = 'モデルの編集';
+  title.textContent = '家具の編集';
   const headSpacer = document.createElement('span');
   headSpacer.className = 'edit__spacer';
   head.append(back, title, headSpacer);
@@ -415,7 +451,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
     const name = nameInput.value.trim();
     if (name && name !== current.name) {
       updateModel(current.id, { name });
-      renamePlacedCopies(current.modelKey, name);
+      renamePlacedCopies(current, name);
     }
     close();
   });
@@ -427,7 +463,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'button is-quiet is-small is-danger-outline';
-  remove.textContent = 'このモデルを削除';
+  remove.textContent = 'この家具を削除';
   remove.addEventListener('click', () => {
     confirm.hidden = false;
     remove.hidden = true;
@@ -490,7 +526,42 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   return { element, open };
 }
 
-/** 作成中のモデル。円で進み具合を出す。まだ押しても何も起きない */
+/**
+ * 切り抜き中の家具。数秒で終わるので、円は目安の秒数で 9 割まで進めて待つ。
+ * 3D の作成のように工程が返ってこないため、経過時間しか手掛かりが無い
+ */
+function createCutoutThumb(job: CutoutJob): ThumbNode<CutoutJob> {
+  const thumb = createThumb(describeCutout(job));
+  thumb.button.disabled = true;
+  thumb.image.classList.add('is-running');
+  const ring = createProgressRing();
+  thumb.image.append(ring.element);
+
+  function update(current: CutoutJob): void {
+    if (current.previewUrl) thumb.image.style.backgroundImage = `url("${current.previewUrl}")`;
+    thumb.name.textContent = describeCutout(current);
+    const elapsed = (Date.now() - current.startedAt) / 1000;
+    ring.update(Math.min(elapsed / EXPECTED_SECONDS, 1) * 0.9, '');
+  }
+  update(job);
+  // 元写真の Blob URL は切り抜きの状態が持っているので、ここでは解放しない
+  return { element: thumb.element, update, dispose() {} };
+}
+
+function describeCutout(job: CutoutJob): string {
+  switch (job.phase) {
+    case 'uploading':
+      return '送っています';
+    case 'cutting':
+      return '切り抜いています';
+    case 'saving':
+      return '保存しています';
+    case 'failed':
+      return '切り抜けませんでした';
+  }
+}
+
+/** 作成中の 3D モデル。円で進み具合を出す。まだ押しても何も起きない */
 function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
   const thumb = createThumb(describe(job));
   thumb.button.disabled = true;
@@ -537,16 +608,17 @@ function createThumb(caption: string): {
   return { element, button, image, name };
 }
 
-function createFailure(job: GenerationJob): HTMLElement {
+/** 失敗した作成（切り抜きも 3D も同じ姿）。とじると、その失敗だけが消える */
+function createFailure(fileName: string, error: string | null, dismiss: () => void): HTMLElement {
   const row = document.createElement('div');
   row.className = 'row lib__failure';
   const message = document.createElement('p');
   message.className = 'hint is-error';
-  message.textContent = `${job.fileName}: ${job.error ?? '作成できませんでした'}`;
+  message.textContent = `${fileName}: ${error ?? '作成できませんでした'}`;
   const closeButton = document.createElement('button');
   closeButton.className = 'button is-quiet is-small';
   closeButton.textContent = 'とじる';
-  closeButton.addEventListener('click', () => dismissError(job.id));
+  closeButton.addEventListener('click', dismiss);
   row.append(message, closeButton);
   return row;
 }
