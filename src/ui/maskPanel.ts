@@ -35,17 +35,18 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 ];
 
 /**
- * 今なにをすればいいかの 1 文。done は「もう次に進める」状態（案内の色を変える）。
+ * 今なにをすればいいかの 1 文。done は「押すべきものが現れた」状態で、案内の色を緑にする。
  *
  * 目的の文（「手前に表示したいエリアを…」）だけでは、指でなぞるのか点を打つのかが
- * 分からず、押してみて初めて分かる状態だった。道具と進み具合ごとに動作を書く
+ * 分からず、押してみて初めて分かる状態だった。道具と進み具合ごとに動作を書く。
+ *
+ * 緑になるのは囲むの 3 点以上だけ。なぞるは塗り続けるだけで「次に押すもの」が無いので、
+ * 塗った後も文と色を変えない（一筆で緑になって以後ずっと緑、が気持ち悪かった）
  */
-function guideFor(kind: MaskToolKind, corners: number, painted: boolean): { text: string; done: boolean } {
+function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } {
   switch (kind) {
     case 'brush':
-      return painted
-        ? { text: 'はみ出した部分を消すなら「消しゴム」、やり直すなら「戻す」を押して下さい', done: true }
-        : { text: '写真の上を指でなぞると、なぞった部分が3Dモデルの手前になります', done: false };
+      return { text: '写真の上を指でなぞると、なぞった部分が3Dモデルの手前になります', done: false };
     case 'eraser':
       return { text: '消したい部分を指でなぞると、手前の指定が消えます', done: false };
     case 'polygon':
@@ -119,7 +120,7 @@ export function createMaskPanel(): HTMLElement {
     const { kind } = maskTool;
 
     if (hasPhoto) {
-      const { text, done } = guideFor(kind, maskPolygon.length, maskUrl !== null);
+      const { text, done } = guideFor(kind, maskPolygon.length);
       guide.className = done ? 'mask__guide is-done' : 'mask__guide';
       guide.textContent = text;
     } else {
