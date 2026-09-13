@@ -49,11 +49,14 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   generateButton.className = 'button lib__generate';
   generateButton.textContent = '＋ 写真から3Dモデルを作成';
   generateButton.addEventListener('click', async () => {
+    signedInNote.hidden = true;
+    // 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため
+    if (authState.get().anonymous) {
+      loginPanel.open();
+      return;
+    }
     const files = await pickImages();
-    if (files.length === 0) return;
-    // 匿名のままなら作成の代わりにログインを求める。写真は預けておき、ログインできたら作成に進む
-    if (authState.get().anonymous) loginPanel.open(files);
-    else void startGeneration(files);
+    if (files.length > 0) void startGeneration(files);
   });
   /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
   const loginHint = document.createElement('p');
@@ -64,17 +67,24 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   authNote.className = 'hint is-error';
   authNote.hidden = true;
   /**
-   * iOS のリダイレクトでログインして戻ってきたときだけ出す。
-   * ページを読み直しているので、選んでいた写真は無い。何も言わないと
-   * 「ログインしたのに何も起きない」に見える
+   * ログインできた直後に出す。ポップアップなら閉じた瞬間、iOS のリダイレクトなら
+   * 戻ってきた起動時。何も言わないと「ログインしたのに何も起きない」に見える。
+   * 次にボタンを押したら消す
    */
-  const redirectNote = document.createElement('p');
-  redirectNote.className = 'hint';
-  redirectNote.hidden = true;
-  generateRow.append(generateButton, loginHint, authNote, redirectNote);
+  const signedInNote = document.createElement('p');
+  signedInNote.className = 'hint';
+  signedInNote.hidden = true;
+  generateRow.append(generateButton, loginHint, authNote, signedInNote);
 
   // ログインを求めるパネル。作成ボタンの場所と入れ替わりで出る
-  const loginPanel = createLoginPanel((files) => void startGeneration(files));
+  const loginPanel = createLoginPanel(() => showSignedIn());
+
+  function showSignedIn(error: string | null = null): void {
+    signedInNote.classList.toggle('is-error', error !== null);
+    signedInNote.textContent =
+      error ?? 'ログインできました。もう一度「＋ 写真から3Dモデルを作成」を押して写真を選んでください';
+    signedInNote.hidden = false;
+  }
 
   // --- 2 段目: 作ったモデル ---
   const made = document.createElement('div');
@@ -135,34 +145,64 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     authNote.hidden = !authFailed;
     authNote.textContent = authFailed ? authFailureMessage() : '';
     loginHint.hidden = authFailed || !anonymous;
-    const redirect = redirectLogin.get();
-    redirectNote.hidden = redirect.outcome === 'none';
-    redirectNote.classList.toggle('is-error', redirect.outcome === 'failed');
-    redirectNote.textContent =
-      redirect.outcome === 'signed-in'
-        ? 'ログインできました。「＋ 写真から3Dモデルを作成」で写真を選び直してください'
-        : redirect.outcome === 'failed'
-          ? (redirect.error ?? 'ログインできませんでした')
-          : '';
     // ログインを求めている間は作成ボタンを引っ込める（同じ場所に出す）
     generateRow.hidden = !loginPanel.element.hidden;
 
-    // 作成中のものを先頭に、できあがったものを新しい順に並べる
+    // 作成中のものを先頭に、できあがったものを新しい順に並べる。
+    //
+    // **サムネイルは作り直さず、id で使い回す。** 作成中は 15 秒ごとの状態更新で
+    // ここが呼ばれる。毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの
+    // 一覧がちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
     const running = jobs.filter((job) => job.phase !== 'failed');
     const failed = jobs.filter((job) => job.phase === 'failed');
     made.hidden = running.length === 0 && failed.length === 0 && models.length === 0;
-    thumbs.replaceChildren(
-      ...running.map(createJobThumb),
-      ...[...models].reverse().map((model) => createModelThumb(model, placeGenerated))
-    );
+
+    const wanted = new Set<string>();
+    const ordered: HTMLElement[] = [];
+    for (const job of running) {
+      const key = `job:${job.id}`;
+      wanted.add(key);
+      let node = thumbNodes.get(key);
+      if (!node) {
+        node = createJobThumb(job);
+        thumbNodes.set(key, node);
+      }
+      node.update?.(job);
+      ordered.push(node.element);
+    }
+    for (const model of [...models].reverse()) {
+      const key = `model:${model.id}`;
+      wanted.add(key);
+      let node = thumbNodes.get(key);
+      if (!node) {
+        node = createModelThumb(model, placeGenerated);
+        thumbNodes.set(key, node);
+      }
+      ordered.push(node.element);
+    }
+    for (const [key, node] of thumbNodes) {
+      if (!wanted.has(key)) {
+        node.dispose();
+        thumbNodes.delete(key);
+      }
+    }
+    thumbs.replaceChildren(...ordered);
     failures.replaceChildren(...failed.map(createFailure));
   }
+
+  /** 表示中のサムネイル。キーは job:<id> か model:<id> */
+  const thumbNodes = new Map<string, ThumbNode>();
 
   render();
   generationState.subscribe(render);
   modelLibrary.subscribe(render);
   authState.subscribe(render);
-  redirectLogin.subscribe(render);
+  redirectLogin.subscribe((state) => {
+    // iOS のリダイレクトから戻ってきた。写真は持ち越せていないので、選び直しを促す
+    if (state.outcome === 'signed-in') showSignedIn();
+    else if (state.outcome === 'failed') showSignedIn(state.error ?? 'ログインできませんでした');
+    render();
+  });
   // パネルの出し入れは hidden 属性の変化なので、状態の購読では拾えない
   new MutationObserver(render).observe(loginPanel.element, { attributeFilter: ['hidden'] });
 
@@ -197,15 +237,28 @@ function createBasicGrid(
 }
 
 /** できあがったモデル。押すと置く。× で保管庫から外す */
-function createModelThumb(
-  model: GeneratedModel,
-  place: (model: GeneratedModel) => void
-): HTMLElement {
+/** 使い回すサムネイル。update は作成中のものだけが持つ。dispose で画像の URL を解放する */
+interface ThumbNode {
+  element: HTMLElement;
+  update?(job: GenerationJob): void;
+  dispose(): void;
+}
+
+function createModelThumb(model: GeneratedModel, place: (model: GeneratedModel) => void): ThumbNode {
   const thumb = createThumb(model.name);
   thumb.button.addEventListener('click', () => place(model));
+  // 画像は一度だけ読む。Blob URL はこのサムネイルを外すときに解放する
+  let previewUrl: string | null = null;
+  let disposed = false;
   if (model.previewKey) {
     void resolvePreview(model.previewKey).then((url) => {
-      if (url) thumb.image.style.backgroundImage = `url("${url}")`;
+      if (!url) return;
+      if (disposed) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      previewUrl = url;
+      thumb.image.style.backgroundImage = `url("${url}")`;
     });
   }
 
@@ -219,11 +272,17 @@ function createModelThumb(
     removeModel(model.id);
   });
   thumb.element.append(remove);
-  return thumb.element;
+  return {
+    element: thumb.element,
+    dispose() {
+      disposed = true;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+  };
 }
 
 /** 作成中のモデル。円で進み具合を出す。まだ押しても何も起きない */
-function createJobThumb(job: GenerationJob): HTMLElement {
+function createJobThumb(job: GenerationJob): ThumbNode {
   const thumb = createThumb(describe(job));
   thumb.button.disabled = true;
   thumb.image.classList.add('is-running');
@@ -232,12 +291,20 @@ function createJobThumb(job: GenerationJob): HTMLElement {
   // 円は小さく出すので中に文字は入れない。残り時間は下の名前の場所に出す。
   // 実行が始まるまでは残り時間が読めないので、円は空のまま
   const ring = createProgressRing();
-  ring.update(
-    job.phase === 'running' ? progressFor(job.serverPhase, elapsedInPhase(job)).ratio : 0,
-    ''
-  );
   thumb.image.append(ring.element);
-  return thumb.element;
+
+  function update(current: GenerationJob): void {
+    thumb.name.textContent = describe(current);
+    ring.update(
+      current.phase === 'running'
+        ? progressFor(current.serverPhase, elapsedInPhase(current)).ratio
+        : 0,
+      ''
+    );
+  }
+  update(job);
+  // 元写真の Blob URL は作成の状態が持っているので、ここでは解放しない
+  return { element: thumb.element, update, dispose() {} };
 }
 
 /** サムネイルの骨組み。画像の枠と、その下の名前 */
@@ -245,6 +312,7 @@ function createThumb(caption: string): {
   element: HTMLElement;
   button: HTMLButtonElement;
   image: HTMLElement;
+  name: HTMLElement;
 } {
   const element = document.createElement('div');
   element.className = 'thumb';
@@ -257,7 +325,7 @@ function createThumb(caption: string): {
   name.textContent = caption;
   button.append(image, name);
   element.append(button);
-  return { element, button, image };
+  return { element, button, image, name };
 }
 
 function createFailure(job: GenerationJob): HTMLElement {

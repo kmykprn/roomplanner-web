@@ -1,9 +1,13 @@
 /**
  * ログインを求める小さなパネル。「3Dモデル」タブの作成ボタンの場所に出す。
  *
- * 写真を選んだあと、匿名のままなら作成の代わりにこれを出す。
- * **選んだ写真は持ったまま**にして、ログインできたらそのまま作成に進む。
- * ログインのために写真を選び直させない。
+ * 匿名のまま「＋ 写真から3Dモデルを作成」を押したら、**写真を選ぶ前に**これを出す。
+ * ログインできたら閉じ、利用者はもう一度ボタンを押して写真を選ぶ。
+ *
+ * 以前は写真を選んだあとにログインを求め、選んだ写真を持ったまま作成に進んでいた。
+ * iOS ではログインがリダイレクト（ページの読み直し）になり写真を持ち越せないため、
+ * 順序を入れ替えた。ログイン後に自動で写真選択を開かないのは、ポップアップやリダイレクトを
+ * 挟んだあとではブラウザが「利用者の操作」とみなさず、ファイル選択を塞ぐことがあるため。
  *
  * ポップアップは直接のクリックからしか開けないので、ここの「Google でログイン」の
  * クリックの中で signInWithGoogle() を呼ぶ。await を挟んだ先で開こうとすると塞がれる。
@@ -32,12 +36,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export interface LoginPanel {
   element: HTMLElement;
-  /** 写真を預かって出す */
-  open(files: File[]): void;
+  open(): void;
   close(): void;
 }
 
-export function createLoginPanel(onSignedIn: (files: File[]) => void): LoginPanel {
+/** onSignedIn はポップアップでログインできた直後に呼ぶ（iOS のリダイレクトでは呼ばれない） */
+export function createLoginPanel(onSignedIn: () => void): LoginPanel {
   const element = document.createElement('div');
   element.className = 'login';
   element.hidden = true;
@@ -48,7 +52,7 @@ export function createLoginPanel(onSignedIn: (files: File[]) => void): LoginPane
 
   const note = document.createElement('p');
   note.className = 'hint login__note';
-  note.textContent = 'ログインすると、選んだ写真でそのまま作成が始まります';
+  note.textContent = 'ログインすると、写真を選んで作成できるようになります';
 
   const buttons = document.createElement('div');
   buttons.className = 'row';
@@ -62,9 +66,6 @@ export function createLoginPanel(onSignedIn: (files: File[]) => void): LoginPane
 
   element.append(title, note, buttons, error);
 
-  /** 預かっている写真。閉じたら捨てる */
-  let pending: File[] = [];
-
   async function login(): Promise<void> {
     loginButton.disabled = true;
     loginButton.textContent = usesRedirectLogin() ? 'Google へ移動しています…' : 'ログインしています…';
@@ -72,12 +73,11 @@ export function createLoginPanel(onSignedIn: (files: File[]) => void): LoginPane
     try {
       const outcome = await withTimeout(signInWithGoogle(), LOGIN_TIMEOUT_MS);
       if (outcome === 'signed-in') {
-        const files = pending;
         close();
-        onSignedIn(files);
+        onSignedIn();
         return;
       }
-      // 閉じられただけ。写真は持ったまま、もう一度押せるようにする
+      // 閉じられただけ。もう一度押せるようにする
     } catch (failure) {
       error.textContent = failure instanceof Error ? failure.message : 'ログインできませんでした';
       error.hidden = false;
@@ -86,14 +86,12 @@ export function createLoginPanel(onSignedIn: (files: File[]) => void): LoginPane
     loginButton.textContent = 'Google でログイン';
   }
 
-  function open(files: File[]): void {
-    pending = files;
+  function open(): void {
     error.hidden = true;
     element.hidden = false;
   }
 
   function close(): void {
-    pending = [];
     element.hidden = true;
   }
 

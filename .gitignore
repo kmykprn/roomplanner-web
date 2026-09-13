@@ -1,4 +1,8 @@
+# ディレクトリだけでなくシンボリックリンクも除く。
+# worktree で node_modules へのリンクを置いたとき、`node_modules/` だけでは
+# リンク（ファイル扱い）が一致せずコミットされてしまった
 node_modules/
+node_modules
 dist/
 .DS_Store
 *.local
