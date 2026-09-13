@@ -28,7 +28,7 @@ import {
   removeModel,
   type GeneratedModel,
 } from '@/core/modelLibrary';
-import { authState } from '@/platform/auth';
+import { authState, redirectLogin } from '@/platform/auth';
 import { pickImages } from '@/platform/picker';
 import { resolvePreview } from '@/platform/previewCache';
 import { createLoginPanel } from '@/ui/loginPanel';
@@ -63,7 +63,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const authNote = document.createElement('p');
   authNote.className = 'hint is-error';
   authNote.hidden = true;
-  generateRow.append(generateButton, loginHint, authNote);
+  /**
+   * iOS のリダイレクトでログインして戻ってきたときだけ出す。
+   * ページを読み直しているので、選んでいた写真は無い。何も言わないと
+   * 「ログインしたのに何も起きない」に見える
+   */
+  const redirectNote = document.createElement('p');
+  redirectNote.className = 'hint';
+  redirectNote.hidden = true;
+  generateRow.append(generateButton, loginHint, authNote, redirectNote);
 
   // ログインを求めるパネル。作成ボタンの場所と入れ替わりで出る
   const loginPanel = createLoginPanel((files) => void startGeneration(files));
@@ -127,6 +135,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     authNote.hidden = !authFailed;
     authNote.textContent = authFailed ? authFailureMessage() : '';
     loginHint.hidden = authFailed || !anonymous;
+    const redirect = redirectLogin.get();
+    redirectNote.hidden = redirect.outcome === 'none';
+    redirectNote.classList.toggle('is-error', redirect.outcome === 'failed');
+    redirectNote.textContent =
+      redirect.outcome === 'signed-in'
+        ? 'ログインできました。「＋ 写真から3Dモデルを作成」で写真を選び直してください'
+        : redirect.outcome === 'failed'
+          ? (redirect.error ?? 'ログインできませんでした')
+          : '';
     // ログインを求めている間は作成ボタンを引っ込める（同じ場所に出す）
     generateRow.hidden = !loginPanel.element.hidden;
 
@@ -145,6 +162,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   generationState.subscribe(render);
   modelLibrary.subscribe(render);
   authState.subscribe(render);
+  redirectLogin.subscribe(render);
   // パネルの出し入れは hidden 属性の変化なので、状態の購読では拾えない
   new MutationObserver(render).observe(loginPanel.element, { attributeFilter: ['hidden'] });
 

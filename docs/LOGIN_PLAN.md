@@ -31,6 +31,23 @@
 
 無料回数の導入は、ログイン必須化（順序 3）と**同時**に行うこと。
 
+## iOS ではポップアップではなくリダイレクト（2026-09-13 追記）
+
+iOS Safari は `linkWithPopup` の結果を持ち帰れず、Promise が決着しないまま止まる（実機で再現）。
+根本原因は `authDomain` がアプリと別オリジンだったこと。Safari 16.1+ などはサードパーティの
+保存領域を分断するため、ポップアップもリダイレクトも壊れる。
+
+対処は 2 段:
+
+1. `authDomain` を `kmykprn.github.io` にし、Firebase のヘルパーを同じオリジンで配る
+   （`kmykprn.github.io` リポジトリ、`docs/OPEN_ISSUES.md` の 2）
+2. iOS では `linkWithRedirect` で遷移し、戻ってきた起動時に `getRedirectResult` で受け取る
+   （`auth.ts` の `receiveRedirect`）。**匿名ログインより先に受け取る**。2 台目の
+   `credential-already-in-use` は `googleLink.ts` の `finishRedirect` がポップアップと同じ分岐で処理する
+
+リダイレクトはページを読み直すので選んでいた写真は持ち越せない。`redirectLogin` ストアで
+画面に伝え、選び直しを促す。PC はポップアップのまま。
+
 ## 昇格（linkWithPopup）とは
 
 全員が最初からログインしているわけではない。**誰もログインしていない状態から始まり、

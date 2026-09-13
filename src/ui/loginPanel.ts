@@ -7,9 +7,28 @@
  *
  * ポップアップは直接のクリックからしか開けないので、ここの「Google でログイン」の
  * クリックの中で signInWithGoogle() を呼ぶ。await を挟んだ先で開こうとすると塞がれる。
+ *
+ * ログインの Promise が決着しないまま止まる事故が実際にあった（iOS Safari）。
+ * 二度と無言で止まらないよう、待つ時間に上限を置く。
  */
 
-import { signInWithGoogle } from '@/platform/auth';
+import { signInWithGoogle, usesRedirectLogin } from '@/platform/auth';
+
+/**
+ * ログインの応答を待つ上限。Google の画面で利用者がアカウントを選ぶ時間を含むので短くしない。
+ * iOS ではこの間にページごと Google へ遷移するので、ここで切れるのは遷移が起きなかったとき
+ */
+const LOGIN_TIMEOUT_MS = 60_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error('ログインの応答がありません。もう一度お試しください')),
+      ms
+    );
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
 
 export interface LoginPanel {
   element: HTMLElement;
@@ -48,10 +67,10 @@ export function createLoginPanel(onSignedIn: (files: File[]) => void): LoginPane
 
   async function login(): Promise<void> {
     loginButton.disabled = true;
-    loginButton.textContent = 'ログインしています…';
+    loginButton.textContent = usesRedirectLogin() ? 'Google へ移動しています…' : 'ログインしています…';
     error.hidden = true;
     try {
-      const outcome = await signInWithGoogle();
+      const outcome = await withTimeout(signInWithGoogle(), LOGIN_TIMEOUT_MS);
       if (outcome === 'signed-in') {
         const files = pending;
         close();

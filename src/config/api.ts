@@ -34,7 +34,20 @@ export const API_BASE = 'https://hunyuan3d-api-yvl3t4jpxa-as.a.run.app';
  */
 export const FIREBASE_CONFIG = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? '',
-  authDomain: 'project-db31f07b-2895-48b8-8bb.firebaseapp.com',
+  /**
+   * 認証の戻り先。**アプリと同じオリジンにしてある。**
+   *
+   * 既定の `project-….firebaseapp.com` だとアプリ（kmykprn.github.io）と別オリジンになり、
+   * Safari 16.1+ / Firefox 109+ / Chrome 115+ はサードパーティの保存領域を分断するため、
+   * iOS Safari でログインの結果をアプリに持ち帰れない（「ログインしています…」のまま止まる。
+   * 実機で再現済み）。
+   *
+   * SDK は `https://<authDomain>/__/auth/handler` をドメイン直下に見に行く。その 7 ファイルは
+   * Firebase の配信をそのまま写して https://github.com/kmykprn/kmykprn.github.io で配っている。
+   * 戻したくなったらここを firebaseapp.com に戻すだけでよい（Google 側の配信は生きている）。
+   * https://firebase.google.com/docs/auth/web/redirect-best-practices
+   */
+  authDomain: 'kmykprn.github.io',
   projectId: 'project-db31f07b-2895-48b8-8bb',
 };
 
