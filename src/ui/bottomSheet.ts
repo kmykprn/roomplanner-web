@@ -11,6 +11,7 @@
 import type { PlacedFurniture } from '@/config/furniture';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createPhotoPanel } from '@/ui/photoPanel';
+import { createIcon, type IconName } from '@/ui/icons';
 import { createRepeatButton } from '@/ui/repeatButton';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
@@ -138,27 +139,31 @@ export function createBottomSheet(container: HTMLElement): void {
     const { id } = selected;
     const rows = [
       createManageRow('向き', [
-        ['⟲', '左に回す', () => rotate(id, -ROTATION_STEP)],
-        ['⟳', '右に回す', () => rotate(id, ROTATION_STEP)],
+        ['rotateLeft', '左に回す', () => rotate(id, -ROTATION_STEP)],
+        ['rotateRight', '右に回す', () => rotate(id, ROTATION_STEP)],
       ], (item) => formatAngle(item.rotationY)),
       createManageRow('大きさ', [
-        ['−', '小さくする', () => resize(id, 1 / SIZE_STEP_RATIO)],
-        ['＋', '大きくする', () => resize(id, SIZE_STEP_RATIO)],
+        ['shrink', '小さくする', () => resize(id, 1 / SIZE_STEP_RATIO)],
+        ['grow', '大きくする', () => resize(id, SIZE_STEP_RATIO)],
       ], (item) => `幅 ${item.size[0].toFixed(2)} m`),
       createManageRow('高さ', [
-        ['↓', '下げる', () => lift(id, -HEIGHT_STEP)],
-        ['↑', '上げる', () => lift(id, HEIGHT_STEP)],
+        ['down', '下げる', () => lift(id, -HEIGHT_STEP)],
+        ['up', '上げる', () => lift(id, HEIGHT_STEP)],
       ], (item) => formatHeight(item.position[1])),
     ];
 
-    wrapper.append(
-      ...rows.map((row) => row.element),
-      createButton('削除', () => {
-        scene.remove(id);
-        // 写真から作ったモデルの中身は、保管庫にも残っていなければここで捨てる
-        releaseFurnitureAssets(selected);
-      }, 'is-danger manage__delete')
-    );
+    // 削除は右下に寄せ、枠線だけの赤にする。塗りつぶしだと操作の中でいちばん目立ってしまう
+    const foot = document.createElement('div');
+    foot.className = 'manage__foot';
+    const remove = createButton('削除', () => {
+      scene.remove(id);
+      // 写真から作ったモデルの中身は、保管庫にも残っていなければここで捨てる
+      releaseFurnitureAssets(selected);
+    }, 'is-quiet is-small manage__delete');
+    remove.prepend(createIcon('trash'));
+    foot.append(remove);
+
+    wrapper.append(...rows.map((row) => row.element), foot);
 
     manageView = {
       itemId: id,
@@ -169,12 +174,17 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 「見出し・減らす・増やす・いまの値」の1行。
+   * 「見出し」と「減らす｜いまの値｜増やす」の 1 行。
+   *
+   * 値をボタンの間に挟むのは、どのボタンがどの値に効くかを目で往復させないため。
    * ボタンは押しっぱなしで動き続ける。値は refresh で書き替える
    */
   function createManageRow(
     label: string,
-    buttons: Array<[mark: string, description: string, act: () => void]>,
+    buttons: [
+      decrease: [icon: IconName, description: string, act: () => void],
+      increase: [icon: IconName, description: string, act: () => void],
+    ],
     format: (item: PlacedFurniture) => string
   ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
     const element = document.createElement('div');
@@ -187,13 +197,14 @@ export function createBottomSheet(container: HTMLElement): void {
     const value = document.createElement('span');
     value.className = 'manage__value';
 
-    element.append(
-      heading,
-      ...buttons.map(([mark, description, act]) =>
-        createRepeatButton(mark, `${label}を${description}`, act)
-      ),
-      value
-    );
+    const control = document.createElement('span');
+    control.className = 'manage__control';
+    const [decrease, increase] = buttons;
+    const button = ([icon, description, act]: (typeof buttons)[number]): HTMLButtonElement =>
+      createRepeatButton(createIcon(icon), `${label}を${description}`, act, 'manage__button');
+    control.append(button(decrease), value, button(increase));
+
+    element.append(heading, control);
     return {
       element,
       refresh: (item) => {
