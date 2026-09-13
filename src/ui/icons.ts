@@ -10,7 +10,7 @@
  * 必ず出るようにするため。色は currentColor で、置いた場所の文字色に従う。
  */
 
-export type IconName = 'rotateLeft' | 'rotateRight' | 'shrink' | 'grow' | 'down' | 'up' | 'trash';
+export type IconName = 'rotateLeft' | 'rotateRight' | 'shrink' | 'grow' | 'down' | 'up' | 'trash' | 'check';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -24,6 +24,8 @@ const PATHS: Record<IconName, string[]> = {
   down: ['M12 4v11', 'M8 11l4 4 4-4', 'M5 20h14'],
   up: ['M12 15V4', 'M8 8l4-4 4 4', 'M5 20h14'],
   trash: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13', 'M10 11v6M14 11v6'],
+  // 完了: 「終える」操作だと分かるように
+  check: ['M5 12.5l4.5 4.5L19 7.5'],
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

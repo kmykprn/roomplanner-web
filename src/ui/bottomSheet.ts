@@ -152,14 +152,15 @@ export function createBottomSheet(container: HTMLElement): void {
       ], (item) => formatHeight(item.position[1])),
     ];
 
-    // 削除は右下に寄せ、枠線だけの赤にする。塗りつぶしだと操作の中でいちばん目立ってしまう
+    // 削除は右下に寄せる（誤タップを避ける）。塗りつぶしの赤で「消せる」ことをはっきり出す。
+    // 赤はここ 1 つだけなので、青のステッパーと並んでも主従は崩れない
     const foot = document.createElement('div');
     foot.className = 'manage__foot';
     const remove = createButton('削除', () => {
       scene.remove(id);
       // 写真から作ったモデルの中身は、保管庫にも残っていなければここで捨てる
       releaseFurnitureAssets(selected);
-    }, 'is-quiet is-small manage__delete');
+    }, 'is-danger is-small manage__delete');
     remove.prepend(createIcon('trash'));
     foot.append(remove);
 
