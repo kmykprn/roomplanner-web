@@ -9,6 +9,7 @@
  * ボタン（囲みを閉じる・戻す）は ui/maskPanel.ts。どちらもここを呼ぶ。
  */
 
+import { THEME } from '@/config/theme';
 import { photoState, setMaskPolygon, setMaskUndoDepth, setMaskUrl } from '@/core/photoState';
 import type { PhotoPoint } from '@/core/photoView';
 import { saveMask } from '@/platform/backgroundStore';
@@ -26,6 +27,9 @@ const OUTLINE_SCREEN_FRACTION = 0.004;
 const CORNER_SCREEN_FRACTION = 0.012;
 /** 最初の角からこの距離（画面の幅に対する割合）以内をタップしたら、囲みを閉じたとみなす */
 const CLOSE_TAP_SCREEN_FRACTION = 0.04;
+
+/** 囲みを閉じるのに要る角の数。案内の文言（ui/maskPanel.ts）もこれを見る */
+export const MIN_CORNERS = 3;
 
 /** 「戻す」で戻れる回数。1回ぶんの控えはマスクの画素数と同じ大きさなので、増やしすぎない */
 const UNDO_LIMIT = 10;
@@ -148,12 +152,37 @@ function createMaskEditor(): MaskEditor {
         : previewContext.lineTo(corner.x, corner.y)
     );
     previewContext.stroke();
-    const radius = screenFractionToPixels(CORNER_SCREEN_FRACTION) / 2;
-    for (const corner of corners) {
+
+    // 閉じられる状態になったら、最後の点から最初の点へ破線を引き、最初の点を大きく色付きにする。
+    // 「最初の点をもう一度タップすると閉じる」を、文で言う前に絵で伝える
+    const closable = corners.length >= MIN_CORNERS;
+    const lineWidth = previewContext.lineWidth;
+    if (closable) {
+      const first = corners[0];
+      const last = corners[corners.length - 1];
+      previewContext.save();
+      previewContext.strokeStyle = THEME.primary;
+      previewContext.setLineDash([lineWidth * 3, lineWidth * 2]);
       previewContext.beginPath();
-      previewContext.arc(corner.x, corner.y, radius, 0, Math.PI * 2);
-      previewContext.fill();
+      previewContext.moveTo(last.x, last.y);
+      previewContext.lineTo(first.x, first.y);
+      previewContext.stroke();
+      previewContext.restore();
     }
+
+    const radius = screenFractionToPixels(CORNER_SCREEN_FRACTION) / 2;
+    corners.forEach((corner, index) => {
+      const emphasized = closable && index === 0;
+      previewContext.beginPath();
+      previewContext.arc(corner.x, corner.y, emphasized ? radius * 2 : radius, 0, Math.PI * 2);
+      previewContext.fillStyle = emphasized ? THEME.primary : '#fff';
+      previewContext.fill();
+      if (emphasized) {
+        previewContext.lineWidth = lineWidth * 1.5;
+        previewContext.stroke();
+        previewContext.lineWidth = lineWidth;
+      }
+    });
     return preview;
   }
 
@@ -224,7 +253,7 @@ function createMaskEditor(): MaskEditor {
     const corners = photoState.get().maskPolygon;
 
     // 3 つ以上打ってあって、最初の角の近くをタップしたら「閉じる」の合図
-    if (corners.length >= 3) {
+    if (corners.length >= MIN_CORNERS) {
       const first = corners[0];
       const distance = Math.hypot(point.x - first.x, point.y - first.y);
       if (distance <= CLOSE_TAP_SCREEN_FRACTION / photoState.get().view.scale) {
@@ -240,7 +269,7 @@ function createMaskEditor(): MaskEditor {
   function closePolygon(): void {
     const corners = photoState.get().maskPolygon.map(toPixel);
     setMaskPolygon([]);
-    if (corners.length < 3) {
+    if (corners.length < MIN_CORNERS) {
       schedulePreview();
       return;
     }
