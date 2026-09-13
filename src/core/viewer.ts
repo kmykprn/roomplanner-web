@@ -52,6 +52,24 @@ export interface Viewer {
   dispose(): void;
 }
 
+/** 画面いっぱいに描くときの縦の画角（度）。写真モードでも部屋モードでも同じ */
+const BASE_FOV = 50;
+
+/**
+ * 描画領域の高さに合わせた縦の画角。
+ *
+ * three.js は縦の画角を固定して描くので、1 m の物が画面に占める大きさは
+ * **描画領域の高さに比例する。** 写真モードは描画領域を写真の縦横比に
+ * 切り取るため、横長の写真を選ぶと高さが縮み、同じモデルが小さく見えていた
+ * （写真を外すと元に戻る）。切り取った分だけ画角も狭めれば、
+ * 画面いっぱいに描いたときと同じ大きさで描ける。
+ */
+function fovForDrawHeight(drawHeight: number, containerHeight: number): number {
+  const halfBase = THREE.MathUtils.degToRad(BASE_FOV / 2);
+  const halfFov = Math.atan(Math.tan(halfBase) * (drawHeight / containerHeight));
+  return THREE.MathUtils.radToDeg(halfFov * 2);
+}
+
 export function createViewer(container: HTMLElement): Viewer {
   // alpha: true は写真モードのため。背景を CSS で敷いた写真に透かす。
   // 部屋モードは scene.background を色で塗るので、見た目は変わらない
@@ -89,7 +107,7 @@ export function createViewer(container: HTMLElement): Viewer {
   // 部屋の中が実際の室内らしい明るさに見えるところまで上げている
   scene.environmentIntensity = 1.0;
 
-  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.1, 100);
 
   const frameCallbacks: Array<() => void> = [];
 
@@ -124,6 +142,7 @@ export function createViewer(container: HTMLElement): Viewer {
     }
 
     camera.aspect = drawWidth / drawHeight;
+    camera.fov = fovForDrawHeight(drawHeight, height);
     applyPhotoView();
   }
 
