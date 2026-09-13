@@ -115,22 +115,82 @@ export async function getJob(jobId: string): Promise<JobStatus> {
   return response.json();
 }
 
+/** サーバーが流してくる工程。詳細は Hunyuan3D-2GP の cutout/SPEC.md */
+export type CutoutEvent =
+  | { phase: 'received' }
+  | { phase: 'cutting'; expectedSeconds: number }
+  | { phase: 'finishing' }
+  | { phase: 'done'; png: string }
+  | { phase: 'failed'; error: string };
+
 /**
  * 写真を送って、家具だけを切り抜いた透過 PNG を受け取る。数秒で返る。
+ *
+ * 応答は工程を 1 行ずつ流す NDJSON。届いた行ごとに onEvent を呼び、最後の行の PNG を返す。
+ * 1 行目が届くまでの空白がコールドスタート（サーバーの起動待ち）で、その間も
+ * 呼び出し側は「起動を待っている」と出せる。
  *
  * 待つ上限を置く。サーバー側にも 60 秒の打ち切りがあるが、通信が途中で
  * 切れたときは応答そのものが来ないので、こちらでも切る
  */
-export async function createCutout(image: Blob): Promise<Blob> {
+export async function createCutout(
+  image: Blob,
+  onEvent: (event: CutoutEvent) => void
+): Promise<Blob> {
   const body = new FormData();
   body.append('image', image, 'photo.jpg');
 
   const response = await fetch(`${CUTOUT_BASE}/cutouts`, {
     method: 'POST',
-    headers: await authHeaders(),
+    headers: { ...(await authHeaders()), Accept: 'application/x-ndjson' },
     body,
     signal: AbortSignal.timeout(CUTOUT_TIMEOUT_MS),
   });
   if (!response.ok) throw toCutoutError(response);
-  return response.blob();
+
+  let result: Blob | null = null;
+  for await (const line of readLines(response)) {
+    const event = JSON.parse(line) as CutoutEvent;
+    if (event.phase === 'failed') throw new ApiError(500, event.error);
+    if (event.phase === 'done') {
+      result = base64ToBlob(event.png, 'image/png');
+      break;
+    }
+    onEvent(event);
+  }
+  if (!result) throw new ApiError(500, '切り抜きの結果が届きませんでした');
+  return result;
+}
+
+/**
+ * 応答の本文を、届いた順に 1 行ずつ返す。
+ *
+ * 本文を最後まで待ってから分けると、工程を流してもらう意味が無い。
+ * 読み進めながら改行で区切る。ストリームを読めない古いブラウザでは全文を待って分ける
+ */
+async function* readLines(response: Response): AsyncGenerator<string> {
+  if (!response.body) {
+    for (const line of (await response.text()).split('\n')) if (line) yield line;
+    return;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    buffered += decoder.decode(value, { stream: !done });
+    const lines = buffered.split('\n');
+    // 最後の要素は途中の行（まだ改行が来ていない）なので次に回す
+    buffered = lines.pop() ?? '';
+    for (const line of lines) if (line) yield line;
+    if (done) break;
+  }
+  if (buffered) yield buffered;
+}
+
+function base64ToBlob(base64: string, type: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
 }

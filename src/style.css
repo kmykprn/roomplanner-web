@@ -577,6 +577,50 @@ body {
   white-space: nowrap;
 }
 
+/* 置いてある家具の一覧（何も選んでいないとき） */
+.manage__list {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.manage__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 行の大半を「選ぶ」ボタンにする。押しやすく、どこが押せるか迷わない */
+.manage__pick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.manage__icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: #e6e2dc center / cover no-repeat;
+}
+
+.manage__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .manage__foot {
   display: flex;
   justify-content: flex-end;

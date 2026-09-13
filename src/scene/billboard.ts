@@ -127,16 +127,19 @@ function radialGradientTexture(): THREE.CanvasTexture {
  *
  * 向くのは水平方向だけ（Y 軸まわり）。上下まで向けると、見下ろしたときに板が寝て
  * 床に沈んで見える。親（家具の group）の向きは rotationY で決まっているので、
- * その分を差し引いてカメラの方向を出す。裏返し（左右反転）は親の向きから決める
+ * その分を差し引いてカメラの方向を出す。裏返し（左右反転）は親の向きから決める。
+ *
+ * 傾き（tilt）は Z 軸まわり。Euler の既定 XYZ は Ry × Rz の順に掛かるので、
+ * 「カメラを向いてから、その面の中で回す」になる
  */
-export function faceCamera(billboard: THREE.Object3D, camera: THREE.Camera): void {
+export function faceCamera(billboard: THREE.Object3D, camera: THREE.Camera, tilt = 0): void {
   const parent = billboard.parent;
   if (!parent) return;
   const position = new THREE.Vector3();
   parent.getWorldPosition(position);
   const toCamera = camera.position.clone().sub(position);
   const yaw = Math.atan2(toCamera.x, toCamera.z);
-  billboard.rotation.y = yaw - parent.rotation.y;
+  billboard.rotation.set(0, yaw - parent.rotation.y, tilt);
   // 「向き」が 90°〜270° の側なら裏返す。cos の符号で見れば範囲の折り返しを考えずに済む
   billboard.scale.x = Math.cos(parent.rotation.y) < 0 ? -1 : 1;
 }

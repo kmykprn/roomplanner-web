@@ -51,6 +51,8 @@ export function createFurnitureLayer(): FurnitureLayer {
 
       object.position.set(...item.position);
       object.rotation.y = item.rotationY;
+      // 板の傾き。板はカメラを向くときに毎フレーム向きを決め直すので、そこで一緒に効かせる
+      object.userData.tilt = item.tilt ?? 0;
       applySize(object, item.size);
 
       // 選択枠は子として持たせてあるので、表示を切り替えるだけでよい
@@ -70,7 +72,7 @@ export function createFurnitureLayer(): FurnitureLayer {
     faceCamera(camera) {
       for (const object of objects.values()) {
         const billboard = object.getObjectByName(BILLBOARD_NAME);
-        if (billboard) faceCamera(billboard, camera);
+        if (billboard) faceCamera(billboard, camera, object.userData.tilt as number);
       }
     },
   };
