@@ -157,6 +157,48 @@ body {
   height: 100%;
 }
 
+/* 写真が無いときの案内。キャンバスの真ん中に重ねる。指の操作はボタンだけが受け、他は下へ通す */
+.viewport__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+.viewport__empty[hidden] {
+  display: none;
+}
+.viewport__empty > * {
+  pointer-events: auto;
+}
+.viewport__empty .hint {
+  max-width: 22ch;
+}
+/* 写真の枠を思わせる印。画像は使わず線だけで描く */
+.viewport__empty-icon {
+  position: relative;
+  width: 56px;
+  height: 44px;
+  border: 2px dashed #7a8388;
+  border-radius: 8px;
+  opacity: 0.7;
+}
+.viewport__empty-icon::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 8px;
+  height: 12px;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #7a8388 0 50%, transparent 50%);
+  opacity: 0.6;
+}
+
 .sheet {
   flex: none;
   background: var(--surface);

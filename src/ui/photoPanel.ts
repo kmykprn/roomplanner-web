@@ -16,8 +16,8 @@ import { clearBackground, photoState, setBackground, setMasking } from '@/core/p
 
 /** 写真がまだ無いときの案内 */
 const IDLE_MESSAGE = '部屋の写真を選ぶと、その上に3Dモデルを置けます';
-/** 形式と大きさのどちらでも起こる。利用者にできることを先に出す */
-const FAILED_MESSAGE = '写真を読み込めませんでした。別の写真で試してください';
+/** 形式と大きさのどちらでも起こる。利用者にできることを先に出す。キャンバスの案内（ui/photoEmpty.ts）も使う */
+export const FAILED_MESSAGE = '写真を読み込めませんでした。別の写真で試してください';
 const MASK_NOTE = '指定した範囲は3Dモデルの手前に表示されます';
 
 export function createPhotoPanel(): HTMLElement {
