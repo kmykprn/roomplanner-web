@@ -24,9 +24,9 @@ import {
   type GenerationJob,
 } from '@/core/generation';
 import {
+  cutoutProgress,
   cutoutState,
   dismissCutoutError,
-  EXPECTED_SECONDS,
   startCutout,
   type CutoutJob,
 } from '@/core/cutout';
@@ -41,8 +41,9 @@ import {
 } from '@/core/modelLibrary';
 import { authState, redirectLogin } from '@/platform/auth';
 import { pickImage, pickImages } from '@/platform/picker';
-import { resolvePreview, savePreview } from '@/platform/previewCache';
+import { savePreview } from '@/platform/previewCache';
 import { createLoginPanel } from '@/ui/loginPanel';
+import { createPreviewImage } from '@/ui/previewImage';
 import { createProgressRing } from '@/ui/progressRing';
 
 export interface ModelPanelOptions {
@@ -302,43 +303,6 @@ function syncThumbs<T extends { id: string }>(
   return ordered;
 }
 
-/**
- * アイコンの画像を、キーが変わったときだけ読み直す。Blob URL は次の読み直しか dispose で解放する。
- * 作ったモデルのサムネイルと、編集の姿のアイコンで同じものを使う
- */
-function createPreviewImage(target: HTMLElement): { show(key: string | null): void; dispose(): void } {
-  let shownKey: string | null | undefined;
-  let url: string | null = null;
-  let disposed = false;
-  function release(): void {
-    if (url) URL.revokeObjectURL(url);
-    url = null;
-    target.style.backgroundImage = '';
-  }
-  return {
-    show(key) {
-      if (key === shownKey) return;
-      shownKey = key;
-      release();
-      if (!key) return;
-      void resolvePreview(key).then((resolved) => {
-        if (!resolved) return;
-        // 待っている間に別のキーへ変わったか、捨てられたなら使わない
-        if (disposed || shownKey !== key) {
-          URL.revokeObjectURL(resolved);
-          return;
-        }
-        url = resolved;
-        target.style.backgroundImage = `url("${resolved}")`;
-      });
-    },
-    dispose() {
-      disposed = true;
-      release();
-    },
-  };
-}
-
 function createModelThumb(
   model: GeneratedModel,
   place: (model: GeneratedModel) => void,
@@ -527,11 +491,11 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
 }
 
 /**
- * 切り抜き中の家具。数秒で終わるので、円は目安の秒数で 9 割まで進めて待つ。
- * 3D の作成のように工程が返ってこないため、経過時間しか手掛かりが無い
+ * 切り抜き中の家具。円はサーバーの工程と見込み秒数で進む（core/cutout.ts の cutoutProgress）。
+ * 1 行目が届くまでは「起動を待っています」で、コールドスタートを嘘の円で隠さない
  */
 function createCutoutThumb(job: CutoutJob): ThumbNode<CutoutJob> {
-  const thumb = createThumb(describeCutout(job));
+  const thumb = createThumb(cutoutProgress(job).label);
   thumb.button.disabled = true;
   thumb.image.classList.add('is-running');
   const ring = createProgressRing();
@@ -539,26 +503,13 @@ function createCutoutThumb(job: CutoutJob): ThumbNode<CutoutJob> {
 
   function update(current: CutoutJob): void {
     if (current.previewUrl) thumb.image.style.backgroundImage = `url("${current.previewUrl}")`;
-    thumb.name.textContent = describeCutout(current);
-    const elapsed = (Date.now() - current.startedAt) / 1000;
-    ring.update(Math.min(elapsed / EXPECTED_SECONDS, 1) * 0.9, '');
+    const progress = cutoutProgress(current);
+    thumb.name.textContent = current.phase === 'failed' ? '切り抜けませんでした' : progress.label;
+    ring.update(progress.ratio, '');
   }
   update(job);
   // 元写真の Blob URL は切り抜きの状態が持っているので、ここでは解放しない
   return { element: thumb.element, update, dispose() {} };
-}
-
-function describeCutout(job: CutoutJob): string {
-  switch (job.phase) {
-    case 'uploading':
-      return '送っています';
-    case 'cutting':
-      return '切り抜いています';
-    case 'saving':
-      return '保存しています';
-    case 'failed':
-      return '切り抜けませんでした';
-  }
 }
 
 /** 作成中の 3D モデル。円で進み具合を出す。まだ押しても何も起きない */
