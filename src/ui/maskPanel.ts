@@ -5,11 +5,14 @@
  * 写真がモデルの上にかぶさるので、後ろへ動かしたモデルが隠れる。
  * 「完了」で背景タブの通常の姿に戻る。
  *
- *   1 行目 … 案内。**今なにをすればいいか**を、道具と進み具合に合わせて 1 文で出す。
+ *   1 行目 … 題「手前の範囲」と「完了」。完了は「この画面を出る」操作なので、道具や設定と
+ *            同じ段に混ぜず、iOS の画面右上と同じ位置に文字だけの青で置く
+ *   2 行目 … 案内。**今なにをすればいいか**を、道具と進み具合に合わせて 1 文で出す。
  *            「なぜ」は背景タブの行の下（ui/photoPanel.ts）に任せ、ここは「どうするか」だけ
- *   2 行目 … 道具の切り替えと、どの道具でも使う「戻す」「全部消す」。
- *            道具の名前は動作で書く（「点をつないで囲む」）。「角」は伝わらなかった
- *   3 行目 … 道具ごとの設定（高さは固定。入れ替わっても写真が伸び縮みしない）
+ *   3 行目 … 道具の切り替えだけ。名前は動作で書く（「点をつないで囲む」）。「角」は伝わらなかった
+ *   4 行目 … 道具ごとの設定（細い/太い、囲みを閉じる）と、どの道具でも使う「戻す」「全部消す」。
+ *            戻す・全部消すは 1 つの組にして、どの道具でも同じ場所に出す。
+ *            高さは固定（入れ替わっても写真が伸び縮みしない）
  *
  * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
@@ -66,19 +69,27 @@ export function createMaskPanel(): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'mask';
 
-  const guide = document.createElement('p');
+  // 1 行目。「完了」は指定を終えて背景タブの通常の姿に戻る
+  const head = document.createElement('div');
+  head.className = 'mask__head';
+  const title = document.createElement('span');
+  title.className = 'mask__title';
+  title.textContent = '手前の範囲';
+  const doneButton = createButton('完了', () => setMasking(false), 'button is-text is-small');
+  head.append(title, doneButton);
 
   // 2 行目
+  const guide = document.createElement('p');
+
+  // 3 行目
   const toolbar = document.createElement('div');
   toolbar.className = 'mask__toolbar';
   const toolSwitch = createSegment(
     TOOLS.map(([kind, label]) => [label, () => setMaskTool({ kind })])
   );
-  const undoButton = createButton('戻す', () => maskEditor.undo(), 'button is-quiet is-small');
-  const clearButton = createButton('全部消す', clearMask, 'button is-quiet is-small');
-  toolbar.append(toolSwitch.element, undoButton, clearButton);
+  toolbar.append(toolSwitch.element);
 
-  // 3 行目
+  // 4 行目
   const row = document.createElement('div');
   row.className = 'mask__row';
   const widthSwitch = createSegment([
@@ -90,13 +101,17 @@ export function createMaskPanel(): HTMLElement {
     () => maskEditor.closePolygon(),
     'button is-small'
   );
-  // 「完了」は右端。指定を終えて背景タブの通常の姿に戻る
   const spacer = document.createElement('span');
   spacer.className = 'mask__spacer';
-  const doneButton = createButton('完了', () => setMasking(false), 'button is-small');
-  row.append(widthSwitch.element, closeButton, spacer, doneButton);
+  // 戻す・全部消すは同じ高さ・同じ枠の 1 つの組にする。ばらばらに置くと道具の段を圧迫していた
+  const editPair = document.createElement('div');
+  editPair.className = 'pair';
+  const undoButton = createButton('戻す', () => maskEditor.undo(), 'button');
+  const clearButton = createButton('全部消す', clearMask, 'button');
+  editPair.append(undoButton, clearButton);
+  row.append(widthSwitch.element, closeButton, spacer, editPair);
 
-  panel.append(guide, toolbar, row);
+  panel.append(head, guide, toolbar, row);
 
   function render(): void {
     const { backgroundStatus, maskTool, maskUrl, maskPolygon, maskUndoDepth } = photoState.get();
