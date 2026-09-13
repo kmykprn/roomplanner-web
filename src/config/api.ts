@@ -75,7 +75,7 @@ export const FIREBASE_CONFIG = {
 export const IS_CONFIGURED = FIREBASE_CONFIG.apiKey.length > 0;
 
 /**
- * 状態を見に行く間隔。生成が約5分（実測284秒）かかるので、細かく叩く意味がない。
+ * 状態を見に行く間隔。生成が約4分（実測226秒）かかるので、細かく叩く意味がない。
  *
  * 工程ごとの所要時間は core/progress.ts にある（そちらがサーバーの `phase` と
  * 対になっているので、時間の話は一箇所にまとめてある）
