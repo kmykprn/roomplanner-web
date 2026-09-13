@@ -24,6 +24,7 @@ import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
+import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
 import { photoState, photoScene } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
@@ -55,6 +56,8 @@ restorePhoto();
 restoreModelLibrary();
 
 const viewer = createViewer(viewport);
+// 写真が無いときの案内。キャンバスと写真の層の上に重ねるので、viewer のあとに足す
+viewport.append(createPhotoEmpty());
 const { room } = appState.get();
 
 // --- シーンを組み立てる ---
