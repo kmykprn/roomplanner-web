@@ -29,18 +29,19 @@ interface Step {
 }
 
 const STEPS: readonly Step[] = [
-  { phase: null, seconds: 25, label: '順番を待っています' },
-  { phase: 'preparing', seconds: 15, label: '写真を読み込んでいます' },
+  { phase: null, seconds: 10, label: '順番を待っています' },
+  // 重みのダウンロード（10.9GB、15 秒）と import を含む
+  { phase: 'preparing', seconds: 50, label: '写真を読み込んでいます' },
   // ここから3つは同じ文言にしてある。利用者から見ればどれも「形ができるのを
   // 待っている」時間で、読み込みと生成の区別に意味が無いため。
   // 工程を分けたままにするのは、所要時間が違い、円の進み方が変わるから
-  { phase: 'loading_texture_model', seconds: 185, label: '形を作っています' },
-  { phase: 'loading_shape_model', seconds: 78, label: '形を作っています' },
-  { phase: 'generating_shape', seconds: 30, label: '形を作っています' },
-  { phase: 'generating_texture', seconds: 169, label: '色と模様をつけています' },
+  { phase: 'loading_texture_model', seconds: 75, label: '形を作っています' },
+  { phase: 'loading_shape_model', seconds: 5, label: '形を作っています' },
+  { phase: 'generating_shape', seconds: 26, label: '形を作っています' },
+  { phase: 'generating_texture', seconds: 106, label: '色と模様をつけています' },
   // 成果物の保存は数秒だが、終わったことに画面が気づくのは次に見に行くとき
   // （最大15秒あと）。その待ちも含めておかないと、円が最後で長く止まって見える
-  { phase: 'finishing', seconds: 20, label: 'もうすぐできあがります' },
+  { phase: 'finishing', seconds: 12, label: 'もうすぐできあがります' },
 ];
 
 /** 全工程の合計。円の持ち分の分母になる */

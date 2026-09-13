@@ -2,14 +2,14 @@
  * 「家具」タブ。置ける家具を並べ、押すといまのモード（部屋／写真）に置く。
  *
  *   1 段目 … 「＋ 写真から家具を作る」。写真から家具だけを切り抜く（数秒）。
- *            その下に、時間のかかる 3D モデルの作成（約 9 分）への入口を小さく置く。
+ *            その下に、時間のかかる 3D モデルの作成（約 5 分）への入口を小さく置く。
  *            どちらも匿名のままなら、写真を選ぶ前にログインを求める（ui/loginPanel.ts）
  *   2 段目 … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *            右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。× で即消せるのは
  *            簡単すぎたので、削除は編集の中で二段階にした
  *   3 段目 … 基本の家具（椅子・テーブル…）
  *
- * 3D 生成は約 8 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
+ * 3D 生成は約 5 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
  * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
  */
 
@@ -67,7 +67,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
    */
   const generate3dButton = document.createElement('button');
   generate3dButton.className = 'button is-text is-small lib__generate-3d';
-  generate3dButton.textContent = '3D モデルとして作る（約 9 分）';
+  generate3dButton.textContent = '3D モデルとして作る（約 5 分）';
   generate3dButton.addEventListener('click', () => void pickAndStart(startGeneration));
 
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
@@ -231,7 +231,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   new MutationObserver(render).observe(loginPanel.element, { attributeFilter: ['hidden'] });
 
   // 待っている間、状態そのものは変わらないので購読だけでは経過時間が止まる。
-  // 8分待たせる画面で数字が動かないと、固まったように見える
+  // 5分待たせる画面で数字が動かないと、固まったように見える
   setInterval(() => {
     if (
       generationState.get().jobs.some((job) => job.phase === 'running') ||
