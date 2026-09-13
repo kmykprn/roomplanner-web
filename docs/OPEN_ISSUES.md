@@ -16,6 +16,12 @@
 
 ### 1. OAuth 同意画面が「テスト中」のまま
 
+（内容は変わらない。以下は 2026-09-13 時点の補足）
+
+`authDomain` を `kmykprn.github.io` に変えたことで、Google の同意画面に出る
+「〜にログイン」の行は `project-….firebaseapp.com` ではなくアプリのドメインになる見込み。
+本番公開の前に実機で見え方を確かめる。
+
 Google ログインは使える状態になっている（プロバイダ有効、承認済みドメインに
 `kmykprn.github.io` を追加済み、認証URIの発行まで実機で確認済み）。ただし
 **公開ステータスが「テスト中」**なので、**テストユーザーに登録したアカウントしか
@@ -51,6 +57,32 @@ OAuth 同意画面ブランディングの承認済みドメイン（同意画�
 > 公開ステータスとテストユーザーの追加は、**どちらも API が無い**。
 > Google Auth Platform のコンソールでしか操作できない。
 > https://console.cloud.google.com/auth/audience?project=project-db31f07b-2895-48b8-8bb
+
+
+### 2. 自前配信している Firebase 認証ヘルパーが古くなる
+
+**iOS Safari でログインが止まる問題の根本原因は `authDomain` が別オリジンだったこと**
+（`project-….firebaseapp.com` ≠ `kmykprn.github.io`）。Safari 16.1+ などはサードパーティの
+保存領域を分断するため、ポップアップもリダイレクトも結果を持ち帰れない。
+「`firebaseapp.com にログイン` と表示されて格好が悪い」問題も同じ原因だった。
+
+対処として、Firebase が配るサインイン用ヘルパー 7 ファイルを
+https://github.com/kmykprn/kmykprn.github.io の `/__/auth/` に**そのまま写して**配信し、
+`authDomain` をアプリと同じオリジンにした（`src/config/api.ts`）。
+根拠: https://firebase.google.com/docs/auth/web/redirect-best-practices
+
+**残る運用上の弱点:**
+
+- ヘルパーは取得時点のスナップショット。Google 側の修正（脆弱性対応を含む）は、
+  同リポジトリの `Sync Firebase auth helper` ワークフローが**毎月1日に取り直す**。
+  差分が無くても `LAST_CHECKED` を更新してコミットし、GitHub がスケジュールを止める
+  「60 日間コミットなし」を避けている
+- **Google がヘルパーの構成を変えて 7 ファイルでは足りなくなると、ログインは黙って失敗する。**
+  自動化では検知できない。**月に一度は実機で Google ログインを試す**こと
+- Apple サインインと SAML はこの方法では動かない（使っていない）
+
+戻したくなったら `authDomain` を `project-db31f07b-2895-48b8-8bb.firebaseapp.com` に戻すだけ。
+Google 側の配信は生きている。
 
 ---
 

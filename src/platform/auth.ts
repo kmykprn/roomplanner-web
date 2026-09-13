@@ -16,6 +16,16 @@
  * signInWithPopup で入り直すと別の uid になって全部が切り離されるので、
  * 1 台目ではそちらを使わない（分岐は googleLink.ts）。
  *
+ * ## iOS はポップアップではなくリダイレクト
+ *
+ * iOS Safari はポップアップの結果を持ち帰れず「ログインしています…」のまま止まる
+ * （実機で再現）。iOS では linkWithRedirect で Google へ遷移し、戻ってきた起動時に
+ * getRedirectResult で結果を受け取る。**匿名ログインより先に受け取る**こと。先に
+ * signInAnonymously が走ると、戻ってきた昇格の結果を別の新しいアカウントで上書きする。
+ *
+ * リダイレクトはページを読み直すので、選んでいた写真は持ち越せない。戻ってきたことを
+ * redirectLogin で画面に伝え、写真を選び直してもらう。
+ *
  * ## 「今のユーザー」を追い続ける
  *
  * 2 台目で既存のアカウントへログインし直すと、Firebase の現在ユーザーは別の
@@ -26,17 +36,20 @@
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   linkWithPopup,
+  linkWithRedirect,
   onAuthStateChanged,
   signInAnonymously,
   signInWithCredential,
   signInWithPopup,
+  type Auth,
   type User,
 } from 'firebase/auth';
 import { createStore } from '@/core/store';
 import { FIREBASE_CONFIG, IS_CONFIGURED } from '@/config/api';
-import { linkOrSignIn } from '@/platform/googleLink';
+import { finishRedirect, linkOrSignIn, shouldUseRedirect } from '@/platform/googleLink';
 
 const NOT_CONFIGURED = 'Firebase の設定が入っていません（VITE_FIREBASE_API_KEY）';
 
@@ -48,6 +61,18 @@ export interface AuthState {
   anonymous: boolean;
   error: string | null;
 }
+
+export interface RedirectLoginState {
+  /** none: リダイレクト経由の起動ではない / signed-in: 戻ってきてログインできた / failed: 戻ってきたが失敗 */
+  outcome: 'none' | 'signed-in' | 'failed';
+  error: string | null;
+}
+
+/**
+ * リダイレクトでのログインから戻ってきたときの結果。iOS でだけ入る。
+ * ページを読み直しているので選んでいた写真は無く、画面はこれを見て選び直しを促す
+ */
+export const redirectLogin = createStore<RedirectLoginState>({ outcome: 'none', error: null });
 
 /** 画面が購読する認証の状態。ログインの要否の表示などに使う */
 export const authState = createStore<AuthState>({
@@ -69,6 +94,14 @@ let currentUser: User | null = null;
 let waiters: Array<{ resolve(user: User): void; reject(error: Error): void }> = [];
 
 if (auth) {
+  void start(auth);
+}
+
+async function start(auth: Auth): Promise<void> {
+  // リダイレクトから戻ってきた結果を**最初に**受け取る。
+  // これより先に匿名ログインが走ると、昇格した本人ではなく新しい匿名アカウントを掴んでしまう
+  await receiveRedirect(auth);
+
   // onAuthStateChanged は「保存済みのログイン状態を復元し終えた」時点でも呼ばれる。
   // 先に signInAnonymously を呼ぶと復元前の状態で新しいアカウントを作ってしまうため、
   // 通知を待ってから、未ログインのときだけ作る
@@ -79,6 +112,44 @@ if (auth) {
       else signInAnonymously(auth).catch(fail);
     },
     fail
+  );
+}
+
+/** リダイレクトでのログインから戻ってきたなら、その結果を採り入れる。そうでなければ何もしない */
+async function receiveRedirect(auth: Auth): Promise<void> {
+  let result: unknown = null;
+  let error: unknown = null;
+  try {
+    result = await getRedirectResult(auth);
+  } catch (caught) {
+    error = caught;
+  }
+  try {
+    const outcome = await finishRedirect(
+      {
+        credentialFromError: credentialFromError,
+        signInWithCredential: async (credential) => {
+          await signInWithCredential(auth, credential);
+        },
+      },
+      result,
+      error
+    );
+    if (outcome === 'linked' || outcome === 'signed-in-existing') {
+      redirectLogin.set({ outcome: 'signed-in', error: null });
+    }
+    // 'none'（リダイレクト経由ではない）と 'cancelled' は何も出さない
+  } catch (failure) {
+    redirectLogin.set({
+      outcome: 'failed',
+      error: failure instanceof Error ? failure.message : 'ログインできませんでした',
+    });
+  }
+}
+
+function credentialFromError(error: unknown) {
+  return GoogleAuthProvider.credentialFromError(
+    error as Parameters<typeof GoogleAuthProvider.credentialFromError>[0]
   );
 }
 
@@ -136,12 +207,20 @@ export async function ensureRegistered(): Promise<void> {
   await waitForUser();
 }
 
+/** この端末ではリダイレクトで昇格するか（iOS）。画面が文言を変えるのにも使う */
+export function usesRedirectLogin(): boolean {
+  return shouldUseRedirect(navigator.userAgent, navigator.maxTouchPoints ?? 0, navigator.platform);
+}
+
 /**
  * Google に紐づける。**直接のクリックから呼ぶこと**（await を挟むとポップアップが塞がれる）。
  *
  * 1 台目: 匿名アカウントが昇格し、uid はそのまま。
  * 2 台目: その Google の既存アカウントへログインし直し、uid はそちらになる。
- * 利用者がポップアップを閉じたら 'cancelled'。それ以外の失敗は理由を持った Error
+ * 利用者がポップアップを閉じたら 'cancelled'。それ以外の失敗は理由を持った Error。
+ *
+ * iOS ではリダイレクトで Google へ遷移するので、この関数は**戻らない**。
+ * 結果は戻ってきた起動時に receiveRedirect() が受け取る
  */
 export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
   if (!auth) throw new Error(NOT_CONFIGURED);
@@ -149,21 +228,22 @@ export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
   if (!user.isAnonymous) return 'signed-in';
 
   const provider = new GoogleAuthProvider();
-  const outcome = await linkOrSignIn({
-    link: async () => {
-      await linkWithPopup(user, provider);
+  const outcome = await linkOrSignIn(
+    {
+      link: async () => {
+        await linkWithPopup(user, provider);
+      },
+      linkWithRedirect: () => linkWithRedirect(user, provider),
+      credentialFromError,
+      signInWithCredential: async (credential) => {
+        await signInWithCredential(auth, credential);
+      },
+      signInWithPopup: async () => {
+        await signInWithPopup(auth, provider);
+      },
     },
-    credentialFromError: (error) =>
-      GoogleAuthProvider.credentialFromError(
-        error as Parameters<typeof GoogleAuthProvider.credentialFromError>[0]
-      ),
-    signInWithCredential: async (credential) => {
-      await signInWithCredential(auth, credential);
-    },
-    signInWithPopup: async () => {
-      await signInWithPopup(auth, provider);
-    },
-  });
+    usesRedirectLogin()
+  );
   if (outcome === 'cancelled') return 'cancelled';
 
   // 昇格では同じユーザーのまま中身が変わるので onAuthStateChanged が鳴らない。
