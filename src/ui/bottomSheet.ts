@@ -11,6 +11,7 @@
 import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createPreviewImage } from '@/ui/previewImage';
+import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel } from '@/ui/photoPanel';
 import { createIcon, type IconName } from '@/ui/icons';
 import { createRepeatButton } from '@/ui/repeatButton';
@@ -166,6 +167,8 @@ export function createBottomSheet(container: HTMLElement): void {
     // 赤はここ 1 つだけなので、青のステッパーと並んでも主従は崩れない
     const foot = document.createElement('div');
     foot.className = 'manage__foot';
+    // 商品ページから取り込んだ家具なら、ここから買いに行ける（削除の左に置く）
+    if (selected.product) foot.append(createProductLink(selected.product));
     const remove = createButton('削除', () => {
       scene.remove(id);
       // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる

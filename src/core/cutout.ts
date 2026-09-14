@@ -11,13 +11,14 @@
 
 import { createStore } from '@/core/store';
 import { shrinkForUpload } from '@/core/imageResize';
-import { ApiError, createCutout, type CutoutEvent } from '@/platform/api';
+import { ApiError, createCutout, importProduct, type CutoutEvent } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
 import { addModel, modelNameFrom } from '@/core/modelLibrary';
 import { saveCutout } from '@/platform/cutoutCache';
 import { deletePreview, savePreview } from '@/platform/previewCache';
+import type { ProductInfo } from '@/config/furniture';
 
-export type CutoutPhase = 'uploading' | 'cutting' | 'saving' | 'failed';
+export type CutoutPhase = 'importing' | 'uploading' | 'cutting' | 'saving' | 'failed';
 
 /** サーバーが流してくる工程のうち、途中のもの（done / failed は phase に畳む） */
 export type CutoutServerPhase = 'received' | 'cutting' | 'finishing';
@@ -74,6 +75,7 @@ export function cutoutProgress(job: CutoutJob, now = Date.now()): CutoutProgress
   const elapsed = Math.max(0, (now - job.phaseStartedAt) / 1000);
   const within = (seconds: number): number => Math.min(elapsed / seconds, 1);
 
+  if (job.phase === 'importing') return { ratio: 0, label: '商品を取り込んでいます' };
   if (job.phase === 'uploading') return { ratio: 0, label: '送っています' };
   if (job.phase === 'saving') {
     return { ratio: SHARE.starting + SHARE.cutting + SHARE.finishing, label: '保存しています' };
@@ -136,7 +138,61 @@ export async function startCutout(files: File[]): Promise<void> {
   await Promise.all(jobs.map((job, index) => submit(job.id, files[index])));
 }
 
-async function submit(id: string, file: File): Promise<void> {
+/**
+ * 楽天の商品ページの URL から取り込む。
+ *
+ * サーバーが商品情報と画像を返すので、その画像を写真と同じ切り抜きの流れに通す。
+ * 寸法が取れていれば置くときの大きさに、商品情報は「楽天で見る」に使う
+ */
+export async function startProductImport(url: string): Promise<void> {
+  const id = crypto.randomUUID();
+  const job: CutoutJob = {
+    id,
+    fileName: '商品',
+    previewKey: null,
+    previewUrl: null,
+    phase: 'importing',
+    serverPhase: null,
+    expectedSeconds: null,
+    phaseStartedAt: Date.now(),
+    error: null,
+  };
+  cutoutState.set({ jobs: [...cutoutState.get().jobs, job] });
+  try {
+    await ensureRegistered();
+    const product = await importProduct(url);
+    updateJob(id, { fileName: product.name });
+    const file = new File([product.image], 'product.jpg', { type: product.image.type });
+    await submit(id, file, {
+      name: productName(product.name),
+      size: product.size ? [product.size.w, product.size.h, product.size.d] : undefined,
+      product: {
+        shop: product.shop,
+        name: product.name,
+        price: product.price,
+        url: product.url,
+        affiliateUrl: product.affiliateUrl,
+      },
+    });
+  } catch (error) {
+    updateJob(id, { phase: 'failed', error: toMessage(error) });
+  }
+}
+
+/** 商品名は長い（検索用の言葉が並ぶ）ので、一覧に出す名前は先頭だけにする */
+function productName(name: string): string {
+  const head = name.replace(/【[^】]*】/g, ' ').trim().split(/\s+/).slice(0, 3).join(' ');
+  return (head || name).slice(0, 24) || '商品';
+}
+
+/** 保管庫に入れるときの、写真からは分からない情報（商品の取り込みだけが持つ） */
+interface SubmitExtras {
+  name?: string;
+  size?: [number, number, number];
+  product?: ProductInfo;
+}
+
+async function submit(id: string, file: File, extras: SubmitExtras = {}): Promise<void> {
   try {
     const preview = await savePreview(id, file);
     if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
@@ -153,10 +209,12 @@ async function submit(id: string, file: File): Promise<void> {
     const job = cutoutState.get().jobs.find((item) => item.id === id);
     addModel({
       id: crypto.randomUUID(),
-      name: modelNameFrom(job?.fileName ?? ''),
+      name: extras.name ?? modelNameFrom(job?.fileName ?? ''),
       modelKey: null,
       imageKey: key,
       previewKey: icon?.key ?? job?.previewKey ?? null,
+      size: extras.size,
+      product: extras.product,
       createdAt: Date.now(),
     });
     // 元写真のプレビューは切り抜いている間だけのもの。アイコンが別に作れたなら捨てる

@@ -28,8 +28,11 @@ import {
   cutoutState,
   dismissCutoutError,
   startCutout,
+  startProductImport,
   type CutoutJob,
 } from '@/core/cutout';
+import { createProductForm } from '@/ui/productForm';
+import { createProductLink } from '@/ui/productLink';
 import {
   GENERATED_SIZE,
   PLACEHOLDER_COLOR,
@@ -70,6 +73,24 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   generate3dButton.textContent = '3D モデルとして作る（約 3 分）';
   generate3dButton.addEventListener('click', () => void pickAndStart(startGeneration));
 
+  /**
+   * 商品ページの URL から作る。楽天の商品ページを貼ると、画像を取って切り抜き、
+   * 寸法が分かれば実寸で置ける。押すと URL の入力欄が出る（ログインは写真と同じく先に求める）
+   */
+  const productButton = document.createElement('button');
+  productButton.type = 'button';
+  productButton.className = 'button is-quiet lib__product';
+  productButton.textContent = '商品の URL から作る';
+  const productForm = createProductForm((url) => void startProductImport(url));
+  productButton.addEventListener('click', () => {
+    signedInNote.hidden = true;
+    if (authState.get().anonymous) {
+      loginPanel.open();
+      return;
+    }
+    productForm.open();
+  });
+
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
   async function pickAndStart(start: (files: File[]) => Promise<void>): Promise<void> {
     signedInNote.hidden = true;
@@ -96,7 +117,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const signedInNote = document.createElement('p');
   signedInNote.className = 'hint';
   signedInNote.hidden = true;
-  generateRow.append(generateButton, generate3dButton, loginHint, authNote, signedInNote);
+  generateRow.append(generateButton, generate3dButton, productButton, productForm.element, loginHint, authNote, signedInNote);
 
   // ログインを求めるパネル。作成ボタンの場所と入れ替わりで出る
   const loginPanel = createLoginPanel(() => showSignedIn());
@@ -160,11 +181,13 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     place({
       typeId: 'generated',
       name: model.name,
-      size: [...GENERATED_SIZE],
+      // 商品ページから寸法が取れていれば実寸。無ければいちばん長い辺 1m
+      size: model.size ? [...model.size] : [...GENERATED_SIZE],
       color: PLACEHOLDER_COLOR,
       modelUrl: model.modelKey ?? undefined,
       imageUrl: model.imageKey ?? undefined,
       sourceImageKey: model.previewKey ?? undefined,
+      product: model.product,
     });
   }
 
@@ -404,6 +427,17 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   nameInput.maxLength = 40;
   nameField.append(nameLabel, nameInput);
 
+  // 商品ページから取り込んだ家具なら、店名・寸法と「楽天で見る」を出す
+  const productField = document.createElement('div');
+  productField.className = 'field';
+  const productLabel = document.createElement('span');
+  productLabel.className = 'field__label';
+  productLabel.textContent = '商品';
+  const productNote = document.createElement('p');
+  productNote.className = 'hint';
+  const productLinkSlot = document.createElement('div');
+  productField.append(productLabel, productNote, productLinkSlot);
+
   const actions = document.createElement('div');
   actions.className = 'edit__actions';
   const save = document.createElement('button');
@@ -468,7 +502,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   confirmButtons.append(cancel, doRemove);
   confirm.append(confirmRow, confirmNote, confirmButtons);
 
-  element.append(head, iconRow, nameField, actions, divider, remove, confirm);
+  element.append(head, iconRow, nameField, productField, actions, divider, remove, confirm);
 
   function open(model: GeneratedModel): void {
     current = model;
@@ -476,6 +510,13 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
     confirmText.textContent = `「${model.name}」を削除します。よろしいですか？`;
+    productField.hidden = !model.product;
+    if (model.product) {
+      productNote.textContent = model.size
+        ? `${model.product.shop} ・ 幅 ${(model.size[0] * 100).toFixed(0)} × 奥行 ${(model.size[2] * 100).toFixed(0)} × 高さ ${(model.size[1] * 100).toFixed(0)} cm`
+        : `${model.product.shop} ・ 寸法は取れませんでした（操作タブで大きさを合わせてください）`;
+      productLinkSlot.replaceChildren(createProductLink(model.product));
+    }
     confirm.hidden = true;
     remove.hidden = false;
     element.hidden = false;

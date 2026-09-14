@@ -30,7 +30,7 @@ import { photoScene } from '@/core/photoState';
 import { deleteModel } from '@/platform/modelCache';
 import { deleteCutout } from '@/platform/cutoutCache';
 import { deletePreview } from '@/platform/previewCache';
-import type { PlacedFurniture } from '@/config/furniture';
+import type { PlacedFurniture, ProductInfo } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.models';
 
@@ -55,6 +55,13 @@ export interface GeneratedModel {
   imageKey: string | null;
   /** アイコンの縮小画像（previewCache のキー）。作れなかったときは null */
   previewKey: string | null;
+  /**
+   * 置くときの大きさ [幅, 高さ, 奥行き]（m）。商品ページから寸法が取れたときだけ。
+   * 無ければ GENERATED_SIZE（いちばん長い辺 1m）
+   */
+  size?: [number, number, number];
+  /** 商品ページから取り込んだ家具なら、買うための情報 */
+  product?: ProductInfo;
   createdAt: number;
 }
 
