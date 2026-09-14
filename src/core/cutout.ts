@@ -161,7 +161,8 @@ export async function startProductImport(url: string): Promise<void> {
   try {
     await ensureRegistered();
     const product = await importProduct(url);
-    updateJob(id, { fileName: product.name });
+    // 一覧や失敗表示に出す名前。商品名そのものは検索用の言葉が並んで長い
+    updateJob(id, { fileName: productName(product.name) });
     const file = new File([product.image], 'product.jpg', { type: product.image.type });
     await submit(id, file, {
       name: productName(product.name),
@@ -228,10 +229,14 @@ async function submit(id: string, file: File, extras: SubmitExtras = {}): Promis
 
 /**
  * サーバーが言ってきた工程を覚える。工程が変わったときだけ基準時刻を更新する
- * （received → cutting は間を置かず続けて届くので、cutting の時刻を基準にする）
+ * （received → cutting は間を置かず続けて届くので、cutting の時刻を基準にする）。
+ * 同じ工程の行は 2 秒ごとに繰り返し届く（接続を黙らせないためのもの）ので、
+ * それでは基準時刻を動かさない。動かすと円が 2 秒ごとに戻ってしまう
  */
 function rememberProgress(id: string, event: CutoutEvent): void {
   if (event.phase === 'done' || event.phase === 'failed') return;
+  const job = cutoutState.get().jobs.find((item) => item.id === id);
+  if (job?.serverPhase === event.phase) return;
   updateJob(id, {
     serverPhase: event.phase,
     expectedSeconds: event.phase === 'cutting' ? event.expectedSeconds : undefined,
