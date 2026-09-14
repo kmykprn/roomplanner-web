@@ -169,10 +169,16 @@ async function toProductError(response: Response): Promise<ApiError> {
 /** サーバーが流してくる工程。詳細は Hunyuan3D-2GP の cutout/SPEC.md */
 export type CutoutEvent =
   | { phase: 'received' }
-  | { phase: 'cutting'; expectedSeconds: number }
-  | { phase: 'finishing' }
+  | { phase: 'cutting'; expectedSeconds: number; elapsed?: number }
+  | { phase: 'finishing'; elapsed?: number }
   | { phase: 'done'; png: string }
   | { phase: 'failed'; error: string };
+
+/** 応答をどこまで読めたか。done が来ずに終わったとき、原因を絞る手がかりとして文言に添える */
+interface ReadStats {
+  chunks: number;
+  bytes: number;
+}
 
 /**
  * 写真を送って、家具だけを切り抜いた透過 PNG を受け取る。数秒で返る。
@@ -182,7 +188,10 @@ export type CutoutEvent =
  * 呼び出し側は「起動を待っている」と出せる。
  *
  * 待つ上限を置く。サーバー側にも 60 秒の打ち切りがあるが、通信が途中で
- * 切れたときは応答そのものが来ないので、こちらでも切る
+ * 切れたときは応答そのものが来ないので、こちらでも切る。
+ *
+ * 同じ工程の行が 2 秒ごとに繰り返し届く（接続を黙らせないため）。onEvent は
+ * その繰り返しごとに呼ぶので、呼び出し側は工程が変わったかを見て扱う
  */
 export async function createCutout(
   image: Blob,
@@ -199,17 +208,26 @@ export async function createCutout(
   });
   if (!response.ok) throw toCutoutError(response);
 
+  const startedAt = Date.now();
+  const stats: ReadStats = { chunks: 0, bytes: 0 };
+  let lastPhase: string | null = null;
   let result: Blob | null = null;
-  for await (const line of readLines(response)) {
+  for await (const line of readLines(response, stats)) {
     const event = JSON.parse(line) as CutoutEvent;
     if (event.phase === 'failed') throw new ApiError(500, event.error);
     if (event.phase === 'done') {
       result = base64ToBlob(event.png, 'image/png');
       break;
     }
+    lastPhase = event.phase;
     onEvent(event);
   }
-  if (!result) throw new ApiError(500, '切り抜きの結果が届きませんでした');
+  if (!result) {
+    // 応答が途中で（行の切れ目で）終わった。どこまで届いたかを添えて、再発時に原因を絞れるようにする
+    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+    const detail = `${lastPhase ?? '工程の行なし'} まで受信・${stats.chunks} 回 ${Math.round(stats.bytes / 1024)}KB・${seconds} 秒`;
+    throw new ApiError(500, `切り抜きの結果が届きませんでした（${detail}）`);
+  }
   return result;
 }
 
@@ -219,9 +237,12 @@ export async function createCutout(
  * 本文を最後まで待ってから分けると、工程を流してもらう意味が無い。
  * 読み進めながら改行で区切る。ストリームを読めない古いブラウザでは全文を待って分ける
  */
-async function* readLines(response: Response): AsyncGenerator<string> {
+async function* readLines(response: Response, stats: ReadStats): AsyncGenerator<string> {
   if (!response.body) {
-    for (const line of (await response.text()).split('\n')) if (line) yield line;
+    const text = await response.text();
+    stats.chunks = 1;
+    stats.bytes = text.length;
+    for (const line of text.split('\n')) if (line) yield line;
     return;
   }
   const reader = response.body.getReader();
@@ -229,6 +250,10 @@ async function* readLines(response: Response): AsyncGenerator<string> {
   let buffered = '';
   while (true) {
     const { value, done } = await reader.read();
+    if (value) {
+      stats.chunks += 1;
+      stats.bytes += value.byteLength;
+    }
     buffered += decoder.decode(value, { stream: !done });
     const lines = buffered.split('\n');
     // 最後の要素は途中の行（まだ改行が来ていない）なので次に回す
