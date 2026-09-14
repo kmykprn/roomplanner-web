@@ -38,7 +38,7 @@ const STEPS: readonly Step[] = [
   { phase: 'loading_texture_model', seconds: 18, label: '形を作っています' },
   { phase: 'loading_shape_model', seconds: 5, label: '形を作っています' },
   { phase: 'generating_shape', seconds: 26, label: '形を作っています' },
-  { phase: 'generating_texture', seconds: 103, label: '色と模様をつけています' },
+  { phase: 'generating_texture', seconds: 45, label: '色と模様をつけています' },
   // 成果物の保存は数秒だが、終わったことに画面が気づくのは次に見に行くとき
   // （最大15秒あと）。その待ちも含めておかないと、円が最後で長く止まって見える
   { phase: 'finishing', seconds: 15, label: 'もうすぐできあがります' },
