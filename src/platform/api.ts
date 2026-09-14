@@ -115,6 +115,57 @@ export async function getJob(jobId: string): Promise<JobStatus> {
   return response.json();
 }
 
+/** 商品ページから取り込んだ結果。詳細は Hunyuan3D-2GP の api/SPEC.md（POST /products） */
+export interface ImportedProduct {
+  name: string;
+  price: number | null;
+  shop: string;
+  url: string;
+  affiliateUrl: string;
+  /** 幅・高さ・奥行き（m）。商品名や説明から拾えたときだけ */
+  size: { w: number; h: number; d: number } | null;
+  /** 商品画像。このあと切り抜きに通す */
+  image: Blob;
+}
+
+/**
+ * 楽天の商品ページの URL から、商品情報と画像を取る。
+ *
+ * 画像はサーバーが楽天から取って base64 で返す（ブラウザから楽天の CDN は取れない）。
+ * ここで Blob に戻して、切り抜きの流れにそのまま渡せる形にする
+ */
+export async function importProduct(url: string): Promise<ImportedProduct> {
+  const response = await fetch(`${API_BASE}/products`, {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  if (!response.ok) throw await toProductError(response);
+  const body = await response.json();
+  return {
+    name: body.name,
+    price: body.price ?? null,
+    shop: body.shop,
+    url: body.url,
+    affiliateUrl: body.affiliateUrl,
+    size: body.size ?? null,
+    image: base64ToBlob(body.imageBase64, body.imageType),
+  };
+}
+
+/** 取り込めなかったときの文言。利用者が次に何をすればよいかで分ける */
+async function toProductError(response: Response): Promise<ApiError> {
+  const messages: Record<number, string> = {
+    400: '楽天市場の商品ページ（item.rakuten.co.jp/…）の URL を貼ってください',
+    401: 'Google ログインが必要です',
+    404: 'その商品が見つかりませんでした。販売終了か、URL が違うかもしれません',
+    429: '本日の取り込みの上限に達しました。少し待ってからお試しください',
+    502: '楽天から商品を取れませんでした。時間をおいて試してください',
+    503: '商品の取り込みはまだ使えません',
+  };
+  return new ApiError(response.status, messages[response.status] ?? '商品を取り込めませんでした');
+}
+
 /** サーバーが流してくる工程。詳細は Hunyuan3D-2GP の cutout/SPEC.md */
 export type CutoutEvent =
   | { phase: 'received' }

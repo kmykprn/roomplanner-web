@@ -777,6 +777,32 @@ body {
   text-align: center;
 }
 
+/* 商品の URL から作る。写真の入口の下に、枠線だけの控えめな姿で */
+.lib__product {
+  width: 100%;
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* URL を貼る欄。ログインを求めるパネルと同じ囲み */
+.product-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+/* 「楽天で見る」。リンクだがボタンの姿。下線は付けない */
+.product-link {
+  text-decoration: none;
+}
+.manage__foot .product-link {
+  margin-right: auto;
+}
+
 .lib__label {
   margin: 0 0 6px;
   font-size: 12px;
