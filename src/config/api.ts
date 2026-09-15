@@ -12,16 +12,22 @@ export const API_BASE = 'https://hunyuan3d-api-yvl3t4jpxa-as.a.run.app';
 /**
  * 切り抜きAPIの入口。詳細は Hunyuan3D-2GP の cutout/SPEC.md。
  *
- * 3D 生成とは別のサービス。あちらはジョブを投げて数分待つ非同期、
- * こちらは数秒で透過 PNG が返る同期
+ * 3D 生成とは別のサービス。どちらも「預けて、あとで取りに行く」形で、
+ * こちらは数十秒で透過 PNG ができる
  */
 export const CUTOUT_BASE = 'https://cutout-yvl3t4jpxa-as.a.run.app';
 
 /**
- * 切り抜きの応答を待つ上限。サーバーは 60 秒で打ち切るので、それより少し長く取る。
- * 実測は 5〜7 秒。コールドスタート（モデルの読み込み）が乗ると 15 秒ほど
+ * 切り抜きの状態を見に行く間隔。1 件が数十秒なので、2 秒なら円がなめらかに進む。
+ * 状態の読み取りは GCS の小さなファイル 1 つで、費用は無視できる
  */
-export const CUTOUT_TIMEOUT_MS = 70_000;
+export const CUTOUT_POLL_INTERVAL_MS = 2_000;
+
+/**
+ * 切り抜きを諦める上限（受付から）。起動待ち 20 秒 + 推論 10 秒 + 順番待ちを見ても
+ * 数分で終わる。それ以上は何かが壊れている
+ */
+export const CUTOUT_TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Firebase の設定。
