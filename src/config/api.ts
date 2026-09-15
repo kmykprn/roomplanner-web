@@ -18,10 +18,13 @@ export const API_BASE = 'https://hunyuan3d-api-yvl3t4jpxa-as.a.run.app';
 export const CUTOUT_BASE = 'https://cutout-yvl3t4jpxa-as.a.run.app';
 
 /**
- * 切り抜きの状態を見に行く間隔。1 件が数十秒なので、2 秒なら円がなめらかに進む。
- * 状態の読み取りは GCS の小さなファイル 1 つで、費用は無視できる
+ * 切り抜きの状態確認で、サーバーに待ってもらう秒数（サーバーの上限も 25）。
+ * 工程が変わればその時点で返る。この秒数で返らなければ、また同じ工程で待ち直す
  */
-export const CUTOUT_POLL_INTERVAL_MS = 2_000;
+export const CUTOUT_WAIT_SECONDS = 25;
+
+/** 状態確認が通信の失敗で返ったときに、次を叩くまでの間 */
+export const CUTOUT_RETRY_INTERVAL_MS = 2_000;
 
 /**
  * 切り抜きを諦める上限（受付から）。起動待ち 20 秒 + 推論 10 秒 + 順番待ちを見ても
