@@ -905,14 +905,26 @@ body {
   color: #7a8388;
 }
 
-/* URL を貼る欄。ログインを求めるパネルと同じ囲み */
+/* 「商品の URL から」の行。見出しと、その下で開く欄の組。開いている間は薄い下地 */
+.way-group {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+.way-group .way {
+  border-top: none;
+}
+.way-group.is-open {
+  background: #f7fafb;
+}
+
+/* URL を貼る欄。行の見出しの下、文の頭（アイコンの右）に揃えて出す */
 .product-form {
   display: grid;
   gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  padding: 0 12px 12px 60px;
+}
+.product-form .hint {
+  margin: 0;
 }
 
 /* 「楽天で見る」。リンクだがボタンの姿。下線は付けない */

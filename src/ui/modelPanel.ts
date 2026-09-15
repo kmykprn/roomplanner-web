@@ -119,11 +119,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
       normal.hidden = false;
     },
   });
-  const productForm = createProductForm((url) => {
-    void startProductImport(url);
-    chooser.close();
+  const productForm = createProductForm({
+    onSubmit: (url) => {
+      void startProductImport(url);
+      chooser.close();
+    },
+    onToggle: (opened) => chooser.markProductOpen(opened),
   });
-  chooser.formSlot.append(productForm.element);
+  // 欄は「商品の URL から」の行の中で開く（行の見出しの下）。別の囲みにしない
+  chooser.productSlot.append(productForm.element);
 
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
   async function pickAndStart(start: (files: File[]) => Promise<void>): Promise<void> {
@@ -300,12 +304,17 @@ function createBasicTile(type: FurnitureType, place: (type: FurnitureType) => vo
  * 匿名なら、どの行を押しても**先に**ログインを求める（写真を選ぶ前。iOS のリダイレクトは
  * 写真を持ち越せないため）。ログインできたら、商品の URL はそのまま欄を出す。写真は
  * もう一度押してもらう。ポップアップやリダイレクトを挟んだあとではブラウザが
- * 「利用者の操作」とみなさず、ファイル選択を塞ぐことがある
+ * 「利用者の操作」とみなさず、ファイル選択を塞ぐことがある。
+ *
+ * 商品の URL の欄は、その行の中（見出しの下）で開く。行と欄が離れていると、
+ * どの行を押した結果かが目で追いにくい
  */
 interface Chooser {
   element: HTMLElement;
-  /** URL を貼る欄の置き場。行の下に出る */
-  formSlot: HTMLElement;
+  /** URL を貼る欄の置き場。「商品の URL から」の行の見出しの下 */
+  productSlot: HTMLElement;
+  /** 欄が開いている間、その行を開いた見た目にする */
+  markProductOpen(opened: boolean): void;
   open(): void;
   close(): void;
   /** ログインの結果を伝える。何も言わないと「ログインしたのに何も起きない」に見える */
@@ -337,6 +346,11 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const menu = document.createElement('div');
   menu.className = 'ways';
   const rows: HTMLButtonElement[] = [];
+  /** 「商品の URL から」の行。見出し（押すもの）と、その下で開く欄をまとめる */
+  const productRow = document.createElement('div');
+  productRow.className = 'way-group';
+  const productSlot = document.createElement('div');
+  productSlot.className = 'way__open';
   const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
     { way: 'photo', icon: 'camera', label: '写真から', note: '家具だけを切り抜いて板にする・数秒' },
     { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天の商品ページ・寸法どおりの大きさで置ける' },
@@ -370,10 +384,19 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
       actions[way]();
     });
     rows.push(row);
-    menu.append(row);
+    if (way === 'product') {
+      row.setAttribute('aria-expanded', 'false');
+      productRow.append(row, productSlot);
+      menu.append(productRow);
+    } else {
+      menu.append(row);
+    }
   }
 
-  const formSlot = document.createElement('div');
+  function markProductOpen(opened: boolean): void {
+    productRow.classList.toggle('is-open', opened);
+    rows[WAYS.findIndex((item) => item.way === 'product')].setAttribute('aria-expanded', String(opened));
+  }
 
   /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
   const loginHint = document.createElement('p');
@@ -396,7 +419,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     pending = null;
   });
 
-  element.append(head, menu, loginPanel.element, formSlot, loginHint, authNote, signedInNote, createIdentity());
+  element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
 
   function showSignedIn(error: string | null = null): void {
     signedInNote.classList.toggle('is-error', error !== null);
@@ -434,7 +457,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   new MutationObserver(renderState).observe(loginPanel.element, { attributeFilter: ['hidden'] });
   renderState();
 
-  return { element, formSlot, open, close, showSignedIn };
+  return { element, productSlot, markProductOpen, open, close, showSignedIn };
 }
 
 /** できあがったモデル。押すと置く。× で保管庫から外す */
