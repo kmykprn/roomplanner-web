@@ -63,12 +63,12 @@ async function toApiError(response: Response): Promise<ApiError> {
     // 本文が JSON でないこともある（プロキシが返す502など）
   }
   const fallback: Record<number, string> = {
-    401: '認証が切れました。ページを開き直してください',
-    403: 'このアカウントはまだ生成を使えません',
-    409: 'いま別の生成が動いています。終わるまで待ってください',
-    429: '本日の上限に達しました',
+    401: 'ログインの有効期限が切れました。アプリを開き直してください',
+    403: 'このアカウントではまだ 3D モデルを作れません',
+    409: '別の 3D モデルを作成中です。終わってからお試しください',
+    429: '今日の作成回数の上限に達しました。明日またお試しください',
   };
-  return new ApiError(response.status, detail || fallback[response.status] || '生成を頼めませんでした');
+  return new ApiError(response.status, detail || fallback[response.status] || '3D モデルの作成を始められませんでした。時間をおいてお試しください');
 }
 
 /**
@@ -78,13 +78,13 @@ async function toApiError(response: Response): Promise<ApiError> {
  */
 function toCutoutError(response: Response): ApiError {
   const messages: Record<number, string> = {
-    400: 'この写真は読み込めませんでした。別の写真を試してください',
+    400: 'この写真は読み込めませんでした。別の写真をお試しください',
     401: 'Google ログインが必要です。ログインしてからもう一度お試しください',
-    409: '同時に処理されました。もう一度お試しください',
-    429: '本日の切り抜きの上限に達しました',
-    503: '切り抜きはいま使えません。時間をおいて試してください',
+    409: '処理が重なりました。もう一度お試しください',
+    429: '今日の切り抜き回数の上限に達しました。明日またお試しください',
+    503: '切り抜きは現在利用できません。時間をおいてお試しください',
   };
-  return new ApiError(response.status, messages[response.status] ?? '切り抜けませんでした。時間をおいて試してください');
+  return new ApiError(response.status, messages[response.status] ?? '切り抜きに失敗しました。時間をおいてお試しください');
 }
 
 /**
@@ -159,12 +159,12 @@ async function toProductError(response: Response): Promise<ApiError> {
   const messages: Record<number, string> = {
     400: '楽天市場の商品ページ（item.rakuten.co.jp/…）の URL を貼ってください',
     401: 'Google ログインが必要です',
-    404: 'その商品が見つかりませんでした。販売終了か、URL が違うかもしれません',
-    429: '本日の取り込みの上限に達しました。少し待ってからお試しください',
-    502: '楽天から商品を取れませんでした。時間をおいて試してください',
-    503: '商品の取り込みはまだ使えません',
+    404: '商品が見つかりませんでした。販売終了か、URL が正しくない可能性があります',
+    429: '今日の取り込み回数の上限に達しました。明日またお試しください',
+    502: '楽天市場から商品情報を取得できませんでした。時間をおいてお試しください',
+    503: '商品の取り込みは現在利用できません',
   };
-  return new ApiError(response.status, messages[response.status] ?? '商品を取り込めませんでした');
+  return new ApiError(response.status, messages[response.status] ?? '商品を取り込めませんでした。もう一度お試しください');
 }
 
 /** 預けた切り抜きの状態。詳細は Hunyuan3D-2GP の cutout/SPEC.md */

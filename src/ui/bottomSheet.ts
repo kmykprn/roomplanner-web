@@ -215,7 +215,7 @@ export function createBottomSheet(container: HTMLElement): void {
     control.className = 'manage__control';
     const [decrease, increase] = buttons;
     const button = ([icon, description, act]: (typeof buttons)[number]): HTMLButtonElement =>
-      createRepeatButton(createIcon(icon), `${label}を${description}`, act, 'manage__button');
+      createRepeatButton(createIcon(icon), description, act, 'manage__button');
     control.append(button(decrease), value, button(increase));
 
     element.append(heading, control);
@@ -239,13 +239,13 @@ export function createBottomSheet(container: HTMLElement): void {
     if (furniture.length === 0) {
       const hint = document.createElement('p');
       hint.className = 'hint';
-      hint.textContent = '「家具」タブから置くと、ここに並びます';
+      hint.textContent = '「家具」タブで置いた家具が、ここに並びます';
       list.append(hint);
       return list;
     }
     const hint = document.createElement('p');
     hint.className = 'hint';
-    hint.textContent = '家具をタップすると選択できます。画面の外に出た家具はここから';
+    hint.textContent = '家具をタップすると選択できます。画面の外にある家具は、この一覧から選べます';
     list.append(hint);
 
     const scene = activeScene();

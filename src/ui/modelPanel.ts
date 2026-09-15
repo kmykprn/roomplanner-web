@@ -59,7 +59,7 @@ export interface ModelPanelOptions {
 
 /** 格子の絞り込み */
 type Filter = 'all' | 'made' | 'basic';
-const FILTERS: Record<Filter, string> = { all: 'すべて', made: '作った', basic: '基本' };
+const FILTERS: Record<Filter, string> = { all: 'すべて', made: '作ったもの', basic: '基本' };
 
 /** 作り方。「作り方を選ぶ」姿の 3 行 */
 type Way = 'photo' | 'product' | 'model';
@@ -278,10 +278,10 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
 
 /** 「＋ 作る」のタイル。格子の先頭に置く */
 function createAddTile(open: () => void): HTMLElement {
-  const thumb = createThumb('作る');
+  const thumb = createThumb('追加');
   thumb.image.classList.add('is-add');
   thumb.image.append(createIcon('plus'));
-  thumb.button.setAttribute('aria-label', '家具を作る');
+  thumb.button.setAttribute('aria-label', '家具を追加');
   thumb.button.addEventListener('click', open);
   return thumb.element;
 }
@@ -335,7 +335,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   back.addEventListener('click', close);
   const title = document.createElement('span');
   title.className = 'edit__title';
-  title.textContent = '作り方を選ぶ';
+  title.textContent = '家具を追加';
   const headSpacer = document.createElement('span');
   headSpacer.className = 'edit__spacer';
   head.append(back, title, headSpacer);
@@ -352,9 +352,9 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const productSlot = document.createElement('div');
   productSlot.className = 'way__open';
   const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
-    { way: 'photo', icon: 'camera', label: '写真から', note: '家具だけを切り抜いて板にする・数秒' },
-    { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天の商品ページ・寸法どおりの大きさで置ける' },
-    { way: 'model', icon: 'cube', label: '3D モデルとして', note: '回して見られる・約 3 分' },
+    { way: 'photo', icon: 'camera', label: '写真から', note: '写真の家具だけを切り抜きます（数秒）' },
+    { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天市場の商品ページから取り込み、実際の寸法で置けます' },
+    { way: 'model', icon: 'cube', label: '3D モデルで作る', note: '向きを変えて置けます（約 3 分）' },
   ];
   for (const { way, icon, label, note } of WAYS) {
     const row = document.createElement('button');
@@ -401,7 +401,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
   const loginHint = document.createElement('p');
   loginHint.className = 'hint lib__login-hint';
-  loginHint.textContent = '作成には Google ログインが必要です';
+  loginHint.textContent = '家具を作るには Google ログインが必要です';
   /** 認証できないときだけ出す。押せない理由が無いと、壊れているように見える */
   const authNote = document.createElement('p');
   authNote.className = 'hint is-error';
@@ -423,7 +423,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
 
   function showSignedIn(error: string | null = null): void {
     signedInNote.classList.toggle('is-error', error !== null);
-    signedInNote.textContent = error ?? 'ログインできました。もう一度作り方を押して写真を選んでください';
+    signedInNote.textContent = error ?? 'ログインしました。もう一度「写真から」を押して写真を選んでください';
     signedInNote.hidden = false;
   }
 
@@ -570,7 +570,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   const iconButton = document.createElement('button');
   iconButton.type = 'button';
   iconButton.className = 'button is-quiet is-small';
-  iconButton.textContent = 'アイコンを選び直す';
+  iconButton.textContent = 'アイコンを変更';
   iconButton.addEventListener('click', async () => {
     if (!current) return;
     const file = await pickImage();
@@ -651,7 +651,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   confirmRow.append(confirmIcon, confirmText);
   const confirmNote = document.createElement('p');
   confirmNote.className = 'hint';
-  confirmNote.textContent = '置いてある家具はそのまま残ります';
+  confirmNote.textContent = '部屋や写真に置いた家具はそのまま残ります';
   const confirmButtons = document.createElement('div');
   confirmButtons.className = 'confirm__buttons';
   const cancel = document.createElement('button');
@@ -685,8 +685,8 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
     productField.hidden = !model.product;
     if (model.product) {
       productNote.textContent = model.size
-        ? `${model.product.shop} ・ 幅 ${(model.size[0] * 100).toFixed(0)} × 奥行 ${(model.size[2] * 100).toFixed(0)} × 高さ ${(model.size[1] * 100).toFixed(0)} cm`
-        : `${model.product.shop} ・ 寸法は取れませんでした（操作タブで大きさを合わせてください）`;
+        ? `${model.product.shop}・幅 ${(model.size[0] * 100).toFixed(0)} × 奥行 ${(model.size[2] * 100).toFixed(0)} × 高さ ${(model.size[1] * 100).toFixed(0)} cm`
+        : `${model.product.shop}・寸法を取得できませんでした。「操作」タブで大きさを調整してください`;
       productLinkSlot.replaceChildren(createProductLink(model.product));
     }
     confirm.hidden = true;
@@ -717,7 +717,7 @@ function createCutoutThumb(job: CutoutJob): ThumbNode<CutoutJob> {
   function update(current: CutoutJob): void {
     if (current.previewUrl) thumb.image.style.backgroundImage = `url("${current.previewUrl}")`;
     const progress = cutoutProgress(current);
-    thumb.name.textContent = current.phase === 'failed' ? '切り抜けませんでした' : progress.label;
+    thumb.name.textContent = current.phase === 'failed' ? '失敗しました' : progress.label;
     ring.update(progress.ratio, '');
   }
   update(job);
@@ -777,13 +777,13 @@ function createThumb(caption: string): {
  * 理由はタイルに収まらないので、押すと格子の下に出る（failureDetailContent）
  */
 function createFailedThumb(item: FailedItem, toggle: (id: string) => void): ThumbNode<FailedItem> {
-  const thumb = createThumb('作れませんでした');
+  const thumb = createThumb('失敗しました');
   thumb.image.classList.add('is-failed');
   const badge = document.createElement('span');
   badge.className = 'thumb__badge';
   badge.textContent = '!';
   thumb.image.append(badge);
-  thumb.button.setAttribute('aria-label', `${item.name}: 作れませんでした。理由を見る`);
+  thumb.button.setAttribute('aria-label', `${item.name}: 失敗しました。理由を見る`);
   thumb.button.addEventListener('click', () => toggle(item.id));
   return { element: thumb.element, update() {}, dispose() {} };
 }
@@ -792,7 +792,7 @@ function createFailedThumb(item: FailedItem, toggle: (id: string) => void): Thum
 function failureDetailContent(item: FailedItem): HTMLElement[] {
   const message = document.createElement('p');
   message.className = 'hint is-error';
-  message.textContent = `${item.name}: ${item.error ?? '作成できませんでした'}`;
+  message.textContent = `${item.name}: ${item.error ?? '作れませんでした'}`;
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
   closeButton.className = 'button is-quiet is-small';
@@ -810,7 +810,7 @@ function createIdentity(): HTMLElement {
   const identity = document.createElement('details');
   identity.className = 'identity';
   const summary = document.createElement('summary');
-  summary.textContent = '利用者ID';
+  summary.textContent = '利用者 ID';
   const uidText = document.createElement('code');
   identity.append(summary, uidText);
   const render = (): void => {
@@ -830,24 +830,24 @@ function createIdentity(): HTMLElement {
  */
 function authFailureMessage(): string {
   return IS_CONFIGURED
-    ? '認証できませんでした。通信を確かめて開き直してください'
-    : 'この配信には生成の設定が入っていません（管理者にお伝えください）';
+    ? '認証できませんでした。通信状況を確認して、アプリを開き直してください'
+    : 'このアプリには家具を作る設定がありません。管理者にお知らせください';
 }
 
 /** サムネイルの下に出す短い状態。幅 72px に収まる長さにする */
 function describe(job: GenerationJob): string {
   switch (job.phase) {
     case 'uploading':
-      return '送っています';
+      return '送信中';
     case 'queued':
       return '順番待ち';
     case 'running':
       // 「あと5分」「まもなく」。見込みであって約束ではない（core/progress.ts）
       return progressFor(job.serverPhase, elapsedInPhase(job)).centerText;
     case 'saving':
-      return '保存しています';
+      return '保存中';
     case 'failed':
-      return '作成できませんでした';
+      return '作れませんでした';
   }
 }
 

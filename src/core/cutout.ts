@@ -139,24 +139,24 @@ export function cutoutProgress(job: CutoutJob, now = Date.now()): CutoutProgress
   const elapsed = Math.max(0, (now - job.phaseStartedAt) / 1000);
   const within = (seconds: number): number => Math.min(elapsed / seconds, 1);
 
-  if (job.phase === 'importing') return { ratio: 0, label: '商品を取り込んでいます' };
-  if (job.phase === 'uploading') return { ratio: 0, label: '送っています' };
+  if (job.phase === 'importing') return { ratio: 0, label: '商品を取り込み中' };
+  if (job.phase === 'uploading') return { ratio: 0, label: '送信中' };
   if (job.phase === 'saving') {
     return {
       ratio: Math.min(
         SHARE.starting + SHARE.cutting + SHARE.finishing * within(SAVING_SECONDS),
         MAX_RATIO
       ),
-      label: '保存しています',
+      label: '保存中',
     };
   }
   switch (job.serverPhase) {
     case null:
     case 'queued':
-      return { ratio: SHARE.starting * within(QUEUED_SECONDS), label: '起動を待っています' };
+      return { ratio: SHARE.starting * within(QUEUED_SECONDS), label: '準備中' };
     case 'running': {
       const seconds = job.expectedSeconds ?? QUEUED_SECONDS;
-      return { ratio: SHARE.starting + SHARE.cutting * within(seconds), label: '切り抜いています' };
+      return { ratio: SHARE.starting + SHARE.cutting * within(seconds), label: '切り抜き中' };
     }
   }
 }
@@ -321,7 +321,7 @@ async function watch(id: string, jobId: string): Promise<void> {
     if (!current || current.jobId !== jobId || current.phase !== 'cutting') return;
 
     if (Date.now() - current.startedAt > CUTOUT_TOTAL_TIMEOUT_MS) {
-      updateJob(id, { phase: 'failed', error: '時間内に終わりませんでした。もう一度お試しください' });
+      updateJob(id, { phase: 'failed', error: '時間がかかりすぎたため中断しました。もう一度お試しください' });
       return;
     }
 
@@ -332,7 +332,7 @@ async function watch(id: string, jobId: string): Promise<void> {
       // 通信が切れただけかもしれない（裏に回った直後など）ので、少し待って見に行く。
       // 無くなっていた（2 日で消える）ならここで諦める
       if (error instanceof ApiError && error.status === 404) {
-        updateJob(id, { phase: 'failed', error: '切り抜きの記録が見つかりませんでした' });
+        updateJob(id, { phase: 'failed', error: '切り抜きの結果が見つかりませんでした。もう一度お試しください' });
         return;
       }
       retryAfterError = true;
@@ -340,7 +340,7 @@ async function watch(id: string, jobId: string): Promise<void> {
     }
 
     if (status.phase === 'failed') {
-      updateJob(id, { phase: 'failed', error: status.error ?? '切り抜けませんでした' });
+      updateJob(id, { phase: 'failed', error: status.error ?? '切り抜きに失敗しました。もう一度お試しください' });
       return;
     }
     if (status.phase === 'queued' || status.phase === 'running') {
@@ -418,5 +418,5 @@ export function dismissCutoutError(id: string): void {
 function toMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
-  return '切り抜けませんでした';
+  return '切り抜きに失敗しました。もう一度お試しください';
 }

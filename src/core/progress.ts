@@ -120,7 +120,7 @@ function unknownPhase(phase: string | null): Progress {
  */
 function remainingText(remainingSec: number): string {
   if (remainingSec < IMMINENT_SECONDS) return 'まもなく';
-  return `あと${Math.ceil(remainingSec / 60)}分`;
+  return `あと ${Math.ceil(remainingSec / 60)} 分`;
 }
 
 function clamp(value: number, min: number, max: number): number {
