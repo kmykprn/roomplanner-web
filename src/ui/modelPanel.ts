@@ -1,19 +1,21 @@
 /**
- * 「家具」タブ。置ける家具を並べ、押すといまのモード（部屋／写真）に置く。
+ * 「家具」タブ。置ける家具をタイルの格子に並べ、押すといまのモード（部屋／写真）に置く。
  *
- *   1 段目 … 「＋ 写真から家具を作る」。写真から家具だけを切り抜く（数秒）。
- *            その下に、時間のかかる 3D モデルの作成（約 3 分）への入口を小さく置く。
- *            どちらも匿名のままなら、写真を選ぶ前にログインを求める（ui/loginPanel.ts）
- *   2 段目 … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
- *            右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。× で即消せるのは
- *            簡単すぎたので、削除は編集の中で二段階にした
- *   3 段目 … 基本の家具（椅子・テーブル…）
+ *   格子の先頭 … 「＋ 作る」。押すと一覧と入れ替わりに「作り方を選ぶ」姿が出る。
+ *                写真から切り抜く（数秒）／商品ページの URL から（実寸で置ける）／
+ *                3D モデルとして（約 3 分）。匿名ならその姿の中でログインを求める（ui/loginPanel.ts）
+ *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
+ *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
+ *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
+ *   その後     … 基本の家具（椅子・テーブル…）。色の四角のタイル
+ *
+ * 格子の上の「すべて / 作った / 基本」で絞れる。
  *
  * 3D 生成は約 3 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
  * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
  */
 
-import { FURNITURE_TYPES, type PlacedFurniture } from '@/config/furniture';
+import { FURNITURE_TYPES, type FurnitureType, type PlacedFurniture } from '@/config/furniture';
 import { IS_CONFIGURED } from '@/config/api';
 import { activeScene } from '@/core/mode';
 import { progressFor } from '@/core/progress';
@@ -45,6 +47,7 @@ import {
 import { authState, redirectLogin } from '@/platform/auth';
 import { pickImage, pickImages } from '@/platform/picker';
 import { savePreview } from '@/platform/previewCache';
+import { createIcon, type IconName } from '@/ui/icons';
 import { createLoginPanel } from '@/ui/loginPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProgressRing } from '@/ui/progressRing';
@@ -54,108 +57,93 @@ export interface ModelPanelOptions {
   onPlaced(id: string): void;
 }
 
+/** 格子の絞り込み */
+type Filter = 'all' | 'made' | 'basic';
+const FILTERS: Record<Filter, string> = { all: 'すべて', made: '作った', basic: '基本' };
+
+/** 作り方。「作り方を選ぶ」姿の 3 行 */
+type Way = 'photo' | 'product' | 'model';
+
+/** 失敗した作成（切り抜きも 3D も同じ姿）。タイルにするための共通の形 */
+interface FailedItem {
+  id: string;
+  name: string;
+  error: string | null;
+  dismiss(): void;
+}
+
 export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'lib';
 
-  // --- 1 段目: 写真から作る。ボタンの文字が説明を兼ねるので、案内は出さない ---
-  const generateRow = document.createElement('div');
-  const generateButton = document.createElement('button');
-  generateButton.className = 'button lib__generate';
-  generateButton.textContent = '＋ 写真から家具を作る';
-  generateButton.addEventListener('click', () => void pickAndStart(startCutout));
-  /**
-   * 3D モデルの作成への入口。切り抜きが基本で、こちらは時間と費用がかかるので小さく出す。
-   * 切り抜きでは向きを変えられない（左右反転だけ）ので、回したい人向け
-   */
-  const generate3dButton = document.createElement('button');
-  generate3dButton.className = 'button is-text is-small lib__generate-3d';
-  generate3dButton.textContent = '3D モデルとして作る（約 3 分）';
-  generate3dButton.addEventListener('click', () => void pickAndStart(startGeneration));
+  // --- 通常の姿: 絞り込み・格子・失敗の理由 ---
+  const normal = document.createElement('div');
+  normal.className = 'lib__normal';
 
-  /**
-   * 商品ページの URL から作る。楽天の商品ページを貼ると、画像を取って切り抜き、
-   * 寸法が分かれば実寸で置ける。押すと URL の入力欄が出る（ログインは写真と同じく先に求める）
-   */
-  const productButton = document.createElement('button');
-  productButton.type = 'button';
-  productButton.className = 'button is-quiet lib__product';
-  productButton.textContent = '商品の URL から作る';
-  const productForm = createProductForm((url) => void startProductImport(url));
-  productButton.addEventListener('click', () => {
-    signedInNote.hidden = true;
-    if (authState.get().anonymous) {
-      loginPanel.open();
-      return;
-    }
-    productForm.open();
+  let filter: Filter = 'all';
+  const filterBar = document.createElement('div');
+  filterBar.className = 'seg';
+  filterBar.setAttribute('role', 'group');
+  filterBar.setAttribute('aria-label', '家具の絞り込み');
+  const filterButtons = new Map<Filter, HTMLButtonElement>();
+  for (const [value, label] of Object.entries(FILTERS) as [Filter, string][]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'seg__item';
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      filter = value;
+      render();
+    });
+    filterButtons.set(value, button);
+    filterBar.append(button);
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'tiles';
+
+  /** 押した失敗の理由。タイルには収まらないので格子の下に出す */
+  const failureDetail = document.createElement('div');
+  failureDetail.className = 'lib__failure';
+  failureDetail.hidden = true;
+  let openFailureId: string | null = null;
+
+  normal.append(filterBar, grid, failureDetail);
+
+  // --- 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る ---
+  const chooser = createChooser({
+    photo: () => void pickAndStart(startCutout),
+    model: () => void pickAndStart(startGeneration),
+    product: () => productForm.open(),
+    onClose: () => {
+      normal.hidden = false;
+    },
   });
+  const productForm = createProductForm((url) => {
+    void startProductImport(url);
+    chooser.close();
+  });
+  chooser.formSlot.append(productForm.element);
 
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
   async function pickAndStart(start: (files: File[]) => Promise<void>): Promise<void> {
-    signedInNote.hidden = true;
-    if (authState.get().anonymous) {
-      loginPanel.open();
-      return;
-    }
     const files = await pickImages();
-    if (files.length > 0) void start(files);
-  }
-  /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
-  const loginHint = document.createElement('p');
-  loginHint.className = 'hint lib__login-hint';
-  loginHint.textContent = '作成には Google ログインが必要です';
-  /** 認証できないときだけ出す。押せない理由が無いと、壊れているように見える */
-  const authNote = document.createElement('p');
-  authNote.className = 'hint is-error';
-  authNote.hidden = true;
-  /**
-   * ログインできた直後に出す。ポップアップなら閉じた瞬間、iOS のリダイレクトなら
-   * 戻ってきた起動時。何も言わないと「ログインしたのに何も起きない」に見える。
-   * 次にボタンを押したら消す
-   */
-  const signedInNote = document.createElement('p');
-  signedInNote.className = 'hint';
-  signedInNote.hidden = true;
-  generateRow.append(generateButton, generate3dButton, productButton, productForm.element, loginHint, authNote, signedInNote);
-
-  // ログインを求めるパネル。作成ボタンの場所と入れ替わりで出る
-  const loginPanel = createLoginPanel(() => showSignedIn());
-
-  function showSignedIn(error: string | null = null): void {
-    signedInNote.classList.toggle('is-error', error !== null);
-    signedInNote.textContent =
-      error ?? 'ログインできました。もう一度「＋ 写真から家具を作る」を押して写真を選んでください';
-    signedInNote.hidden = false;
+    if (files.length === 0) return;
+    void start(files);
+    chooser.close();
   }
 
-  // --- 2 段目: 作った家具 ---
-  const made = document.createElement('div');
-  const madeLabel = document.createElement('p');
-  madeLabel.className = 'lib__label';
-  madeLabel.textContent = '作った家具';
-  const thumbs = document.createElement('div');
-  thumbs.className = 'thumbs';
-  /** 失敗した作成。サムネイルには収まらないので、下に文で出す */
-  const failures = document.createElement('div');
-  failures.className = 'lib__failures';
-  made.append(madeLabel, thumbs, failures);
-
-  // --- 3 段目: 基本の家具 ---
-  const basic = document.createElement('div');
-  const basicLabel = document.createElement('p');
-  basicLabel.className = 'lib__label';
-  basicLabel.textContent = '基本の家具';
-  basic.append(basicLabel, createBasicGrid(place));
-
-  /** 通常の姿。編集の間は引っ込める（「手前の範囲」と同じ作り） */
-  const normal = document.createElement('div');
-  normal.className = 'lib__normal';
-  normal.append(generateRow, loginPanel.element, made, basic, createIdentity());
+  // --- 編集の姿 ---
   const editor = createModelEditor(() => {
     normal.hidden = false;
   });
-  panel.append(normal, editor.element);
+  panel.append(normal, chooser.element, editor.element);
+
+  function openChooser(): void {
+    normal.hidden = true;
+    productForm.close();
+    chooser.open();
+  }
 
   function openEditor(model: GeneratedModel): void {
     normal.hidden = true;
@@ -191,67 +179,84 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     });
   }
 
+  function placeBasic(type: FurnitureType): void {
+    place({ typeId: type.id, size: [...type.defaultSize], color: type.color });
+  }
+
+  /** 失敗のタイルを押した。もう一度押すと閉じる */
+  function toggleFailure(id: string): void {
+    openFailureId = openFailureId === id ? null : id;
+    render();
+  }
+
   function render(): void {
     const { jobs } = generationState.get();
     const { models } = modelLibrary.get();
-    const { status, anonymous } = authState.get();
 
-    // 認証できないとこのあと何をしても失敗する。
-    // 黙って止まると原因が分からないので、ボタンの下に出す
-    const authFailed = status === 'failed';
-    generateButton.disabled = authFailed;
-    generate3dButton.disabled = authFailed;
-    authNote.hidden = !authFailed;
-    authNote.textContent = authFailed ? authFailureMessage() : '';
-    loginHint.hidden = authFailed || !anonymous;
-    // ログインを求めている間は作成ボタンを引っ込める（同じ場所に出す）
-    generateRow.hidden = !loginPanel.element.hidden;
+    for (const [value, button] of filterButtons) {
+      button.setAttribute('aria-pressed', String(value === filter));
+    }
 
-    // 作成中のものを先頭に、できあがったものを新しい順に並べる。
+    // 並び: ＋、切り抜き中（数秒で終わる）、3D の作成中、失敗、できあがったものを新しい順、基本の家具。
     //
-    // **サムネイルは作り直さず、id で使い回す。** 作成中は 15 秒ごとの状態更新で
-    // ここが呼ばれる。毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの
-    // 一覧がちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
+    // **タイルは作り直さず、id で使い回す。** 作成中は状態更新のたびにここが呼ばれる。
+    // 毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの一覧が
+    // ちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
     const cutouts = cutoutState.get().jobs;
     const running = jobs.filter((job) => job.phase !== 'failed');
     const cutting = cutouts.filter((job) => job.phase !== 'failed');
-    const failed = jobs.filter((job) => job.phase === 'failed');
-    const failedCutouts = cutouts.filter((job) => job.phase === 'failed');
-    made.hidden =
-      running.length + cutting.length + failed.length + failedCutouts.length + models.length === 0;
+    const failures: FailedItem[] = [
+      ...cutouts
+        .filter((job) => job.phase === 'failed')
+        .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissCutoutError(job.id) })),
+      ...jobs
+        .filter((job) => job.phase === 'failed')
+        .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissError(job.id) })),
+    ];
 
     const ordered: HTMLElement[] = [];
-    // 切り抜きは数秒で終わるので先頭。3D の作成はその後ろで長く待つ
-    ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
-    ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
-    ordered.push(...syncThumbs(modelNodes, [...models].reverse(), (model) =>
-      createModelThumb(model, placeGenerated, openEditor)
-    ));
-    thumbs.replaceChildren(...ordered);
-    failures.replaceChildren(
-      ...failedCutouts.map((job) => createFailure(job.fileName, job.error, () => dismissCutoutError(job.id))),
-      ...failed.map((job) => createFailure(job.fileName, job.error, () => dismissError(job.id)))
-    );
+    if (filter !== 'basic') {
+      ordered.push(addTile);
+      ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
+      ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
+      ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
+      ordered.push(...syncThumbs(modelNodes, [...models].reverse(), (model) =>
+        createModelThumb(model, placeGenerated, openEditor)
+      ));
+    }
+    if (filter !== 'made') ordered.push(...basicTiles);
+    grid.replaceChildren(...ordered);
+
+    // 押した失敗がまだあれば理由を出す。とじる・絞り込みで見えなくなったら畳む
+    const opened = filter !== 'basic' ? failures.find((item) => item.id === openFailureId) : undefined;
+    failureDetail.hidden = !opened;
+    if (opened) failureDetail.replaceChildren(...failureDetailContent(opened));
+    for (const node of failedNodes.values()) node.element.classList.toggle('is-open', false);
+    if (opened) failedNodes.get(opened.id)?.element.classList.toggle('is-open', true);
   }
 
-  /** 表示中のサムネイル。切り抜き中・作成中・できあがったもので別に持つ */
+  /** 表示中のタイル。切り抜き中・作成中・失敗・できあがったもので別に持つ */
   const cutoutNodes = new Map<string, ThumbNode<CutoutJob>>();
   const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
+  const failedNodes = new Map<string, ThumbNode<FailedItem>>();
   const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
+  const addTile = createAddTile(openChooser);
+  const basicTiles = FURNITURE_TYPES.map((type) => createBasicTile(type, placeBasic));
 
   render();
   generationState.subscribe(render);
   cutoutState.subscribe(render);
   modelLibrary.subscribe(render);
-  authState.subscribe(render);
   redirectLogin.subscribe((state) => {
-    // iOS のリダイレクトから戻ってきた。写真は持ち越せていないので、選び直しを促す
-    if (state.outcome === 'signed-in') showSignedIn();
-    else if (state.outcome === 'failed') showSignedIn(state.error ?? 'ログインできませんでした');
-    render();
+    // iOS のリダイレクトから戻ってきた。写真は持ち越せていないので、選ぶ姿を開いて選び直しを促す
+    if (state.outcome === 'signed-in') {
+      openChooser();
+      chooser.showSignedIn();
+    } else if (state.outcome === 'failed') {
+      openChooser();
+      chooser.showSignedIn(state.error ?? 'ログインできませんでした');
+    }
   });
-  // パネルの出し入れは hidden 属性の変化なので、状態の購読では拾えない
-  new MutationObserver(render).observe(loginPanel.element, { attributeFilter: ['hidden'] });
 
   // 待っている間、状態そのものは変わらないので購読だけでは経過時間が止まる。
   // 3分待たせる画面で数字が動かないと、固まったように見える
@@ -267,25 +272,169 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   return panel;
 }
 
-/** 基本のモデルの一覧。押すと空いている場所に置く */
-function createBasicGrid(
-  place: (item: Omit<PlacedFurniture, 'id' | 'position' | 'rotationY'>) => void
-): HTMLElement {
-  const grid = document.createElement('div');
-  grid.className = 'grid';
-  for (const type of FURNITURE_TYPES) {
-    const button = document.createElement('button');
-    button.className = 'chip';
-    const swatch = document.createElement('span');
-    swatch.className = 'chip__swatch';
-    swatch.style.background = type.color;
-    button.append(swatch, type.name);
-    button.addEventListener('click', () =>
-      place({ typeId: type.id, size: [...type.defaultSize], color: type.color })
-    );
-    grid.appendChild(button);
+/** 「＋ 作る」のタイル。格子の先頭に置く */
+function createAddTile(open: () => void): HTMLElement {
+  const thumb = createThumb('作る');
+  thumb.image.classList.add('is-add');
+  thumb.image.append(createIcon('plus'));
+  thumb.button.setAttribute('aria-label', '家具を作る');
+  thumb.button.addEventListener('click', open);
+  return thumb.element;
+}
+
+/** 基本の家具のタイル。色の四角と名前。押すと空いている場所に置く */
+function createBasicTile(type: FurnitureType, place: (type: FurnitureType) => void): HTMLElement {
+  const thumb = createThumb(type.name);
+  thumb.image.classList.add('is-basic');
+  const swatch = document.createElement('span');
+  swatch.className = 'thumb__swatch';
+  swatch.style.background = type.color;
+  thumb.image.append(swatch);
+  thumb.button.addEventListener('click', () => place(type));
+  return thumb.element;
+}
+
+/**
+ * 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る。
+ *
+ * 匿名なら、どの行を押しても**先に**ログインを求める（写真を選ぶ前。iOS のリダイレクトは
+ * 写真を持ち越せないため）。ログインできたら、商品の URL はそのまま欄を出す。写真は
+ * もう一度押してもらう。ポップアップやリダイレクトを挟んだあとではブラウザが
+ * 「利用者の操作」とみなさず、ファイル選択を塞ぐことがある
+ */
+interface Chooser {
+  element: HTMLElement;
+  /** URL を貼る欄の置き場。行の下に出る */
+  formSlot: HTMLElement;
+  open(): void;
+  close(): void;
+  /** ログインの結果を伝える。何も言わないと「ログインしたのに何も起きない」に見える */
+  showSignedIn(error?: string | null): void;
+}
+
+function createChooser(actions: Record<Way, () => void> & { onClose(): void }): Chooser {
+  const element = document.createElement('div');
+  element.className = 'lib__chooser';
+  element.hidden = true;
+
+  const head = document.createElement('div');
+  head.className = 'edit__head';
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'button is-text is-small';
+  back.textContent = '‹ 戻る';
+  back.addEventListener('click', close);
+  const title = document.createElement('span');
+  title.className = 'edit__title';
+  title.textContent = '作り方を選ぶ';
+  const headSpacer = document.createElement('span');
+  headSpacer.className = 'edit__spacer';
+  head.append(back, title, headSpacer);
+
+  /** 直前に押した行。ログインのあとに続きをするため */
+  let pending: Way | null = null;
+
+  const menu = document.createElement('div');
+  menu.className = 'ways';
+  const rows: HTMLButtonElement[] = [];
+  const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
+    { way: 'photo', icon: 'camera', label: '写真から', note: '家具だけを切り抜いて板にする・数秒' },
+    { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天の商品ページ・寸法どおりの大きさで置ける' },
+    { way: 'model', icon: 'cube', label: '3D モデルとして', note: '回して見られる・約 3 分' },
+  ];
+  for (const { way, icon, label, note } of WAYS) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'way';
+    const iconBox = document.createElement('span');
+    iconBox.className = 'way__icon';
+    iconBox.append(createIcon(icon));
+    const text = document.createElement('span');
+    text.className = 'way__text';
+    const strong = document.createElement('span');
+    strong.className = 'way__label';
+    strong.textContent = label;
+    const small = document.createElement('span');
+    small.className = 'way__note';
+    small.textContent = note;
+    text.append(strong, small);
+    row.append(iconBox, text);
+    row.addEventListener('click', () => {
+      signedInNote.hidden = true;
+      if (authState.get().anonymous) {
+        pending = way;
+        loginPanel.open();
+        renderState();
+        return;
+      }
+      actions[way]();
+    });
+    rows.push(row);
+    menu.append(row);
   }
-  return grid;
+
+  const formSlot = document.createElement('div');
+
+  /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
+  const loginHint = document.createElement('p');
+  loginHint.className = 'hint lib__login-hint';
+  loginHint.textContent = '作成には Google ログインが必要です';
+  /** 認証できないときだけ出す。押せない理由が無いと、壊れているように見える */
+  const authNote = document.createElement('p');
+  authNote.className = 'hint is-error';
+  authNote.hidden = true;
+  const signedInNote = document.createElement('p');
+  signedInNote.className = 'hint';
+  signedInNote.hidden = true;
+
+  // ログインを求めるパネル。行と入れ替わりで出る
+  const loginPanel = createLoginPanel(() => {
+    // ポップアップでログインできた直後。商品の URL はそのまま続けられる。
+    // 写真はファイル選択を開けないので、もう一度押してもらう
+    if (pending === 'product') actions.product();
+    else showSignedIn();
+    pending = null;
+  });
+
+  element.append(head, menu, loginPanel.element, formSlot, loginHint, authNote, signedInNote, createIdentity());
+
+  function showSignedIn(error: string | null = null): void {
+    signedInNote.classList.toggle('is-error', error !== null);
+    signedInNote.textContent = error ?? 'ログインできました。もう一度作り方を押して写真を選んでください';
+    signedInNote.hidden = false;
+  }
+
+  function renderState(): void {
+    const { status, anonymous } = authState.get();
+    // 認証できないとこのあと何をしても失敗する。黙って止まると原因が分からないので出す
+    const authFailed = status === 'failed';
+    for (const row of rows) row.disabled = authFailed;
+    authNote.hidden = !authFailed;
+    authNote.textContent = authFailed ? authFailureMessage() : '';
+    loginHint.hidden = authFailed || !anonymous;
+    // ログインを求めている間は行を引っ込める（同じ場所に出す）
+    menu.hidden = !loginPanel.element.hidden;
+  }
+
+  function open(): void {
+    signedInNote.hidden = true;
+    pending = null;
+    loginPanel.close();
+    renderState();
+    element.hidden = false;
+  }
+
+  function close(): void {
+    element.hidden = true;
+    actions.onClose();
+  }
+
+  authState.subscribe(renderState);
+  // パネルの出し入れは hidden 属性の変化なので、状態の購読では拾えない
+  new MutationObserver(renderState).observe(loginPanel.element, { attributeFilter: ['hidden'] });
+  renderState();
+
+  return { element, formSlot, open, close, showSignedIn };
 }
 
 /** できあがったモデル。押すと置く。× で保管庫から外す */
@@ -600,19 +749,33 @@ function createThumb(caption: string): {
   return { element, button, image, name };
 }
 
-/** 失敗した作成（切り抜きも 3D も同じ姿）。とじると、その失敗だけが消える */
-function createFailure(fileName: string, error: string | null, dismiss: () => void): HTMLElement {
-  const row = document.createElement('div');
-  row.className = 'row lib__failure';
+/**
+ * 失敗した作成のタイル。「!」の印と「作れませんでした」。
+ * 理由はタイルに収まらないので、押すと格子の下に出る（failureDetailContent）
+ */
+function createFailedThumb(item: FailedItem, toggle: (id: string) => void): ThumbNode<FailedItem> {
+  const thumb = createThumb('作れませんでした');
+  thumb.image.classList.add('is-failed');
+  const badge = document.createElement('span');
+  badge.className = 'thumb__badge';
+  badge.textContent = '!';
+  thumb.image.append(badge);
+  thumb.button.setAttribute('aria-label', `${item.name}: 作れませんでした。理由を見る`);
+  thumb.button.addEventListener('click', () => toggle(item.id));
+  return { element: thumb.element, update() {}, dispose() {} };
+}
+
+/** 失敗の理由と「とじる」。とじると、その失敗だけが消える */
+function failureDetailContent(item: FailedItem): HTMLElement[] {
   const message = document.createElement('p');
   message.className = 'hint is-error';
-  message.textContent = `${fileName}: ${error ?? '作成できませんでした'}`;
+  message.textContent = `${item.name}: ${item.error ?? '作成できませんでした'}`;
   const closeButton = document.createElement('button');
+  closeButton.type = 'button';
   closeButton.className = 'button is-quiet is-small';
   closeButton.textContent = 'とじる';
-  closeButton.addEventListener('click', dismiss);
-  row.append(message, closeButton);
-  return row;
+  closeButton.addEventListener('click', item.dismiss);
+  return [message, closeButton];
 }
 
 /**

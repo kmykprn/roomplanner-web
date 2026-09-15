@@ -750,7 +750,7 @@ body {
   gap: 14px;
 }
 
-/* 「3Dモデル」タブ。作る・作ったもの・基本のもの、を縦に並べる */
+/* 「家具」タブ。絞り込み・タイルの格子、と入れ替わりで出る「作り方を選ぶ」「編集」の姿 */
 .lib {
   display: grid;
   /* 列を幅に固定する。auto のままだと長い一文に合わせて列が横に伸び、シートからはみ出す */
@@ -759,36 +759,156 @@ body {
   width: 100%;
 }
 
-.lib__generate + .hint {
-  margin-top: 8px;
+.lib__normal,
+.lib__chooser {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  align-content: start;
 }
 
-/* 主役の操作なので横いっぱいに */
-.lib__generate {
+/* 絞り込み。「すべて / 作った / 基本」。押されているものだけ白く浮く */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #eceff1;
+  justify-self: start;
+}
+.seg__item {
+  flex: none;
+  white-space: nowrap;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #4c5b62;
+  font: inherit;
+  font-size: 12px;
+  touch-action: manipulation;
+}
+.seg__item[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* タイルの格子。幅に応じて 4〜5 列。縦に伸びるのでシートのスクロールに任せる */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 10px 8px;
+}
+.tiles .thumb {
+  width: auto;
+}
+.tiles .thumb__img {
   width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+/* 「＋ 作る」。破線の枠と主色で、置く家具とは別の物だと分かるように */
+.thumb__img.is-add {
+  border: 1.5px dashed var(--primary);
+  background: #eaf4f8;
+  color: var(--primary);
+}
+.thumb__img.is-add .ic {
+  width: 28px;
+  height: 28px;
+}
+
+/* 基本の家具。中に色の四角 */
+.thumb__img.is-basic {
+  background: var(--surface);
+}
+.thumb__swatch {
+  width: 52%;
+  height: 52%;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* 失敗。薄い枠に「!」の印。押すと理由が下に出る（.is-open は出している間） */
+.thumb__img.is-failed {
+  background: #f4f4f4;
+}
+.thumb.is-open .thumb__img.is-failed {
+  border-color: var(--danger);
+}
+.thumb__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
   text-align: center;
 }
 
-/* 3D モデルの作成への入口。主役の下に小さく、中央に */
-.lib__generate-3d {
-  display: block;
-  width: 100%;
-  margin-top: 4px;
-  text-align: center;
+/* 作り方の 3 行。線のアイコンと、太い名前・薄い一言 */
+.ways {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
 }
-
-/* 商品の URL から作る。写真の入口の下に、枠線だけの控えめな姿で */
-.lib__product {
-  width: 100%;
-  margin-top: 8px;
-  text-align: center;
+.way {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+.way:first-child {
+  border-top: none;
+}
+.way:disabled {
+  color: #7a8388;
+}
+.way__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #eaf4f8;
+  color: var(--primary);
+}
+.way__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.way__label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.way__note {
+  font-size: 12px;
+  color: #7a8388;
 }
 
 /* URL を貼る欄。ログインを求めるパネルと同じ囲み */
 .product-form {
   display: grid;
   gap: 8px;
-  margin-top: 8px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -803,26 +923,18 @@ body {
   margin-right: auto;
 }
 
-.lib__label {
-  margin: 0 0 6px;
-  font-size: 12px;
-  color: #7a8388;
-}
-
-/* 失敗した作成は、サムネイルに収まらないので文で出す */
+/* 失敗の理由。タイルに収まらないので格子の下に文で出す。文と「とじる」を両端に */
 .lib__failure {
-  flex-wrap: nowrap;
-  justify-content: space-between;
-  margin-top: 6px;
-}
-
-/* 作ったモデルのサムネイル。横に並べて、はみ出したぶんは横スクロール */
-.thumbs {
   display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 6px 6px 4px 0;
-  touch-action: pan-x;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+.lib__failure .hint {
+  margin: 0;
 }
 
 .thumb {
