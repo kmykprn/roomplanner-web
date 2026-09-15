@@ -35,6 +35,7 @@ import {
   restoreRoom,
 } from '@/core/persistence';
 import { resumeGeneration } from '@/core/generation';
+import { resumeCutouts } from '@/core/cutout';
 import { restoreModelLibrary } from '@/core/modelLibrary';
 import { THEME } from '@/config/theme';
 
@@ -228,8 +229,9 @@ createBottomSheet(app);
 // --- 端末に残す ---
 persistRoomOnChange();
 persistPhotoOnChange();
-// 前回の生成が終わっていれば、ここで保管庫に入る
+// 前回の生成・切り抜きが終わっていれば、ここで保管庫に入る
 resumeGeneration();
+resumeCutouts();
 
 // --- 毎フレームの処理 ---
 viewer.onFrame(() => {

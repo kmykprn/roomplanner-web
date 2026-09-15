@@ -7,7 +7,7 @@
  * API の取り決めは Hunyuan3D-2GP の api/SPEC.md にある。
  */
 
-import { API_BASE, CUTOUT_BASE, CUTOUT_TIMEOUT_MS } from '@/config/api';
+import { API_BASE, CUTOUT_BASE } from '@/config/api';
 import { getIdToken } from '@/platform/auth';
 
 /** 生成の進み方。サーバー側の state をそのまま写している */
@@ -82,6 +82,7 @@ function toCutoutError(response: Response): ApiError {
     401: 'Google ログインが必要です。ログインしてからもう一度お試しください',
     409: '同時に処理されました。もう一度お試しください',
     429: '本日の切り抜きの上限に達しました',
+    503: '切り抜きはいま使えません。時間をおいて試してください',
   };
   return new ApiError(response.status, messages[response.status] ?? '切り抜けませんでした。時間をおいて試してください');
 }
@@ -166,102 +167,50 @@ async function toProductError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, messages[response.status] ?? '商品を取り込めませんでした');
 }
 
-/** サーバーが流してくる工程。詳細は Hunyuan3D-2GP の cutout/SPEC.md */
-export type CutoutEvent =
-  | { phase: 'received' }
-  | { phase: 'cutting'; expectedSeconds: number; elapsed?: number }
-  | { phase: 'finishing'; elapsed?: number }
-  | { phase: 'done'; png: string }
-  | { phase: 'failed'; error: string };
-
-/** 応答をどこまで読めたか。done が来ずに終わったとき、原因を絞る手がかりとして文言に添える */
-interface ReadStats {
-  chunks: number;
-  bytes: number;
+/** 預けた切り抜きの状態。詳細は Hunyuan3D-2GP の cutout/SPEC.md */
+export interface CutoutJobStatus {
+  phase: 'queued' | 'running' | 'done' | 'failed';
+  /** 推論にかかりそうな秒数。サーバーが直近の実測から出した値 */
+  expectedSeconds: number | null;
+  /** いまの工程に入ってからの秒数。サーバーの時計で測ったもの */
+  elapsed: number;
+  error: string | null;
 }
 
 /**
- * 写真を送って、家具だけを切り抜いた透過 PNG を受け取る。数秒で返る。
+ * 写真を預けて受付番号をもらう。切り抜きはあとでできる（getCutoutJob で見に行く）。
  *
- * 応答は工程を 1 行ずつ流す NDJSON。届いた行ごとに onEvent を呼び、最後の行の PNG を返す。
- * 1 行目が届くまでの空白がコールドスタート（サーバーの起動待ち）で、その間も
- * 呼び出し側は「起動を待っている」と出せる。
- *
- * 待つ上限を置く。サーバー側にも 60 秒の打ち切りがあるが、通信が途中で
- * 切れたときは応答そのものが来ないので、こちらでも切る。
- *
- * 同じ工程の行が 2 秒ごとに繰り返し届く（接続を黙らせないため）。onEvent は
- * その繰り返しごとに呼ぶので、呼び出し側は工程が変わったかを見て扱う
+ * 1 本の接続で結果を待たないのは、iPhone が PWA を裏に回すと数秒で通信を切るため。
+ * 楽天のページに URL をコピーしに行く間に切れていた
  */
-export async function createCutout(
-  image: Blob,
-  onEvent: (event: CutoutEvent) => void
-): Promise<Blob> {
+export async function createCutoutJob(image: Blob): Promise<{ id: string; expectedSeconds: number | null }> {
   const body = new FormData();
   body.append('image', image, 'photo.jpg');
-
-  const response = await fetch(`${CUTOUT_BASE}/cutouts`, {
+  const response = await fetch(`${CUTOUT_BASE}/cutout-jobs`, {
     method: 'POST',
-    headers: { ...(await authHeaders()), Accept: 'application/x-ndjson' },
+    headers: await authHeaders(),
     body,
-    signal: AbortSignal.timeout(CUTOUT_TIMEOUT_MS),
   });
   if (!response.ok) throw toCutoutError(response);
-
-  const startedAt = Date.now();
-  const stats: ReadStats = { chunks: 0, bytes: 0 };
-  let lastPhase: string | null = null;
-  let result: Blob | null = null;
-  for await (const line of readLines(response, stats)) {
-    const event = JSON.parse(line) as CutoutEvent;
-    if (event.phase === 'failed') throw new ApiError(500, event.error);
-    if (event.phase === 'done') {
-      result = base64ToBlob(event.png, 'image/png');
-      break;
-    }
-    lastPhase = event.phase;
-    onEvent(event);
-  }
-  if (!result) {
-    // 応答が途中で（行の切れ目で）終わった。どこまで届いたかを添えて、再発時に原因を絞れるようにする
-    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-    const detail = `${lastPhase ?? '工程の行なし'} まで受信・${stats.chunks} 回 ${Math.round(stats.bytes / 1024)}KB・${seconds} 秒`;
-    throw new ApiError(500, `切り抜きの結果が届きませんでした（${detail}）`);
-  }
-  return result;
+  const data = (await response.json()) as { id: string; expectedSeconds?: number | null };
+  return { id: data.id, expectedSeconds: data.expectedSeconds ?? null };
 }
 
-/**
- * 応答の本文を、届いた順に 1 行ずつ返す。
- *
- * 本文を最後まで待ってから分けると、工程を流してもらう意味が無い。
- * 読み進めながら改行で区切る。ストリームを読めない古いブラウザでは全文を待って分ける
- */
-async function* readLines(response: Response, stats: ReadStats): AsyncGenerator<string> {
-  if (!response.body) {
-    const text = await response.text();
-    stats.chunks = 1;
-    stats.bytes = text.length;
-    for (const line of text.split('\n')) if (line) yield line;
-    return;
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffered = '';
-  while (true) {
-    const { value, done } = await reader.read();
-    if (value) {
-      stats.chunks += 1;
-      stats.bytes += value.byteLength;
-    }
-    buffered += decoder.decode(value, { stream: !done });
-    const lines = buffered.split('\n');
-    // 最後の要素は途中の行（まだ改行が来ていない）なので次に回す
-    buffered = lines.pop() ?? '';
-    for (const line of lines) if (line) yield line;
-    if (done) break;
-  }
-  if (buffered) yield buffered;
+export async function getCutoutJob(id: string): Promise<CutoutJobStatus> {
+  const response = await fetch(`${CUTOUT_BASE}/cutout-jobs/${encodeURIComponent(id)}`, {
+    headers: await authHeaders(),
+  });
+  if (!response.ok) throw toCutoutError(response);
+  return (await response.json()) as CutoutJobStatus;
+}
+
+/** できあがった切り抜き（透過 PNG）。done になる前は 404 */
+export async function getCutoutResult(id: string): Promise<Blob> {
+  const response = await fetch(`${CUTOUT_BASE}/cutout-jobs/${encodeURIComponent(id)}/result`, {
+    headers: await authHeaders(),
+  });
+  if (!response.ok) throw toCutoutError(response);
+  return response.blob();
 }
 
 function base64ToBlob(base64: string, type: string): Blob {
