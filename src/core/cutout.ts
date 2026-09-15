@@ -20,7 +20,7 @@ import {
   importProduct,
   type CutoutJobStatus,
 } from '@/platform/api';
-import { CUTOUT_POLL_INTERVAL_MS, CUTOUT_TOTAL_TIMEOUT_MS } from '@/config/api';
+import { CUTOUT_RETRY_INTERVAL_MS, CUTOUT_TOTAL_TIMEOUT_MS } from '@/config/api';
 import { ensureRegistered } from '@/platform/auth';
 import { addModel, modelNameFrom } from '@/core/modelLibrary';
 import { saveCutout } from '@/platform/cutoutCache';
@@ -303,16 +303,18 @@ async function restorePreview(id: string, key: string): Promise<void> {
 }
 
 /**
- * できあがるまで一定間隔で見に行く。
+ * できあがるまで見に行く。
  *
+ * 一定間隔で叩くのではなく、「いま知っている工程」を渡してサーバーに待ってもらう
+ * （工程が変わればその時点で返る）。1 件で 3 回ほどの要求で済む。
  * 画面が裏にいる間は見に行かない（iOS は裏の通信を切るので、失敗と区別がつかない）。
  * 表に戻った瞬間に見に行く。裏にいた時間は諦める判断に数えない
  */
 async function watch(id: string, jobId: string): Promise<void> {
-  let first = true;
+  let retryAfterError = false;
   while (true) {
-    if (!first) await sleep(CUTOUT_POLL_INTERVAL_MS);
-    first = false;
+    if (retryAfterError) await sleep(CUTOUT_RETRY_INTERVAL_MS);
+    retryAfterError = false;
     await untilVisible();
 
     const current = cutoutState.get().jobs.find((job) => job.id === id);
@@ -325,14 +327,15 @@ async function watch(id: string, jobId: string): Promise<void> {
 
     let status: CutoutJobStatus;
     try {
-      status = await getCutoutJob(jobId);
+      status = await getCutoutJob(jobId, current.serverPhase);
     } catch (error) {
-      // 通信が切れただけかもしれないので、続けて見に行く。
-      // 無くなっていた（7 日で消える・別の端末で取り込んだ）ならここで諦める
+      // 通信が切れただけかもしれない（裏に回った直後など）ので、少し待って見に行く。
+      // 無くなっていた（2 日で消える）ならここで諦める
       if (error instanceof ApiError && error.status === 404) {
         updateJob(id, { phase: 'failed', error: '切り抜きの記録が見つかりませんでした' });
         return;
       }
+      retryAfterError = true;
       continue;
     }
 

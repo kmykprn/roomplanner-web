@@ -7,7 +7,7 @@
  * API の取り決めは Hunyuan3D-2GP の api/SPEC.md にある。
  */
 
-import { API_BASE, CUTOUT_BASE } from '@/config/api';
+import { API_BASE, CUTOUT_BASE, CUTOUT_WAIT_SECONDS } from '@/config/api';
 import { getIdToken } from '@/platform/auth';
 
 /** 生成の進み方。サーバー側の state をそのまま写している */
@@ -196,9 +196,23 @@ export async function createCutoutJob(image: Blob): Promise<{ id: string; expect
   return { id: data.id, expectedSeconds: data.expectedSeconds ?? null };
 }
 
-export async function getCutoutJob(id: string): Promise<CutoutJobStatus> {
-  const response = await fetch(`${CUTOUT_BASE}/cutout-jobs/${encodeURIComponent(id)}`, {
+/**
+ * 預けた切り抜きの状態。
+ *
+ * after を渡すと、工程がそこから変わる（か done / failed になる）まで、サーバーで
+ * 最大 CUTOUT_WAIT_SECONDS 待ってから返る。2 秒ごとに叩く代わりに、
+ * 起動待ち → 推論中 → 完成の変わり目ごとに 1 回で済む
+ */
+export async function getCutoutJob(
+  id: string,
+  after: CutoutJobStatus['phase'] | null = null
+): Promise<CutoutJobStatus> {
+  const query = new URLSearchParams({ wait: String(CUTOUT_WAIT_SECONDS) });
+  if (after) query.set('after', after);
+  const response = await fetch(`${CUTOUT_BASE}/cutout-jobs/${encodeURIComponent(id)}?${query}`, {
     headers: await authHeaders(),
+    // サーバーは wait 秒で必ず返す。それでも返らないのは接続が死んでいるときなので、こちらでも切る
+    signal: AbortSignal.timeout((CUTOUT_WAIT_SECONDS + 15) * 1000),
   });
   if (!response.ok) throw toCutoutError(response);
   return (await response.json()) as CutoutJobStatus;
