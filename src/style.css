@@ -199,14 +199,23 @@ body {
   opacity: 0.6;
 }
 
+/*
+ * 下のシート。高さは画面に対して固定し、タブを切り替えても上の表示が動かないようにする。
+ * 中身の高さに合わせると、タブごとにシートが伸び縮みして写真・部屋の表示が押し上げられる。
+ * 長い中身（家具の格子、操作の行）はタブの下だけで縦にスクロールする
+ */
 .sheet {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  height: max(42dvh, 280px);
   background: var(--surface);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
 .sheet__tabs {
+  flex: none;
   display: flex;
   border-bottom: 1px solid var(--border);
 }
@@ -239,8 +248,13 @@ body {
 }
 
 .sheet__body {
+  flex: 1;
+  min-height: 0;
   padding: 12px 16px 16px;
-  min-height: 92px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 中はふつうに縦スクロール。横スクロールの列（.grid）は自分で pan-x を持つ */
+  touch-action: pan-y;
 }
 
 .grid {
