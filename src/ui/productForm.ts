@@ -1,8 +1,9 @@
 /**
- * 商品ページの URL を貼る欄。「作り方を選ぶ」で「商品の URL から」を押したときだけ出す。
+ * 商品ページの URL を貼る欄。「作り方を選ぶ」の「商品の URL から」の行の中で開く。
  *
  * 楽天市場の商品ページの URL を貼って「取り込む」を押すと、閉じて取り込みが始まる。
  * 進み具合は一覧のサムネイル（切り抜きと同じ円）に出るので、ここでは何も待たない。
+ * 行の見出しに説明があるので、ここには欄とボタンだけを置く。
  */
 
 export interface ProductForm {
@@ -11,27 +12,25 @@ export interface ProductForm {
   close(): void;
 }
 
-export function createProductForm(onSubmit: (url: string) => void): ProductForm {
+export interface ProductFormOptions {
+  onSubmit(url: string): void;
+  /** 開いた・閉じたを伝える。行の見た目を合わせるため */
+  onToggle?(opened: boolean): void;
+}
+
+export function createProductForm({ onSubmit, onToggle }: ProductFormOptions): ProductForm {
   const element = document.createElement('form');
   element.className = 'product-form';
   element.hidden = true;
-
-  const label = document.createElement('label');
-  label.className = 'field__label';
-  label.htmlFor = 'product-url';
-  label.textContent = '楽天市場の商品ページの URL';
 
   const input = document.createElement('input');
   input.type = 'url';
   input.id = 'product-url';
   input.className = 'field__input';
-  input.placeholder = 'https://item.rakuten.co.jp/…';
+  input.placeholder = '楽天市場の商品ページの URL を貼る';
+  input.setAttribute('aria-label', '楽天市場の商品ページの URL');
   input.autocomplete = 'off';
   input.required = true;
-
-  const hint = document.createElement('p');
-  hint.className = 'hint';
-  hint.textContent = '商品の画像を切り抜いて、寸法が分かれば実寸で置けます';
 
   const error = document.createElement('p');
   error.className = 'hint is-error';
@@ -50,7 +49,7 @@ export function createProductForm(onSubmit: (url: string) => void): ProductForm 
   cancel.addEventListener('click', close);
   buttons.append(submit, cancel);
 
-  element.append(label, input, hint, error, buttons);
+  element.append(input, error, buttons);
 
   element.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -68,11 +67,15 @@ export function createProductForm(onSubmit: (url: string) => void): ProductForm 
     error.hidden = true;
     input.value = '';
     element.hidden = false;
+    onToggle?.(true);
     input.focus();
+    // iOS はキーボードが出るとシートが縮む。欄が隠れないように見える位置へ
+    input.scrollIntoView({ block: 'nearest' });
   }
 
   function close(): void {
     element.hidden = true;
+    onToggle?.(false);
   }
 
   return { element, open, close };
