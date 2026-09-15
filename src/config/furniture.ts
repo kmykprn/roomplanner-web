@@ -22,7 +22,7 @@ export const FURNITURE_TYPES: FurnitureType[] = [
   { id: 'bed', name: 'ベッド', color: '#e8dbd2', defaultSize: [1, 0.5, 2] },
   { id: 'desk', name: 'デスク', color: '#D2691E', defaultSize: [1.5, 0.8, 0.8] },
   { id: 'refrigerator', name: '冷蔵庫', color: '#E0E0E0', defaultSize: [0.6, 1.8, 0.65] },
-  { id: 'pillar-box', name: '柱（直方体）', color: '#E0E0E0', defaultSize: [0.3, 2.5, 0.3] },
+  { id: 'pillar-box', name: '柱', color: '#E0E0E0', defaultSize: [0.3, 2.5, 0.3] },
 ];
 
 export function findFurnitureType(id: string): FurnitureType | undefined {

@@ -171,7 +171,7 @@ export function resumeGeneration(): void {
     .map<GenerationJob>((job) => ({
       id: crypto.randomUUID(),
       jobId: job.jobId,
-      fileName: job.fileName || '写真から作成した家具',
+      fileName: job.fileName || '写真から作った家具',
       previewKey: job.previewKey ?? null,
       previewUrl: null,
       phase: 'queued',
@@ -213,7 +213,7 @@ async function watch(id: string, jobId: string): Promise<void> {
     if (isOverdue(current)) {
       updateJob(id, {
         phase: 'failed',
-        error: '時間内に終わりませんでした。時間をおいて試してください',
+        error: '時間がかかりすぎたため中断しました。時間をおいてお試しください',
       });
       return;
     }
@@ -225,7 +225,7 @@ async function watch(id: string, jobId: string): Promise<void> {
       // 通信が切れただけかもしれないので、続けて見に行く。
       // 認証や権限の問題なら、次も同じように失敗して諦めることになる
       if (error instanceof ApiError && error.status === 404) {
-        updateJob(id, { phase: 'failed', error: '生成の記録が見つかりませんでした' });
+        updateJob(id, { phase: 'failed', error: '3D モデルの作成結果が見つかりませんでした。もう一度お試しください' });
         return;
       }
       continue;
@@ -234,7 +234,7 @@ async function watch(id: string, jobId: string): Promise<void> {
     if (status.state === 'failed') {
       updateJob(id, {
         phase: 'failed',
-        error: status.error ?? '生成に失敗しました',
+        error: status.error ?? '3D モデルを作れませんでした。もう一度お試しください',
       });
       return;
     }
@@ -290,7 +290,7 @@ function rememberProgress(id: string, status: JobStatus): void {
 /** 完成したモデルを端末に保存してから保管庫に入れる */
 async function finish(id: string, jobId: string, modelUrl?: string): Promise<void> {
   if (!modelUrl) {
-    updateJob(id, { phase: 'failed', error: '完成したモデルの場所が分かりません' });
+    updateJob(id, { phase: 'failed', error: 'できあがった 3D モデルを取得できませんでした。もう一度お試しください' });
     return;
   }
   updateJob(id, { phase: 'saving' });
@@ -323,7 +323,7 @@ export function dismissError(id: string): void {
 function toMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
-  return '生成に失敗しました';
+  return '3D モデルを作れませんでした。もう一度お試しください';
 }
 
 function sleep(ms: number): Promise<void> {

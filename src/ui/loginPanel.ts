@@ -27,7 +27,7 @@ const LOGIN_TIMEOUT_MS = 60_000;
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error('ログインの応答がありません。もう一度お試しください')),
+      () => reject(new Error('ログインが完了しませんでした。もう一度お試しください')),
       ms
     );
     promise.then(resolve, reject).finally(() => clearTimeout(timer));
@@ -48,11 +48,11 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
 
   const title = document.createElement('p');
   title.className = 'login__title';
-  title.textContent = '家具の作成には Google ログインが必要です';
+  title.textContent = '家具を作るには Google ログインが必要です';
 
   const note = document.createElement('p');
   note.className = 'hint login__note';
-  note.textContent = 'ログインすると、写真を選んで作成できるようになります';
+  note.textContent = 'ログイン後に、写真を選んで作れます';
 
   const buttons = document.createElement('div');
   buttons.className = 'row';

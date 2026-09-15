@@ -234,7 +234,7 @@ function decodeImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('画像として読み込めませんでした'));
+    image.onerror = () => reject(new Error('写真として読み込めませんでした'));
     image.src = url;
   });
 }

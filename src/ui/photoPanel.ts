@@ -17,8 +17,8 @@ import { clearBackground, photoState, setBackground, setMasking } from '@/core/p
 /** 写真がまだ無いときの案内 */
 const IDLE_MESSAGE = '部屋の写真を選ぶと、その上に家具を置けます';
 /** 形式と大きさのどちらでも起こる。利用者にできることを先に出す。キャンバスの案内（ui/photoEmpty.ts）も使う */
-export const FAILED_MESSAGE = '写真を読み込めませんでした。別の写真で試してください';
-const MASK_NOTE = '指定した範囲は家具の手前に表示されます';
+export const FAILED_MESSAGE = '写真を読み込めませんでした。別の写真をお試しください';
+const MASK_NOTE = 'なぞった部分が家具より手前に表示されます';
 
 export function createPhotoPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -31,7 +31,7 @@ export function createPhotoPanel(): HTMLElement {
   const mask = createMaskPanel();
 
   // --- 背景の画像 ---
-  const photoRow = createSettingRow('背景の画像');
+  const photoRow = createSettingRow('部屋の写真');
   const pickButton = createSmallButton('選ぶ', async () => {
     const file = await pickImage();
     if (file) await setBackground(file);
@@ -43,7 +43,7 @@ export function createPhotoPanel(): HTMLElement {
   photoRow.element.append(photoButtons);
 
   // --- 手前の範囲。行ごと押せる ---
-  const maskRow = createSettingRow('手前の範囲', () => setMasking(true));
+  const maskRow = createSettingRow('手前にする部分', () => setMasking(true));
   const chevron = document.createElement('span');
   chevron.className = 'setting__chevron';
   chevron.textContent = '›';
@@ -63,15 +63,15 @@ export function createPhotoPanel(): HTMLElement {
     const failed = backgroundStatus === 'failed';
 
     photoRow.setValue(
-      loading ? '読み込んでいます…' : ready && backgroundName ? backgroundName : '未選択'
+      loading ? '読み込み中…' : ready && backgroundName ? backgroundName : '未選択'
     );
-    pickButton.textContent = ready ? '変える' : '選ぶ';
+    pickButton.textContent = ready ? '変更' : '選ぶ';
     // 読み込み中に押させると、どちらが背景になるのか分からなくなる
     pickButton.disabled = loading;
     clearButton.hidden = !ready;
 
     maskRow.element.hidden = !ready;
-    maskRow.setValue(maskUrl ? '指定済み' : '未指定', Boolean(maskUrl));
+    maskRow.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
     note.classList.toggle('is-error', failed);
     note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : maskUrl ? '' : MASK_NOTE;

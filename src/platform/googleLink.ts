@@ -131,13 +131,13 @@ function errorCode(error: unknown): string {
 export function describeFailure(code: string): string {
   switch (code) {
     case 'auth/popup-blocked':
-      return 'ログインの画面が開けませんでした。ポップアップを許可してもう一度お試しください';
+      return 'ログイン画面を開けませんでした。ポップアップを許可して、もう一度お試しください';
     case 'auth/unauthorized-domain':
-      return 'このサイトからはログインできない設定になっています（管理者にお伝えください）';
+      return 'このサイトからはログインできない設定です。管理者にお知らせください';
     case 'auth/network-request-failed':
-      return '通信できませんでした。接続を確かめてもう一度お試しください';
+      return '通信できませんでした。接続を確認して、もう一度お試しください';
     case 'auth/operation-not-allowed':
-      return 'Google ログインが有効になっていません（管理者にお伝えください）';
+      return 'Google ログインが有効になっていません。管理者にお知らせください';
     default:
       return code ? `ログインできませんでした（${code}）` : 'ログインできませんでした';
   }

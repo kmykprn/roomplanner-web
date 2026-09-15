@@ -32,7 +32,7 @@ const NO_PHOTO = '先に「背景」タブで写真を選んでください';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
   ['brush', '指でなぞる'],
-  ['polygon', '点をつないで囲む'],
+  ['polygon', '点で囲む'],
   ['eraser', '消しゴム'],
 ];
 
@@ -48,13 +48,13 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } {
   switch (kind) {
     case 'brush':
-      return { text: '写真の上を指でなぞると、なぞった部分が家具の手前になります', done: false };
+      return { text: '家具より手前に見せたい部分を、指でなぞってください', done: false };
     case 'eraser':
-      return { text: '消したい部分を指でなぞると、手前の指定が消えます', done: false };
+      return { text: '消したい部分を指でなぞってください', done: false };
     case 'polygon':
       if (corners === 0) {
         return {
-          text: `囲みたい物のふちに沿って、点をつなぐようにタップしてください（${MIN_CORNERS}点以上）`,
+          text: `手前にしたい物のふちに沿って、点を打つようにタップしてください（${MIN_CORNERS} 点以上）`,
           done: false,
         };
       }
@@ -62,7 +62,7 @@ function guideFor(kind: MaskToolKind, corners: number): { text: string; done: bo
         return { text: `あと ${MIN_CORNERS - corners} 点。物のふちに沿ってタップしてください`, done: false };
       }
       return {
-        text: '最初の点をもう一度タップするか「囲みを閉じる」で、囲んだ中が家具の手前になります',
+        text: '最初の点をもう一度タップするか「囲みを閉じる」を押すと、囲んだ中が手前になります',
         done: true,
       };
   }
@@ -77,7 +77,7 @@ export function createMaskPanel(): HTMLElement {
   head.className = 'mask__head';
   const title = document.createElement('span');
   title.className = 'mask__title';
-  title.textContent = '手前の範囲';
+  title.textContent = '手前にする部分';
   const doneButton = createButton('完了', () => setMasking(false), 'button is-small mask__done');
   doneButton.prepend(createIcon('check'));
   head.append(title, doneButton);
@@ -110,8 +110,8 @@ export function createMaskPanel(): HTMLElement {
   // 戻す・全部消すは同じ高さ・同じ枠の 1 つの組にする。ばらばらに置くと道具の段を圧迫していた
   const editPair = document.createElement('div');
   editPair.className = 'pair';
-  const undoButton = createButton('戻す', () => maskEditor.undo(), 'button');
-  const clearButton = createButton('全部消す', clearMask, 'button');
+  const undoButton = createButton('ひとつ戻す', () => maskEditor.undo(), 'button');
+  const clearButton = createButton('すべて消す', clearMask, 'button');
   editPair.append(undoButton, clearButton);
   row.append(widthSwitch.element, closeButton, spacer, editPair);
 

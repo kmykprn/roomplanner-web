@@ -27,7 +27,7 @@ export function createProductForm({ onSubmit, onToggle }: ProductFormOptions): P
   input.type = 'url';
   input.id = 'product-url';
   input.className = 'field__input';
-  input.placeholder = '楽天市場の商品ページの URL を貼る';
+  input.placeholder = '楽天市場の商品ページの URL';
   input.setAttribute('aria-label', '楽天市場の商品ページの URL');
   input.autocomplete = 'off';
   input.required = true;
