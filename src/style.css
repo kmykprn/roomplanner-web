@@ -868,6 +868,21 @@ body {
   text-align: center;
 }
 
+/* 画像の隅の小さな印（3D）。「すべて」で 2D と見分けるため */
+.thumb__tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(17, 24, 28, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+}
+
 /* 作り方の 3 行。線のアイコンと、太い名前・薄い一言 */
 .ways {
   display: grid;

@@ -9,7 +9,7 @@
  *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
  *   その後     … 基本の家具（椅子・テーブル…）。色の四角のタイル
  *
- * 格子の上の「すべて / 作った / 基本」で絞れる。
+ * 格子の上の「すべて / 2D / 3D / 基本」で絞れる。2D は切り抜きの板、3D は向きを変えられるモデル。
  *
  * 3D 生成は約 3 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
  * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
@@ -58,8 +58,12 @@ export interface ModelPanelOptions {
 }
 
 /** 格子の絞り込み */
-type Filter = 'all' | 'made' | 'basic';
-const FILTERS: Record<Filter, string> = { all: 'すべて', made: '作ったもの', basic: '基本' };
+/**
+ * 格子の絞り込み。作ったものは「できたものが何か」で分ける。
+ * 2D は写真や商品ページから切り抜いた板（正面からしか見えない）、3D は向きを変えて置けるモデル
+ */
+type Filter = 'all' | 'flat' | 'solid' | 'basic';
+const FILTERS: Record<Filter, string> = { all: 'すべて', flat: '2D', solid: '3D', basic: '基本' };
 
 /** 作り方。「作り方を選ぶ」姿の 3 行 */
 type Way = 'photo' | 'product' | 'model';
@@ -206,33 +210,33 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     // **タイルは作り直さず、id で使い回す。** 作成中は状態更新のたびにここが呼ばれる。
     // 毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの一覧が
     // ちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
+    const showFlat = filter === 'all' || filter === 'flat';
+    const showSolid = filter === 'all' || filter === 'solid';
     const cutouts = cutoutState.get().jobs;
-    const running = jobs.filter((job) => job.phase !== 'failed');
-    const cutting = cutouts.filter((job) => job.phase !== 'failed');
+    const running = showSolid ? jobs.filter((job) => job.phase !== 'failed') : [];
+    const cutting = showFlat ? cutouts.filter((job) => job.phase !== 'failed') : [];
     const failures: FailedItem[] = [
-      ...cutouts
+      ...(showFlat ? cutouts : [])
         .filter((job) => job.phase === 'failed')
         .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissCutoutError(job.id) })),
-      ...jobs
+      ...(showSolid ? jobs : [])
         .filter((job) => job.phase === 'failed')
         .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissError(job.id) })),
     ];
+    // 3D は modelKey を持つ。切り抜き（2D）は imageKey だけ
+    const shown = [...models].reverse().filter((model) => (model.modelKey ? showSolid : showFlat));
 
     const ordered: HTMLElement[] = [];
-    if (filter !== 'basic') {
-      ordered.push(addTile);
-      ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
-      ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
-      ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
-      ordered.push(...syncThumbs(modelNodes, [...models].reverse(), (model) =>
-        createModelThumb(model, placeGenerated, openEditor)
-      ));
-    }
-    if (filter !== 'made') ordered.push(...basicTiles);
+    if (filter !== 'basic') ordered.push(addTile);
+    ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
+    ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
+    ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
+    ordered.push(...syncThumbs(modelNodes, shown, (model) => createModelThumb(model, placeGenerated, openEditor)));
+    if (filter === 'all' || filter === 'basic') ordered.push(...basicTiles);
     grid.replaceChildren(...ordered);
 
     // 押した失敗がまだあれば理由を出す。とじる・絞り込みで見えなくなったら畳む
-    const opened = filter !== 'basic' ? failures.find((item) => item.id === openFailureId) : undefined;
+    const opened = failures.find((item) => item.id === openFailureId);
     failureDetail.hidden = !opened;
     if (opened) failureDetail.replaceChildren(...failureDetailContent(opened));
     for (const node of failedNodes.values()) node.element.classList.toggle('is-open', false);
@@ -352,9 +356,9 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const productSlot = document.createElement('div');
   productSlot.className = 'way__open';
   const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
-    { way: 'photo', icon: 'camera', label: '写真から', note: '写真の家具だけを切り抜きます（数秒）' },
-    { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天市場の商品ページから取り込み、実際の寸法で置けます' },
-    { way: 'model', icon: 'cube', label: '3D モデルで作る', note: '向きを変えて置けます（約 3 分）' },
+    { way: 'photo', icon: 'camera', label: '写真から', note: '写真の家具だけを切り抜いて、2D で置けます（数秒）' },
+    { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天市場の商品ページから取り込み、実際の寸法の 2D で置けます' },
+    { way: 'model', icon: 'cube', label: '3D モデルで作る', note: '立体なので、向きを変えて置けます（約 3 分）' },
   ];
   for (const { way, icon, label, note } of WAYS) {
     const row = document.createElement('button');
@@ -507,6 +511,8 @@ function createModelThumb(
   let current = model;
   thumb.button.addEventListener('click', () => place(current));
   const preview = createPreviewImage(thumb.image);
+  // 「すべて」で 2D と見分けられるように、3D には印を付ける
+  if (model.modelKey) thumb.image.append(createTag('3D'));
 
   // 右上の「⋯」で編集へ。押しても置いてしまわないよう、下のボタンには渡さない
   const more = document.createElement('button');
@@ -735,7 +741,7 @@ function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
   // 円は小さく出すので中に文字は入れない。残り時間は下の名前の場所に出す。
   // 実行が始まるまでは残り時間が読めないので、円は空のまま
   const ring = createProgressRing();
-  thumb.image.append(ring.element);
+  thumb.image.append(ring.element, createTag('3D'));
 
   function update(current: GenerationJob): void {
     thumb.name.textContent = describe(current);
@@ -749,6 +755,15 @@ function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
   update(job);
   // 元写真の Blob URL は作成の状態が持っているので、ここでは解放しない
   return { element: thumb.element, update, dispose() {} };
+}
+
+/** 画像の隅に付ける小さな印（「3D」）。読み上げは名前に含めないので aria-hidden */
+function createTag(text: string): HTMLElement {
+  const tag = document.createElement('span');
+  tag.className = 'thumb__tag';
+  tag.textContent = text;
+  tag.setAttribute('aria-hidden', 'true');
+  return tag;
 }
 
 /** サムネイルの骨組み。画像の枠と、その下の名前 */
