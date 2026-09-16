@@ -87,55 +87,6 @@ export function createFurnitureScene<T extends FurnitureSceneState>(
   };
 }
 
-/**
- * 新しい家具を置ける床の座標を探す。
- *
- * 全部を原点に置くと既存の家具に埋まって見えなくなるので、
- * 中央から外側へ向かって格子状に候補を試し、
- * 既存の家具と重ならない最初の場所を返す。
- * 空きが見つからない場合は中央に置く（重なっても操作は可能なため）。
- *
- * `limit` を渡すとその範囲からはみ出す候補を除く（部屋の壁）。
- * 渡さなければ制限なし。**写真モードには壁が無い。**
- *
- * 探すのは中心から PLACEMENT_RADIUS 以内だけ。遠くの空きに置くと画面の外に出て
- * 「置いたのに見えない」になる。近くに空きが無ければ中心に重ねて置く（動かせばよい）
- */
-export function findFreeSpot(
-  furniture: PlacedFurniture[],
-  size: [number, number, number],
-  options: { limit?: { halfWidth: number; halfDepth: number } } = {}
-): [number, number, number] {
-  const { limit } = options;
-  const [width, , depth] = size;
-
-  const STEP = 0.5; // 候補を探す間隔（メートル）
-  const maxRings = Math.ceil(PLACEMENT_RADIUS / STEP);
-
-  for (let ring = 0; ring <= maxRings; ring++) {
-    for (const [gridX, gridZ] of ringOffsets(ring)) {
-      const x = gridX * STEP;
-      const z = gridZ * STEP;
-
-      if (Math.hypot(x, z) > PLACEMENT_RADIUS) continue;
-
-      // 家具が範囲からはみ出す候補は除外する（新規設置なので回転は 0）
-      if (limit && Math.abs(x) + width / 2 > limit.halfWidth) continue;
-      if (limit && Math.abs(z) + depth / 2 > limit.halfDepth) continue;
-
-      const overlaps = furniture.some((other) =>
-        isOverlapping(x, z, width, depth, other.position[0], other.position[2], other.size[0], other.size[2])
-      );
-      if (!overlaps) return [x, 0, z];
-    }
-  }
-
-  return [0, 0, 0];
-}
-
-/** 新しく置くとき、空きを探す範囲（中心からの距離、メートル）。これより外は画面に入らないことがある */
-const PLACEMENT_RADIUS = 1.5;
-
 /** 上に載れる家具の大きさの上限（いちばん長い辺、メートル）。ランプや小物はこれ以下 */
 const STACKABLE_MAX_EDGE = 0.6;
 
@@ -167,26 +118,4 @@ export function restingHeightAt(
     height = Math.max(height, other.position[1] + other.size[1]);
   }
   return height;
-}
-
-/** 中央から距離 ring にある格子点を列挙する（ring = 0 なら中央のみ） */
-function ringOffsets(ring: number): Array<[number, number]> {
-  if (ring === 0) return [[0, 0]];
-
-  const offsets: Array<[number, number]> = [];
-  for (let x = -ring; x <= ring; x++) {
-    for (let z = -ring; z <= ring; z++) {
-      // 内側の輪は前の ring で調べ済みなので、外周だけを見る
-      if (Math.max(Math.abs(x), Math.abs(z)) === ring) offsets.push([x, z]);
-    }
-  }
-  return offsets;
-}
-
-/** 2 つの家具を上から見た長方形として、重なっているかを判定する */
-function isOverlapping(
-  x1: number, z1: number, w1: number, d1: number,
-  x2: number, z2: number, w2: number, d2: number
-): boolean {
-  return Math.abs(x1 - x2) < (w1 + w2) / 2 && Math.abs(z1 - z2) < (d1 + d2) / 2;
 }

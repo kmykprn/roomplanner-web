@@ -21,23 +21,19 @@ const cache = new Map<string, Promise<THREE.Group>>();
 /**
  * GLB を読み込み、指定サイズに収めた複製を返す。
  *
- * @param url       public/ からのパス
+ * @param url       そのまま読める URL。基本の家具は Vite が取り込んだ URL（ベースパス込み）、
+ *                  生成した家具は Blob から作った URL。ここでは何も足さない
+ *                  （以前はベースパスを足していて、Pages では二重になり読めなかった）
  * @param fitSize   [幅, 高さ, 奥行き] メートル。この箱に収まるよう等倍で縮める
  */
 export async function loadFurnitureModel(
   url: string,
   fitSize: [number, number, number]
 ): Promise<THREE.Group> {
-  // public/ からの相対パスにだけベースパスを付ける。
-  // 生成した家具は Blob から作った URL を渡してくるので、
-  // 前に付けると `/roomplanner-web/blob:...` になって読めなくなる
-  const isAbsolute = /^(https?:|blob:|data:)/.test(url);
-  const resolvedUrl = isAbsolute ? url : import.meta.env.BASE_URL + url;
-
-  let entry = cache.get(resolvedUrl);
+  let entry = cache.get(url);
   if (!entry) {
-    entry = loader.loadAsync(resolvedUrl).then((gltf) => gltf.scene);
-    cache.set(resolvedUrl, entry);
+    entry = loader.loadAsync(url).then((gltf) => gltf.scene);
+    cache.set(url, entry);
   }
 
   // 使う側が自由に動かせるよう、キャッシュの原本ではなく複製を渡す
