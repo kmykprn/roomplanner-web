@@ -4,7 +4,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * iOS アプリ（Capacitor）の設定。
  *
  * Web と同じ dist/ を WKWebView に読ませる。ビルドは `npm run build:app`（Service Worker を切る）。
- * Bundle ID は App Store に出したあとは変えられない（CLAUDE.md「アプリ版」）。
+ * Bundle ID は App Store に出したあとは変えられない（CLAUDE.md「ネイティブ依存の扱い」）。
  */
 const config: CapacitorConfig = {
   appId: 'io.github.kmykprn.roomplanner',
