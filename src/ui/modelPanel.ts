@@ -1,9 +1,10 @@
 /**
  * 「家具」タブ。置ける家具をタイルの格子に並べ、押すといまのモード（部屋／写真）に置く。
  *
- *   格子の先頭 … 「＋ 作る」。押すと一覧と入れ替わりに「作り方を選ぶ」姿が出る。
- *                写真から切り抜く（数秒）／商品ページの URL から（実寸で置ける）／
- *                3D モデルとして（約 3 分）。匿名ならその姿の中でログインを求める（ui/loginPanel.ts）
+ *   格子の先頭 … 「＋ 追加」。押すと一覧と入れ替わりに「家具を追加」の姿が出る。
+ *                写真から切り抜く（数秒）／商品ページの URL から（実寸で置ける）。
+ *                匿名ならその姿の中でログインを求める（ui/loginPanel.ts）。
+ *                3D は切り抜き（2D）の編集画面から「3D モデルにする」（約 3 分）
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
  *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
@@ -22,7 +23,7 @@ import { progressFor } from '@/core/progress';
 import {
   dismissError,
   generationState,
-  startGeneration,
+  startGenerationForModel,
   type GenerationJob,
 } from '@/core/generation';
 import {
@@ -66,7 +67,7 @@ type Filter = 'all' | 'flat' | 'solid' | 'basic';
 const FILTERS: Record<Filter, string> = { all: 'すべて', flat: '2D', solid: '3D', basic: '基本' };
 
 /** 作り方。「作り方を選ぶ」姿の 3 行 */
-type Way = 'photo' | 'product' | 'model';
+type Way = 'photo' | 'product';
 
 /** 失敗した作成（切り抜きも 3D も同じ姿）。タイルにするための共通の形 */
 interface FailedItem {
@@ -117,7 +118,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   // --- 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る ---
   const chooser = createChooser({
     photo: () => void pickAndStart(startCutout),
-    model: () => void pickAndStart(startGeneration),
     product: () => productForm.open(),
     onClose: () => {
       normal.hidden = false;
@@ -142,8 +142,21 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   }
 
   // --- 編集の姿 ---
-  const editor = createModelEditor(() => {
-    normal.hidden = false;
+  const editor = createModelEditor({
+    onClose: () => {
+      normal.hidden = false;
+    },
+    // 3D 化にもログインが要る。匿名なら追加画面のログインに送る
+    onMakeModel: (model) => {
+      if (authState.get().anonymous) {
+        editor.close();
+        openChooser();
+        chooser.requireLogin('ログイン後に、もう一度「⋯」→「3D モデルにする」を押してください');
+        return;
+      }
+      void startGenerationForModel(model);
+      editor.close();
+    },
   });
   panel.append(normal, chooser.element, editor.element);
 
@@ -323,6 +336,8 @@ interface Chooser {
   close(): void;
   /** ログインの結果を伝える。何も言わないと「ログインしたのに何も起きない」に見える */
   showSignedIn(error?: string | null): void;
+  /** ログインを求める。ログインできたら note を出す（別の場所から来たとき用） */
+  requireLogin(note: string): void;
 }
 
 function createChooser(actions: Record<Way, () => void> & { onClose(): void }): Chooser {
@@ -346,6 +361,8 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
 
   /** 直前に押した行。ログインのあとに続きをするため */
   let pending: Way | null = null;
+  /** 別の場所（編集画面の 3D 化）から来たときに、ログイン後に出す案内 */
+  let afterLoginNote: string | null = null;
 
   const menu = document.createElement('div');
   menu.className = 'ways';
@@ -358,7 +375,6 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
     { way: 'photo', icon: 'camera', label: '写真から', note: '写真の家具だけを切り抜いて、2D で置けます（数秒）' },
     { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天市場の商品ページから取り込み、実際の寸法の 2D で置けます' },
-    { way: 'model', icon: 'cube', label: '3D モデルで作る', note: '立体なので、向きを変えて置けます（約 3 分）' },
   ];
   for (const { way, icon, label, note } of WAYS) {
     const row = document.createElement('button');
@@ -419,16 +435,25 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     // ポップアップでログインできた直後。商品の URL はそのまま続けられる。
     // 写真はファイル選択を開けないので、もう一度押してもらう
     if (pending === 'product') actions.product();
+    else if (afterLoginNote) showSignedIn(null, afterLoginNote);
     else showSignedIn();
     pending = null;
+    afterLoginNote = null;
   });
 
   element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
 
-  function showSignedIn(error: string | null = null): void {
+  function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
-    signedInNote.textContent = error ?? 'ログインしました。もう一度「写真から」を押して写真を選んでください';
+    signedInNote.textContent =
+      error ?? note ?? 'ログインしました。もう一度「写真から」を押して写真を選んでください';
     signedInNote.hidden = false;
+  }
+
+  function requireLogin(note: string): void {
+    afterLoginNote = note;
+    loginPanel.open();
+    renderState();
   }
 
   function renderState(): void {
@@ -446,6 +471,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   function open(): void {
     signedInNote.hidden = true;
     pending = null;
+    afterLoginNote = null;
     loginPanel.close();
     renderState();
     element.hidden = false;
@@ -461,7 +487,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   new MutationObserver(renderState).observe(loginPanel.element, { attributeFilter: ['hidden'] });
   renderState();
 
-  return { element, productSlot, markProductOpen, open, close, showSignedIn };
+  return { element, productSlot, markProductOpen, open, close, showSignedIn, requireLogin };
 }
 
 /** できあがったモデル。押すと置く。× で保管庫から外す */
@@ -543,7 +569,17 @@ function createModelThumb(
  * 同じ名前のモデルがあっても取り違えないようにする。
  * 一覧から外すだけで、置いてある家具はそのまま残る（removeModel の挙動）
  */
-function createModelEditor(onClose: () => void): { element: HTMLElement; open(model: GeneratedModel): void } {
+interface ModelEditorActions {
+  onClose(): void;
+  /** 切り抜き（2D）の家具から 3D を作る */
+  onMakeModel(model: GeneratedModel): void;
+}
+
+function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
+  element: HTMLElement;
+  open(model: GeneratedModel): void;
+  close(): void;
+} {
   const element = document.createElement('div');
   element.className = 'lib__edit';
   element.hidden = true;
@@ -616,6 +652,23 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   const productLinkSlot = document.createElement('div');
   productField.append(productLabel, productNote, productLinkSlot);
 
+  // 切り抜き（2D）だけに出す。3D にすると向きを変えて置ける
+  const modelField = document.createElement('div');
+  modelField.className = 'field';
+  const modelLabel = document.createElement('span');
+  modelLabel.className = 'field__label';
+  modelLabel.textContent = '3D モデル';
+  const modelNote = document.createElement('p');
+  modelNote.className = 'hint';
+  const makeModel = document.createElement('button');
+  makeModel.type = 'button';
+  makeModel.className = 'button is-quiet is-small';
+  makeModel.textContent = '3D モデルにする（約 3 分）';
+  makeModel.addEventListener('click', () => {
+    if (current) onMakeModel(current);
+  });
+  modelField.append(modelLabel, modelNote, makeModel);
+
   const actions = document.createElement('div');
   actions.className = 'edit__actions';
   const save = document.createElement('button');
@@ -680,7 +733,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
   confirmButtons.append(cancel, doRemove);
   confirm.append(confirmRow, confirmNote, confirmButtons);
 
-  element.append(head, iconRow, nameField, productField, actions, divider, remove, confirm);
+  element.append(head, iconRow, nameField, productField, modelField, actions, divider, remove, confirm);
 
   function open(model: GeneratedModel): void {
     current = model;
@@ -688,6 +741,13 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
     confirmText.textContent = `「${model.name}」を削除します。よろしいですか？`;
+    // 3D 化は 2D の家具だけ。作っている最中なら押せないようにする
+    modelField.hidden = model.modelKey !== null || model.imageKey === null;
+    const making = generationState.get().jobs.some((job) => job.targetModelId === model.id && job.phase !== 'failed');
+    makeModel.disabled = making;
+    modelNote.textContent = making
+      ? '3D モデルを作っています。一覧の作成中のタイルで進み具合が見られます'
+      : 'この切り抜きから立体を作ると、向きを変えて置けるようになります';
     productField.hidden = !model.product;
     if (model.product) {
       productNote.textContent = model.size
@@ -706,7 +766,7 @@ function createModelEditor(onClose: () => void): { element: HTMLElement; open(mo
     onClose();
   }
 
-  return { element, open };
+  return { element, open, close };
 }
 
 /**

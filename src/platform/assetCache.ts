@@ -26,6 +26,13 @@ export async function resolveAssetUrl(cacheName: string, key: string): Promise<s
   return URL.createObjectURL(await hit.blob());
 }
 
+/** 保存したものを Blob のまま返す（サーバーへ送り直すとき用）。見つからなければ null */
+export async function readAsset(cacheName: string, key: string): Promise<Blob | null> {
+  const cache = await caches.open(cacheName);
+  const hit = await cache.match(key);
+  return hit ? hit.blob() : null;
+}
+
 export async function deleteAsset(cacheName: string, key: string): Promise<void> {
   const cache = await caches.open(cacheName);
   await cache.delete(key);
