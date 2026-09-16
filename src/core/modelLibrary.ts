@@ -183,6 +183,23 @@ export function renamePlacedCopies(model: GeneratedModel, name: string): void {
   }
 }
 
+/**
+ * 切り抜き（2D）の家具に、あとから作った 3D を付ける。
+ *
+ * 保管庫の項目に modelKey を入れ、置いてある同じ家具にも modelUrl を写す。
+ * 描画は modelUrl があればそちらを優先するので、置いてある板はそのまま 3D に切り替わる
+ */
+export function attachModel(id: string, modelKey: string): void {
+  const model = modelLibrary.get().models.find((item) => item.id === id);
+  if (!model) return;
+  setModels(modelLibrary.get().models.map((item) => (item.id === id ? { ...item, modelKey } : item)));
+  for (const scene of [roomScene, photoScene]) {
+    for (const item of scene.state().furniture) {
+      if (isCopyOf(item, model) && item.modelUrl !== modelKey) scene.update(item.id, { modelUrl: modelKey });
+    }
+  }
+}
+
 /** 置いてある家具が、この保管庫の項目から置いたものか。中身のキーで見る */
 function isCopyOf(item: PlacedFurniture, model: GeneratedModel): boolean {
   return (

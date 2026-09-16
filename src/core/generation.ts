@@ -1,19 +1,19 @@
 /**
- * 写真から家具を作る一連の流れを受け持つ。
+ * 切り抜き（2D）の家具から 3D モデルを作る一連の流れを受け持つ。
  *
+ * 入口は編集画面の「3D モデルにする」。端末に保存してある切り抜きの透過 PNG を
+ * そのまま送り、できあがったら同じ項目に 3D を付ける（置いてある板も切り替わる）。
  * 生成には約3分かかる。その間ユーザーはアプリを閉じられるし、リロードもする。
  * **待っている状態を端末に残し、開き直したら続きから見に行く**のがこのファイルの主眼。
- * 複数の写真は個別のジョブとして扱い、完成したものから保管庫（modelLibrary.ts）に入れる。
- * **完成しても勝手には置かない。** 置くのは「3Dモデル」タブで利用者が選んだとき。
  */
 
 import { createStore } from '@/core/store';
-import { shrinkForUpload } from '@/core/imageResize';
 import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
-import { addModel, modelNameFrom } from '@/core/modelLibrary';
+import { addModel, attachModel, modelNameFrom, type GeneratedModel } from '@/core/modelLibrary';
+import { readCutout } from '@/platform/cutoutCache';
 import { saveModel } from '@/platform/modelCache';
-import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCache';
+import { deletePreview, resolvePreview } from '@/platform/previewCache';
 import { POLL_INTERVAL_MS, RUN_TIMEOUT_MS, TOTAL_TIMEOUT_MS } from '@/config/api';
 
 const STORAGE_KEY = 'roomplanner.generations';
@@ -53,6 +53,11 @@ export interface GenerationJob {
    * 端末側で滑らかに進められる
    */
   serverPhaseStartedAt: number | null;
+  /**
+   * 切り抜き（2D）の家具から作っているなら、その保管庫の項目の id。
+   * できあがったら新しい項目を足さず、この項目に 3D を付ける
+   */
+  targetModelId: string | null;
   error: string | null;
 }
 
@@ -74,11 +79,12 @@ function persist(state: GenerationState): void {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(
-          pending.map(({ jobId, fileName, previewKey, startedAt }) => ({
+          pending.map(({ jobId, fileName, previewKey, startedAt, targetModelId }) => ({
             jobId,
             fileName,
             previewKey,
             startedAt,
+            targetModelId,
           }))
         )
       );
@@ -107,15 +113,18 @@ function removeJob(id: string): void {
 }
 
 /**
- * 写真を送って生成を頼む。
+ * 切り抜き（2D）の家具から 3D を作る。
  *
- * 完成を待たずに返る。選択した各写真の進み方は generationState を購読して見る。
+ * 入力は端末に保存してある切り抜きの透過 PNG そのもの。サーバーは透過があれば
+ * 背景除去をせずそのまま形にする（Hunyuan3D-2GP の api/SPEC.md）。
+ * できあがったら同じ項目に 3D が付き、置いてある板も 3D に切り替わる
  */
-export async function startGeneration(files: File[]): Promise<void> {
-  const jobs = files.map<GenerationJob>((file) => ({
+export async function startGenerationForModel(model: GeneratedModel): Promise<void> {
+  if (!model.imageKey) return;
+  const job: GenerationJob = {
     id: crypto.randomUUID(),
     jobId: null,
-    fileName: file.name,
+    fileName: model.name,
     previewKey: null,
     previewUrl: null,
     phase: 'uploading',
@@ -123,31 +132,24 @@ export async function startGeneration(files: File[]): Promise<void> {
     startedRunningAt: null,
     serverPhase: null,
     serverPhaseStartedAt: null,
+    targetModelId: model.id,
     error: null,
-  }));
-  if (jobs.length === 0) return;
-
-  setState({ jobs: [...generationState.get().jobs, ...jobs] });
+  };
+  setState({ jobs: [...generationState.get().jobs, job] });
   try {
     await ensureRegistered();
+    const png = await readCutout(model.imageKey);
+    if (!png) throw new Error('切り抜きが端末に見つかりませんでした');
+    // 進行中のタイルには、その家具のアイコンをそのまま出す（新しいプレビューは作らない）
+    if (model.previewKey) {
+      const url = await resolvePreview(model.previewKey);
+      if (url) updateJob(job.id, { previewUrl: url });
+    }
+    const jobId = await createJob(png);
+    updateJob(job.id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
+    void watch(job.id, jobId);
   } catch (error) {
-    for (const job of jobs) updateJob(job.id, { phase: 'failed', error: toMessage(error) });
-    return;
-  }
-
-  await Promise.all(jobs.map((job, index) => submit(job.id, files[index])));
-}
-
-async function submit(id: string, file: File): Promise<void> {
-  try {
-    const preview = await savePreview(id, file);
-    if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
-    const image = await shrinkForUpload(file);
-    const jobId = await createJob(image);
-    updateJob(id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
-    void watch(id, jobId);
-  } catch (error) {
-    updateJob(id, { phase: 'failed', error: toMessage(error) });
+    updateJob(job.id, { phase: 'failed', error: toMessage(error) });
   }
 }
 
@@ -158,8 +160,13 @@ async function submit(id: string, file: File): Promise<void> {
  * 復帰した時点で完成していれば、そのまま保管庫に入る。
  */
 export function resumeGeneration(): void {
-  let saved: Array<{ jobId?: string; fileName?: string; previewKey?: string; startedAt?: number }> =
-    [];
+  let saved: Array<{
+    jobId?: string;
+    fileName?: string;
+    previewKey?: string;
+    startedAt?: number;
+    targetModelId?: string | null;
+  }> = [];
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
     saved = Array.isArray(value) ? value : [];
@@ -180,6 +187,7 @@ export function resumeGeneration(): void {
       startedRunningAt: null,
       serverPhase: null,
       serverPhaseStartedAt: null,
+      targetModelId: job.targetModelId ?? null,
       error: null,
     }));
   if (jobs.length === 0) return;
@@ -298,14 +306,19 @@ async function finish(id: string, jobId: string, modelUrl?: string): Promise<voi
     // 署名付きURLは1時間で切れる。中身を先に保存してから並べる
     const key = await saveModel(jobId, modelUrl);
     const job = generationState.get().jobs.find((item) => item.id === id);
-    addModel({
-      id: crypto.randomUUID(),
-      name: modelNameFrom(job?.fileName ?? ''),
-      modelKey: key,
-      imageKey: null,
-      previewKey: job?.previewKey ?? null,
-      createdAt: Date.now(),
-    });
+    if (job?.targetModelId) {
+      // 切り抜きから作った。同じ項目に 3D を付ける（置いてある板も切り替わる）
+      attachModel(job.targetModelId, key);
+    } else {
+      addModel({
+        id: crypto.randomUUID(),
+        name: modelNameFrom(job?.fileName ?? ''),
+        modelKey: key,
+        imageKey: null,
+        previewKey: job?.previewKey ?? null,
+        createdAt: Date.now(),
+      });
+    }
     removeJob(id);
   } catch (error) {
     updateJob(id, { phase: 'failed', error: toMessage(error) });
