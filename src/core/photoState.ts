@@ -11,7 +11,6 @@
 import { createStore } from '@/core/store';
 import {
   createFurnitureScene,
-  findFreeSpot,
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
@@ -89,21 +88,11 @@ export const photoState = createStore<PhotoState>({
   selectedId: null,
 });
 
-/**
- * 新しい家具を並べる横幅の半分（メートル）。
- *
- * 写真モードでは奥行きを使わない（奥へ置くと小さく写り、写真の床と合っていない
- * 以上その縮み方に意味がない）。**奥行き 0 の横一列**にだけ並べる
- */
-const PHOTO_ROW_HALF_WIDTH = 8;
-
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
-  // 奥行きの許容幅を家具の厚みちょうどにすると、z = 0 の候補だけが残る
-  placementFor: (size) =>
-    findFreeSpot(photoState.get().furniture, size, {
-      limit: { halfWidth: PHOTO_ROW_HALF_WIDTH, halfDepth: size[2] / 2 },
-    }),
+  // 置くのはいつも画面のど真ん中（原点）。空きを探して端に置くと画面の外に出て見失う。
+  // 重なっても、置いた直後は選択されているので動かせばよい
+  placementFor: () => [0, 0, 0],
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
   constrain: (position) => position,

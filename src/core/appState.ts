@@ -10,7 +10,6 @@
 import { createStore } from '@/core/store';
 import {
   createFurnitureScene,
-  findFreeSpot,
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { ROOM_DEFAULT, type RoomSize } from '@/config/room';
@@ -27,7 +26,9 @@ export const appState = createStore<AppState>({
 
 /** 部屋モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const roomScene = createFurnitureScene(appState, {
-  placementFor: (size) => findFreePosition(size),
+  // 置くのはいつも部屋のど真ん中。空きを探して端に置くと画面の外に出て見失う。
+  // 重なっても、置いた直後は選択されているので動かせばよい
+  placementFor: () => [0, 0, 0],
   constrain: (position, size, rotationY) =>
     clampInsideRoom(position, size, rotationY, appState.get().room),
 });
@@ -79,10 +80,3 @@ function rotatedHalfExtents(
   return [halfWidth * cos + halfDepth * sin, halfWidth * sin + halfDepth * cos];
 }
 
-/** 新しい家具を置ける床の座標を探す。部屋の壁の内側に限る */
-function findFreePosition(size: [number, number, number]): [number, number, number] {
-  const { room, furniture } = appState.get();
-  return findFreeSpot(furniture, size, {
-    limit: { halfWidth: room.width / 2, halfDepth: room.depth / 2 },
-  });
-}
