@@ -7,9 +7,17 @@ dist/
 .DS_Store
 *.local
 .vscode/
-# Capacitor（step 4 以降で追加される）
-ios/
+# Capacitor。ios/ は Xcode プロジェクトごと追跡する（Capacitor の推奨）。
+# 中の生成物と、git に置かない設定（下の名指し）だけ除く
 android/
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
 
 # 実際の値が入る。.env.example だけを追跡する
 .env

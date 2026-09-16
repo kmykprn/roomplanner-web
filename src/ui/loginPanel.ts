@@ -16,7 +16,8 @@
  * 二度と無言で止まらないよう、待つ時間に上限を置く。
  */
 
-import { signInWithGoogle, usesRedirectLogin } from '@/platform/auth';
+import { signInWithApple, signInWithGoogle, usesRedirectLogin } from '@/platform/auth';
+import { isNativeApp } from '@/platform/native';
 
 /**
  * ログインの応答を待つ上限。Google の画面で利用者がアカウントを選ぶ時間を含むので短くしない。
@@ -48,7 +49,8 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
 
   const title = document.createElement('p');
   title.className = 'login__title';
-  title.textContent = '家具を作るには Google ログインが必要です';
+  // iOS アプリでは Apple でも入れる（Google を出す以上、App Store の審査で必須）
+  title.textContent = isNativeApp ? '家具を作るにはログインが必要です' : '家具を作るには Google ログインが必要です';
 
   const note = document.createElement('p');
   note.className = 'hint login__note';
@@ -56,9 +58,11 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
 
   const buttons = document.createElement('div');
   buttons.className = 'row';
-  const loginButton = createButton('Google でログイン', 'button', () => void login());
+  const loginButton = createButton('Google でログイン', 'button', () => void login(loginButton, signInWithGoogle));
+  const appleButton = createButton('Apple でログイン', 'button', () => void login(appleButton, signInWithApple));
+  appleButton.hidden = !isNativeApp;
   const cancelButton = createButton('やめる', 'button is-quiet', () => close());
-  buttons.append(loginButton, cancelButton);
+  buttons.append(loginButton, appleButton, cancelButton);
 
   const error = document.createElement('p');
   error.className = 'hint is-error';
@@ -66,12 +70,13 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
 
   element.append(title, note, buttons, error);
 
-  async function login(): Promise<void> {
-    loginButton.disabled = true;
-    loginButton.textContent = usesRedirectLogin() ? 'Google へ移動しています…' : 'ログインしています…';
+  async function login(button: HTMLButtonElement, signIn: () => Promise<'signed-in' | 'cancelled'>): Promise<void> {
+    const label = button.textContent;
+    loginButton.disabled = appleButton.disabled = true;
+    button.textContent = usesRedirectLogin() ? 'Google へ移動しています…' : 'ログインしています…';
     error.hidden = true;
     try {
-      const outcome = await withTimeout(signInWithGoogle(), LOGIN_TIMEOUT_MS);
+      const outcome = await withTimeout(signIn(), LOGIN_TIMEOUT_MS);
       if (outcome === 'signed-in') {
         close();
         onSignedIn();
@@ -82,8 +87,8 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
       error.textContent = failure instanceof Error ? failure.message : 'ログインできませんでした';
       error.hidden = false;
     }
-    loginButton.disabled = false;
-    loginButton.textContent = 'Google でログイン';
+    loginButton.disabled = appleButton.disabled = false;
+    button.textContent = label;
   }
 
   function open(): void {

@@ -76,7 +76,40 @@ GitHub Pages はリポジトリ名のサブパス（`/roomplanner-web/`）配下
 ### アイコンを変更する
 
 `assets-src/icon.svg` を編集して、ファイル先頭のコメントにあるコマンドを実行する。
-生成された PNG は `public/` にコミットする。
+生成された PNG は `public/` にコミットする。iOS アプリのアイコン
+（`ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`、1024×1024）も同じ元から作る。
+
+## iOS アプリ（Capacitor）
+
+同じ `dist/` を WKWebView に読ませる。Xcode プロジェクトは `ios/` にあり、git で追跡している。
+Bundle ID は `io.github.kmykprn.roomplanner`（App Store に出したあとは変えられない）。
+
+```sh
+npm run build:app        # Service Worker 無しでビルドして ios/ に写す（cap sync ios）
+npx cap open ios         # Mac でだけ動く
+```
+
+Web と違うのはログインだけ。WKWebView では Google のポップアップもリダイレクトも動かないので、
+ネイティブの画面で資格情報を取り（`src/platform/native.ts`）、Web の Firebase SDK に渡す。
+匿名からの昇格で uid を保つ流れは Web と同じ（`src/platform/auth.ts`）。
+Apple でのログインはアプリの中だけに出す（Google を出す以上、審査で必須）。
+
+### Mac で最初に一度だけやること
+
+1. Firebase コンソールでこのプロジェクトに iOS アプリ（上の Bundle ID）を追加し、
+   `GoogleService-Info.plist` を `ios/App/App/` に置いて Xcode のプロジェクトに追加する。
+   **git には入れない**（`.gitignore` 済み。CLAUDE.md「秘密の置き場」）
+2. その plist の `REVERSED_CLIENT_ID` を `ios/App/App/Info.plist` の
+   `REVERSED_CLIENT_ID_FROM_GOOGLESERVICE_INFO_PLIST` と置き換える（Google ログインの戻り先）。
+   OAuth のクライアント ID の逆順で公開値なので、これはコミットしてよい
+3. Xcode の Signing & Capabilities で Apple Developer のチームを選ぶ。
+   Sign in with Apple の権限は `App.entitlements` に入れてあるので、App ID 側でも有効にする
+4. Firebase コンソールの Authentication で Apple プロバイダを有効にする（Apple Developer の登録後）
+
+### 通信先
+
+アプリ内のオリジンは `capacitor://localhost`。API・切り抜き・生成物バケットの CORS は
+Hunyuan3D-2GP の Terraform（`allowed_origins`）で許可している。
 
 ## ディレクトリ構成
 
@@ -182,17 +215,15 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 2. 窓 / ドア / カーテンなど壁固定オブジェクト
 3. 部屋の保存（IndexedDB）と一覧画面
 4. 写真からの家具生成（S3 + FastAPI）
-5. Capacitor 8 で iOS アプリ化 → App Store
+5. iOS アプリ化（Capacitor 8、導入済み）→ TestFlight → App Store
 
 ### iOS 配信時の注意点
 
 - **オフラインで起動できること。** ネット断で白画面になる WebView アプリは
   App Store のガイドライン 4.2（最低限の機能）で弾かれる。
-  現状は Service Worker でこの条件を満たしているので、
+  アプリは端末内の `dist/` を直接開くので Service Worker は要らない（`build:app` で切っている）が、
   起動時にサーバーを必要とする設計に変えないこと。
 - **Xcode 26 / iOS 26 SDK が必須。** 2026 年 4 月 28 日以降、
   これより古いツールチェーンでビルドしたバイナリは App Store Connect が受け付けない。
   Capacitor は 8 系を使うこと（7 系は Xcode 16 前提）。
-- **FastAPI 側の CORS に `capacitor://localhost` を追加すること。**
-  Capacitor アプリ内の WebView はこのオリジンから通信する。
-  また iOS の ATS により、API サーバーは HTTPS である必要がある。
+- iOS の ATS により、API サーバーは HTTPS である必要がある（Cloud Run なので満たしている）。

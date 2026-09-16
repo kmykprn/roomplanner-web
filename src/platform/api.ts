@@ -9,6 +9,7 @@
 
 import { API_BASE, CUTOUT_BASE, CUTOUT_WAIT_SECONDS } from '@/config/api';
 import { getIdToken } from '@/platform/auth';
+import { isNativeApp } from '@/platform/native';
 
 /** 生成の進み方。サーバー側の state をそのまま写している */
 export type JobState = 'queued' | 'running' | 'succeeded' | 'failed';
@@ -73,8 +74,10 @@ async function toApiError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, detail || fallback[response.status] || '3D モデルの作成を始められませんでした。時間をおいてお試しください');
 }
 
-/** 3D を作る回数（お試し・回数券）を使い切ったときの文言 */
-export const NO_CREDITS_MESSAGE = '3D モデルを作る回数を使い切りました。回数券はアプリ版で買えるようになる予定です';
+/** 3D を作る回数（お試し・回数券）を使い切ったときの文言。券の購入はアプリ版に入る予定（段階 2） */
+export const NO_CREDITS_MESSAGE = isNativeApp
+  ? '3D モデルを作る回数を使い切りました。回数券は準備中です'
+  : '3D モデルを作る回数を使い切りました。回数券はアプリ版で買えるようになる予定です';
 
 /** 財布。詳細は Hunyuan3D-2GP の api/SPEC.md（GET /wallet） */
 export interface Wallet {

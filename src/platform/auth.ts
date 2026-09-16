@@ -38,6 +38,7 @@ import {
   getAuth,
   getRedirectResult,
   GoogleAuthProvider,
+  linkWithCredential,
   linkWithPopup,
   linkWithRedirect,
   onAuthStateChanged,
@@ -50,6 +51,7 @@ import {
 import { createStore } from '@/core/store';
 import { FIREBASE_CONFIG, IS_CONFIGURED } from '@/config/api';
 import { finishRedirect, linkOrSignIn, shouldUseRedirect } from '@/platform/googleLink';
+import { isNativeApp, nativeCredential, type NativeProvider } from '@/platform/native';
 
 const NOT_CONFIGURED = 'Firebase の設定が入っていません（VITE_FIREBASE_API_KEY）';
 
@@ -207,8 +209,9 @@ export async function ensureRegistered(): Promise<void> {
   await waitForUser();
 }
 
-/** この端末ではリダイレクトで昇格するか（iOS）。画面が文言を変えるのにも使う */
+/** この端末ではリダイレクトで昇格するか（iOS の Safari）。画面が文言を変えるのにも使う。アプリの中では使わない */
 export function usesRedirectLogin(): boolean {
+  if (isNativeApp) return false;
   return shouldUseRedirect(navigator.userAgent, navigator.maxTouchPoints ?? 0, navigator.platform);
 }
 
@@ -223,6 +226,7 @@ export function usesRedirectLogin(): boolean {
  * 結果は戻ってきた起動時に receiveRedirect() が受け取る
  */
 export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
+  if (isNativeApp) return signInNatively('google');
   if (!auth) throw new Error(NOT_CONFIGURED);
   const user = await waitForUser();
   if (!user.isAnonymous) return 'signed-in';
@@ -248,6 +252,44 @@ export async function signInWithGoogle(): Promise<'signed-in' | 'cancelled'> {
 
   // 昇格では同じユーザーのまま中身が変わるので onAuthStateChanged が鳴らない。
   // ログインし直しでは鳴るが、どちらでもここで今のユーザーを映し直せば同じ
+  adopt(auth.currentUser ?? user);
+  return 'signed-in';
+}
+
+/** Apple に紐づける。iOS アプリの中だけ（Web には出さない） */
+export async function signInWithApple(): Promise<'signed-in' | 'cancelled'> {
+  return signInNatively('apple');
+}
+
+/**
+ * iOS アプリの中でのログイン。ネイティブの画面で資格情報を取り、Web の Firebase SDK に渡す。
+ *
+ * 分岐（1 台目は昇格、2 台目は既存のアカウントへ）は googleLink.ts の同じ判断を使う。
+ * ポップアップの代わりに資格情報を渡すだけなので、リダイレクトの分岐は無い
+ */
+async function signInNatively(provider: NativeProvider): Promise<'signed-in' | 'cancelled'> {
+  if (!auth) throw new Error(NOT_CONFIGURED);
+  const user = await waitForUser();
+  if (!user.isAnonymous) return 'signed-in';
+
+  const credential = await nativeCredential(provider);
+  if (!credential) return 'cancelled';
+
+  const outcome = await linkOrSignIn({
+    link: async () => {
+      await linkWithCredential(user, credential);
+    },
+    linkWithRedirect: () => Promise.reject(new Error('アプリではリダイレクトを使わない')),
+    credentialFromError,
+    signInWithCredential: async (found) => {
+      await signInWithCredential(auth, found);
+    },
+    // 失敗した結果から資格情報が取れなくても、いま取った資格情報でそのまま入り直せる
+    signInWithPopup: async () => {
+      await signInWithCredential(auth, credential);
+    },
+  });
+  if (outcome === 'cancelled') return 'cancelled';
   adopt(auth.currentUser ?? user);
   return 'signed-in';
 }
