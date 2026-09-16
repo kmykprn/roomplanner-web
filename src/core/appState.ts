@@ -13,16 +13,40 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { ROOM_DEFAULT, type RoomSize } from '@/config/room';
+import {
+  DEFAULT_INTERIOR,
+  DEFAULT_MATS,
+  roomSizeFor,
+  type InteriorTemplateId,
+  type TatamiMats,
+} from '@/config/interior';
+
+/** 内装（壁と床の柄）。和室のときだけ畳数が意味を持つ */
+export interface Interior {
+  template: InteriorTemplateId;
+  mats: TatamiMats;
+}
 
 export interface AppState extends FurnitureSceneState {
   room: RoomSize;
+  interior: Interior;
 }
 
 export const appState = createStore<AppState>({
   room: { ...ROOM_DEFAULT },
+  interior: { template: DEFAULT_INTERIOR, mats: DEFAULT_MATS },
   furniture: [],
   selectedId: null,
 });
+
+/**
+ * 内装を変える。和室は畳数で部屋の大きさが決まるので、大きさも一緒に変える。
+ * 置いてある家具はそのまま（小さい部屋に変えて壁の外に出ても、動かせば壁の内側に丸まる）
+ */
+export function setInterior(patch: Partial<Interior>): void {
+  const interior = { ...appState.get().interior, ...patch };
+  appState.set({ interior, room: roomSizeFor(interior.template, interior.mats) });
+}
 
 /** 部屋モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const roomScene = createFurnitureScene(appState, {

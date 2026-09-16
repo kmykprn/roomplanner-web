@@ -1128,3 +1128,57 @@ body {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* 「内装」タブ。テンプレートのタイルの格子と、和室のときだけ出る畳数 */
+.interior {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+.interior__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px 8px;
+}
+.interior__tile {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  touch-action: manipulation;
+}
+.interior__picture {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background: #e6e2dc;
+}
+.interior__tile[aria-pressed='true'] .interior__picture {
+  border-color: var(--primary);
+}
+.interior__tile[aria-pressed='true'] .interior__name {
+  color: var(--primary);
+  font-weight: 600;
+}
+.interior__mats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.interior__mats-label {
+  font-size: 13px;
+  color: #4c5b62;
+}
+.interior__mats .hint {
+  flex-basis: 100%;
+  margin: 0;
+}

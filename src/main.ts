@@ -14,6 +14,9 @@ import '@/style.css';
 import * as THREE from 'three';
 import { createViewer } from '@/core/viewer';
 import { createRoom } from '@/scene/room';
+import { buildInteriorTextures } from '@/scene/interiorTextures';
+import type { RoomSize } from '@/config/room';
+import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createFurnitureLayer } from '@/scene/furniture';
 import { createCameraControls } from '@/interaction/cameraControls';
@@ -102,6 +105,18 @@ const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.came
 // --- 状態とシーンを同期する ---
 // 状態が変わったときだけ呼ばれる。毎フレーム差分を取る必要はない
 appState.subscribe((state) => roomFurniture.sync(state.furniture, state.selectedId));
+
+// 内装（壁と床の柄）と部屋の大きさ。変わったときだけ描き直す（柄を描くのは数十 ms かかる）
+let appliedInterior: string | null = null;
+function applyInterior(state: { room: RoomSize; interior: Interior }): void {
+  const key = JSON.stringify([state.room, state.interior]);
+  if (key === appliedInterior) return;
+  appliedInterior = key;
+  roomObjects.resize(state.room);
+  roomObjects.applyInterior(buildInteriorTextures(state.interior.template, state.room, state.interior.mats));
+}
+applyInterior(appState.get());
+appState.subscribe(applyInterior);
 photoState.subscribe((state) => photoFurniture.sync(state.furniture, state.selectedId));
 
 // subscribe は登録するだけで、その場では呼ばれない。

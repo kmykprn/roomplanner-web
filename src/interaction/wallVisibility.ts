@@ -24,7 +24,8 @@ interface WallProbe {
   // ここで必要なのは opacity だけなので、材質の種類は問わない。
   // 壁本体と輪郭線の 2 つを同時に薄くする
   materials: THREE.Material[];
-  position: THREE.Vector3;
+  /** 位置はここから毎回読む（部屋の大きさで変わる） */
+  wall: THREE.Mesh;
   normal: THREE.Vector3;
 }
 
@@ -33,8 +34,8 @@ export function createWallVisibility(
   camera: THREE.Camera,
   size: RoomSize
 ) {
-  // 壁の位置と法線は部屋のサイズが変わらない限り不変なので、
-  // 毎フレーム作り直さず最初に 1 度だけ用意する
+  // 法線は部屋の向きで決まり変わらない。位置は部屋の大きさ（和室の畳数）で変わるので、
+  // メッシュの位置を毎回読む
   const probes: WallProbe[] = WALL_DIRECTIONS.map((direction) => {
     const transform = getWallTransform(direction, size);
     const wall = walls[direction];
@@ -44,7 +45,7 @@ export function createWallVisibility(
       materials: [wall.material as THREE.Material, edges?.material as THREE.Material].filter(
         Boolean
       ),
-      position: new THREE.Vector3(...transform.position),
+      wall,
       normal: new THREE.Vector3(...transform.normal),
     };
   });
@@ -53,7 +54,7 @@ export function createWallVisibility(
 
   return function update(): void {
     for (const probe of probes) {
-      wallToCamera.subVectors(camera.position, probe.position);
+      wallToCamera.subVectors(camera.position, probe.wall.position);
       const target = wallToCamera.dot(probe.normal) > 0 ? 1 : HIDDEN_OPACITY;
 
       // 一気に切り替えるとチラつくので、目標値へ少しずつ近づける
