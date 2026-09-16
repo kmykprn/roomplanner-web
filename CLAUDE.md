@@ -112,6 +112,19 @@ mesh.position.y = height / 2;
   - 自前のAPI層（プロキシ）の背後に置き、呼び出し側が特定のベンダーを知らない状態を保つ
   - APIキーは絶対にクライアントに露出させない（公開リポジトリ・公開サイトのため）
 
+## 秘密の置き場（このリポジトリは公開）
+
+- **証明書と API キーは GitHub の Secrets にしか置かない。** Apple の署名用証明書（.p12）、
+  プロビジョニング、App Store Connect の API キー（.p8）、Android のキーストアは
+  ビルド時に Secrets から流し込む。ファイルとして作ったら作業が終わり次第消す
+- **Firebase の設定ファイル（`GoogleService-Info.plist` / `google-services.json`）は
+  Web の API キー（`VITE_FIREBASE_API_KEY`）と同じ扱い。** 公開値ではあるが git には置かず、
+  ビルド時に注入する。理由は config/api.ts の説明のとおり（誤検知でアラートに慣れない、
+  履歴に残さない、本当の秘密の置き場を先に作る）
+- `.gitignore` に名指しで載せてある。push protection も有効なので、うっかり push しても
+  GitHub が止めるが、止まったら中身を消して履歴を書き直すのではなく、その鍵を失効させて作り直す
+- 迷ったら「fork した人がそのファイルを持っていて困るか」で判断する。困るなら Secrets
+
 ## 3Dモデル生成
 
 - **Hunyuan3D-2GP を自前で動かす**（https://github.com/kmykprn/Hunyuan3D-2GP）
