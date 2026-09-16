@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import type { CameraControls } from '@/interaction/cameraControls';
 import type { FurnitureLayer } from '@/scene/furniture';
-import type { EditableScene } from '@/core/furnitureScene';
+import { restingHeightAt, type EditableScene } from '@/core/furnitureScene';
 
 /** この距離（ピクセル）以内で指を離したらドラッグではなくタップとみなす */
 const TAP_THRESHOLD_PX = 8;
@@ -148,11 +148,14 @@ export function createFurnitureDrag(
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
 
-    // 面に沿わない向きの座標はそのまま保つ（床なら高さ、画面なら奥行き）。
+    // 床の上では、動かした先で何かの上に載るなら、その上面の高さにする（机の上のランプなど）。
+    // 画面に沿う写真モードでは奥行きをそのまま保つ。
     // 移動先の丸め方はモードが決める（部屋なら壁の内側と床の上、写真なら丸めない）
-    const [, y, z] = item.position;
+    const [, , z] = item.position;
     const moved: [number, number, number] =
-      draggingTarget.surface === 'floor' ? [next.x, y, next.z] : [next.x, next.y, z];
+      draggingTarget.surface === 'floor'
+        ? [next.x, restingHeightAt(scene.state().furniture, item, next.x, next.z), next.z]
+        : [next.x, next.y, z];
     scene.update(draggingId, {
       position: scene.constrain(moved, item.size, item.rotationY),
     });

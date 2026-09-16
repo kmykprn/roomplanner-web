@@ -154,6 +154,14 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 `platform/picker.ts` は現時点でまだ呼び出し元がない（家具作成画面が未実装のため）。
 この方針を先に決めておくためのもので、写真取り込みを実装する際にここから使う。
 
+## 基本の家具について
+
+「基本」に並ぶ 3D モデル（`public/models/*.glb`）は、すべて自前で作ったものです。
+画像生成（SDXL base 1.0、CreativeML Open RAIL++-M）で「白背景の商品写真」風の画像を作り
+（`assets-src/furniture/sdxl.py`、元画像は `assets-src/furniture/inputs/`）、それを自前の 3D 生成
+（Hunyuan3D-2GP、背景除去は BiRefNet）に通しました（`assets-src/furniture/generate.sh`）。
+第三者の写真や製品の意匠は使っていません。タイルの画像（`public/models/thumbs/`）はそのモデルを描いたものです。
+
 ## 商品リンクについて
 
 「作る」→「商品の URL から」で取り込んだ家具の「楽天で見る」は、楽天アフィリエイトのリンクです。
