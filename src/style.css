@@ -835,24 +835,6 @@ body {
   height: 28px;
 }
 
-/* 基本の家具。モデルの絵（無ければ色の四角） */
-.thumb__img.is-basic {
-  background: var(--surface);
-  overflow: hidden;
-}
-.thumb__picture {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.thumb__swatch {
-  width: 52%;
-  height: 52%;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-}
-
 /* 失敗。薄い枠に「!」の印。押すと理由が下に出る（.is-open は出している間） */
 .thumb__img.is-failed {
   background: #f4f4f4;
@@ -875,11 +857,12 @@ body {
   text-align: center;
 }
 
-/* 画像の隅の小さな印（3D）。「すべて」で 2D と見分けるため */
+/* 画像の左上の小さな印（3D）。「すべて」で 2D と見分けるため。
+   位置の基準はタイル全体（.thumb）なので、下に置くと名前に重なる。上に置く */
 .thumb__tag {
   position: absolute;
   left: 4px;
-  bottom: 4px;
+  top: 4px;
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(17, 24, 28, 0.72);

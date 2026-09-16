@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
+import type { PlacedFurniture } from '@/config/furniture';
 import { SCENE_COLORS, SURFACES } from '@/config/theme';
 import { loadFurnitureModel } from '@/scene/modelLoader';
 import { BILLBOARD_NAME, faceCamera, loadBillboard } from '@/scene/billboard';
@@ -137,12 +137,8 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
     resolveCutoutUrl(item.imageUrl).then((url) => {
       if (url) replaceWithBillboard(object, mesh, outline, url, item);
     });
-  } else {
-    const type = findFurnitureType(item.typeId);
-    if (type?.modelPath) {
-      replaceWithModel(object, mesh, type.modelPath, item.size);
-    }
   }
+  // どちらも無ければ箱のまま（古い記録に残っている基本の家具など）
 
   return object;
 }
