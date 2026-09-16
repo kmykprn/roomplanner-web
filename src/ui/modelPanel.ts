@@ -8,7 +8,7 @@
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
  *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
- *   その後     … 基本の家具（椅子・テーブル…）。色の四角のタイル
+ *   その後     … 基本の家具（椅子・ソファ）。モデルの絵のタイル
  *
  * 格子の上の「すべて / 2D / 3D / 基本」で絞れる。2D は切り抜きの板、3D は向きを変えられるモデル。
  *
@@ -303,14 +303,24 @@ function createAddTile(open: () => void): HTMLElement {
   return thumb.element;
 }
 
-/** 基本の家具のタイル。色の四角と名前。押すと空いている場所に置く */
+/** 基本の家具のタイル。モデルの絵と名前。押すと空いている場所に置く */
 function createBasicTile(type: FurnitureType, place: (type: FurnitureType) => void): HTMLElement {
   const thumb = createThumb(type.name);
   thumb.image.classList.add('is-basic');
-  const swatch = document.createElement('span');
-  swatch.className = 'thumb__swatch';
-  swatch.style.background = type.color;
-  thumb.image.append(swatch);
+  if (type.thumbnail) {
+    const picture = document.createElement('img');
+    picture.className = 'thumb__picture';
+    picture.src = type.thumbnail;
+    picture.alt = '';
+    picture.loading = 'lazy';
+    picture.decoding = 'async';
+    thumb.image.append(picture);
+  } else {
+    const swatch = document.createElement('span');
+    swatch.className = 'thumb__swatch';
+    swatch.style.background = type.color;
+    thumb.image.append(swatch);
+  }
   thumb.button.addEventListener('click', () => place(type));
   return thumb.element;
 }

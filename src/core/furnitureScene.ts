@@ -131,6 +131,39 @@ export function findFreeSpot(
   return [0, 0, 0];
 }
 
+/** 上に載れる家具の大きさの上限（いちばん長い辺、メートル）。ランプや小物はこれ以下 */
+const STACKABLE_MAX_EDGE = 0.6;
+
+/**
+ * 家具を (x, z) に動かしたとき、何の上に載るかを見て底面の高さを返す。
+ *
+ * 真下にある家具のうち、上面がいちばん高いものに載せる。何も無ければ床（0）。
+ * 載るのは小さいもの（長辺 60cm 以下）だけで、相手は自分より広いものだけ。
+ * 椅子をソファの上に引きずっても跳ね上がらないように、テーブルランプのような
+ * 小物が机に載る向きだけにする。
+ * 回転は見ない（上から見た外接の長方形で十分。細かい当たりは求めていない）
+ */
+export function restingHeightAt(
+  furniture: PlacedFurniture[],
+  item: PlacedFurniture,
+  x: number,
+  z: number
+): number {
+  if (Math.max(...item.size) > STACKABLE_MAX_EDGE) return 0;
+  let height = 0;
+  for (const other of furniture) {
+    if (other.id === item.id) continue;
+    if (other.size[0] < item.size[0] || other.size[2] < item.size[2]) continue;
+    // 自分の中心が相手の上面の中にあるか
+    const inside =
+      Math.abs(x - other.position[0]) < other.size[0] / 2 &&
+      Math.abs(z - other.position[2]) < other.size[2] / 2;
+    if (!inside) continue;
+    height = Math.max(height, other.position[1] + other.size[1]);
+  }
+  return height;
+}
+
 /** 中央から距離 ring にある格子点を列挙する（ring = 0 なら中央のみ） */
 function ringOffsets(ring: number): Array<[number, number]> {
   if (ring === 0) return [[0, 0]];

@@ -835,9 +835,16 @@ body {
   height: 28px;
 }
 
-/* 基本の家具。中に色の四角 */
+/* 基本の家具。モデルの絵（無ければ色の四角） */
 .thumb__img.is-basic {
   background: var(--surface);
+  overflow: hidden;
+}
+.thumb__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .thumb__swatch {
   width: 52%;

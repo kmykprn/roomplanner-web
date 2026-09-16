@@ -1,28 +1,36 @@
 /**
- * 家具の種類定義（roomplanner-v4 の constants/furnitureTypes.ts から移植）
+ * 家具の種類定義。
  *
- * v4 では image に require() を使っていたが、Web では不要なので落としている。
- * GLB を使う家具は modelPath に public/ からの相対 URL を入れる想定。
+ * 基本の家具。どれも GLB モデルとタイルの画像を持つ（public/models/）。
  */
 
 export interface FurnitureType {
   id: string;
   name: string;
+  /** モデルが読めるまでの仮の箱の色 */
   color: string;
-  /** [幅(X), 高さ(Y), 奥行き(Z)] メートル */
+  /** [幅(X), 高さ(Y), 奥行き(Z)] メートル。モデルの外形と同じ比にしておく（縦横比を保って収めるため） */
   defaultSize: [number, number, number];
-  /** GLB を使う場合のパス。未指定なら箱で描画する */
+  /** GLB のパス（public/ からの相対）。未指定なら箱で描画する */
   modelPath?: string;
+  /** 一覧のタイルに出す画像（public/ からの相対）。無ければ色の四角 */
+  thumbnail?: string;
 }
 
+/**
+ * 基本の家具。
+ *
+ * モデルは自前で作ったもの: 画像生成（SDXL）で「白背景の商品写真」風の画像を作り、
+ * 自前の 3D 生成（Hunyuan3D-2GP、背景除去は BiRefNet）に通した。第三者の写真・意匠は
+ * 使っていない（作り方は README「基本の家具について」）。タイルの画像はモデルを描いたもの
+ */
+const basic = (id: string, name: string, color: string, defaultSize: [number, number, number]): FurnitureType => ({
+  id, name, color, defaultSize, modelPath: `models/${id}.glb`, thumbnail: `models/thumbs/${id}.webp`,
+});
+
 export const FURNITURE_TYPES: FurnitureType[] = [
-  { id: 'chair', name: '椅子', color: '#debb9b', defaultSize: [0.5, 0.8, 0.5], modelPath: 'models/chair.glb' },
-  { id: 'table', name: 'テーブル', color: '#453122', defaultSize: [1.2, 0.8, 0.8] },
-  { id: 'sofa', name: 'ソファ', color: '#c4c2c3', defaultSize: [2, 1, 0.9] },
-  { id: 'bed', name: 'ベッド', color: '#e8dbd2', defaultSize: [1, 0.5, 2] },
-  { id: 'desk', name: 'デスク', color: '#D2691E', defaultSize: [1.5, 0.8, 0.8] },
-  { id: 'refrigerator', name: '冷蔵庫', color: '#E0E0E0', defaultSize: [0.6, 1.8, 0.65] },
-  { id: 'pillar-box', name: '柱', color: '#E0E0E0', defaultSize: [0.3, 2.5, 0.3] },
+  basic('chair', '椅子', '#b0803f', [0.46, 0.9, 0.5]),
+  basic('sofa', 'ソファ', '#5f7382', [1.6, 0.85, 0.85]),
 ];
 
 export function findFurnitureType(id: string): FurnitureType | undefined {
