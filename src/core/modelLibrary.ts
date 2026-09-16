@@ -31,8 +31,11 @@ import { deleteModel } from '@/platform/modelCache';
 import { deleteCutout } from '@/platform/cutoutCache';
 import { deletePreview } from '@/platform/previewCache';
 import type { PlacedFurniture, ProductInfo } from '@/config/furniture';
+import { SAMPLE_MODELS } from '@/config/samples';
 
 const STORAGE_KEY = 'roomplanner.models';
+/** サンプルを入れたかどうか。消したサンプルが次回に復活しないように、入れるのは一度だけ */
+const SAMPLES_SEEDED_KEY = 'roomplanner.samplesSeeded';
 
 /**
  * 作った家具の大きさ。
@@ -95,19 +98,32 @@ export function restoreModelLibrary(): void {
   } catch {
     raw = null;
   }
-  if (raw === null) {
-    setModels(importPlaced());
-    return;
-  }
   let saved: unknown = [];
-  try {
-    saved = JSON.parse(raw);
-  } catch {
-    saved = [];
+  if (raw !== null) {
+    try {
+      saved = JSON.parse(raw);
+    } catch {
+      saved = [];
+    }
   }
-  modelLibrary.set({
-    models: (Array.isArray(saved) ? saved : []).filter(isSavedModel).map(normalizeSaved),
-  });
+  const models = raw === null
+    ? importPlaced()
+    : (Array.isArray(saved) ? saved : []).filter(isSavedModel).map(normalizeSaved);
+  setModels(seedSamples(models));
+}
+
+/** サンプルの家具を、まだ入れたことが無ければ先頭に足す */
+function seedSamples(models: GeneratedModel[]): GeneratedModel[] {
+  let seeded = false;
+  try {
+    seeded = localStorage.getItem(SAMPLES_SEEDED_KEY) === '1';
+    localStorage.setItem(SAMPLES_SEEDED_KEY, '1');
+  } catch {
+    // localStorage が使えないときは毎回入れる（消しても戻るが、動きはする）
+  }
+  if (seeded) return models;
+  const known = new Set(models.map((model) => model.id));
+  return [...SAMPLE_MODELS.filter((sample) => !known.has(sample.id)), ...models];
 }
 
 /** 置いてある生成家具を保管庫の項目にする。同じ GLB は 1 件にまとめる */

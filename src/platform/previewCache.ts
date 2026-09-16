@@ -1,5 +1,7 @@
 /** 生成元写真の小さなプレビューを端末に保存する。 */
 
+import { isPlainUrl } from '@/platform/modelCache';
+
 const DATABASE_NAME = 'roomplanner-generated-previews';
 const STORE_NAME = 'previews';
 const MAX_EDGE = 160;
@@ -42,6 +44,8 @@ export async function savePreview(
 
 /** 保存済みプレビューを img に渡せる一時 URL として取り出す。 */
 export async function resolvePreview(key: string): Promise<string | null> {
+  // サンプルの家具のアイコンは、取り込んだ画像の URL（data:）をそのまま鍵にしている
+  if (isPlainUrl(key)) return key;
   try {
     const blob = await readPreview(key);
     return blob ? URL.createObjectURL(blob) : null;

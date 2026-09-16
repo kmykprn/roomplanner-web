@@ -8,15 +8,14 @@
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
  *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
- *   その後     … 基本の家具（椅子・ソファ）。モデルの絵のタイル
  *
- * 格子の上の「すべて / 2D / 3D / 基本」で絞れる。2D は切り抜きの板、3D は向きを変えられるモデル。
+ * 格子の上の「すべて / 2D / 3D」で絞れる。最初から入っている椅子・ソファ（サンプル）も作った家具と同じ扱い。2D は切り抜きの板、3D は向きを変えられるモデル。
  *
  * 3D 生成は約 3 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
  * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
  */
 
-import { FURNITURE_TYPES, type FurnitureType, type PlacedFurniture } from '@/config/furniture';
+import type { PlacedFurniture } from '@/config/furniture';
 import { IS_CONFIGURED } from '@/config/api';
 import { activeScene } from '@/core/mode';
 import { progressFor } from '@/core/progress';
@@ -63,8 +62,8 @@ export interface ModelPanelOptions {
  * 格子の絞り込み。作ったものは「できたものが何か」で分ける。
  * 2D は写真や商品ページから切り抜いた板（正面からしか見えない）、3D は向きを変えて置けるモデル
  */
-type Filter = 'all' | 'flat' | 'solid' | 'basic';
-const FILTERS: Record<Filter, string> = { all: 'すべて', flat: '2D', solid: '3D', basic: '基本' };
+type Filter = 'all' | 'flat' | 'solid';
+const FILTERS: Record<Filter, string> = { all: 'すべて', flat: '2D', solid: '3D' };
 
 /** 作り方。「作り方を選ぶ」姿の 3 行 */
 type Way = 'photo' | 'product';
@@ -209,10 +208,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     });
   }
 
-  function placeBasic(type: FurnitureType): void {
-    place({ typeId: type.id, size: [...type.defaultSize], color: type.color });
-  }
-
   /** 失敗のタイルを押した。もう一度押すと閉じる */
   function toggleFailure(id: string): void {
     openFailureId = openFailureId === id ? null : id;
@@ -249,12 +244,11 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     const shown = [...models].reverse().filter((model) => (model.modelKey ? showSolid : showFlat));
 
     const ordered: HTMLElement[] = [];
-    if (filter !== 'basic') ordered.push(addTile);
+    ordered.push(addTile);
     ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
     ordered.push(...syncThumbs(modelNodes, shown, (model) => createModelThumb(model, placeGenerated, openEditor)));
-    if (filter === 'all' || filter === 'basic') ordered.push(...basicTiles);
     grid.replaceChildren(...ordered);
 
     // 押した失敗がまだあれば理由を出す。とじる・絞り込みで見えなくなったら畳む
@@ -271,7 +265,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const failedNodes = new Map<string, ThumbNode<FailedItem>>();
   const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
   const addTile = createAddTile(openChooser);
-  const basicTiles = FURNITURE_TYPES.map((type) => createBasicTile(type, placeBasic));
 
   render();
   generationState.subscribe(render);
@@ -309,28 +302,6 @@ function createAddTile(open: () => void): HTMLElement {
   thumb.image.append(createIcon('plus'));
   thumb.button.setAttribute('aria-label', '家具を追加');
   thumb.button.addEventListener('click', open);
-  return thumb.element;
-}
-
-/** 基本の家具のタイル。モデルの絵と名前。押すと空いている場所に置く */
-function createBasicTile(type: FurnitureType, place: (type: FurnitureType) => void): HTMLElement {
-  const thumb = createThumb(type.name);
-  thumb.image.classList.add('is-basic');
-  if (type.thumbnail) {
-    const picture = document.createElement('img');
-    picture.className = 'thumb__picture';
-    picture.src = type.thumbnail;
-    picture.alt = '';
-    picture.loading = 'lazy';
-    picture.decoding = 'async';
-    thumb.image.append(picture);
-  } else {
-    const swatch = document.createElement('span');
-    swatch.className = 'thumb__swatch';
-    swatch.style.background = type.color;
-    thumb.image.append(swatch);
-  }
-  thumb.button.addEventListener('click', () => place(type));
   return thumb.element;
 }
 

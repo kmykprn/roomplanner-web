@@ -40,7 +40,14 @@ export async function saveModel(jobId: string, signedUrl: string): Promise<strin
  * 見つからなければ null（端末のデータが消された場合など）。
  */
 export function resolveModelUrl(key: string): Promise<string | null> {
+  // サンプルの家具は Vite が取り込んだ GLB の URL をそのまま鍵にしている
+  if (isPlainUrl(key)) return Promise.resolve(key);
   return resolveAssetUrl(CACHE_NAME, key);
+}
+
+/** 端末の保存庫の鍵ではなく、そのまま読める URL か */
+export function isPlainUrl(key: string): boolean {
+  return /^(https?:|data:|\/|\.\/)/.test(key);
 }
 
 /** 家具を消したときに中身も捨てる。GLBは1件4〜5MBあるので溜めない */

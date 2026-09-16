@@ -8,7 +8,7 @@
  * 家具（置く・写真から作る）と操作は両方にある。
  */
 
-import { findFurnitureType, type PlacedFurniture } from '@/config/furniture';
+import type { PlacedFurniture } from '@/config/furniture';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
@@ -278,7 +278,7 @@ export function createBottomSheet(container: HTMLElement): void {
       }
       const name = document.createElement('span');
       name.className = 'manage__name';
-      name.textContent = item.name ?? findFurnitureType(item.typeId)?.name ?? item.typeId;
+      name.textContent = item.name ?? item.typeId;
       pick.append(icon, name);
       pick.addEventListener('click', () => scene.select(item.id));
 
