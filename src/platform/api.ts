@@ -68,7 +68,31 @@ async function toApiError(response: Response): Promise<ApiError> {
     409: '別の 3D モデルを作成中です。終わってからお試しください',
     429: '今日の作成回数の上限に達しました。明日またお試しください',
   };
+  // 残高切れはサーバーの理由（運用者向けの言い方）ではなく、画面の文言（core/wallet.ts と対）で出す
+  if (response.status === 402) return new ApiError(402, NO_CREDITS_MESSAGE);
   return new ApiError(response.status, detail || fallback[response.status] || '3D モデルの作成を始められませんでした。時間をおいてお試しください');
+}
+
+/** 3D を作る回数（お試し・回数券）を使い切ったときの文言 */
+export const NO_CREDITS_MESSAGE = '3D モデルを作る回数を使い切りました。回数券はアプリ版で買えるようになる予定です';
+
+/** 財布。詳細は Hunyuan3D-2GP の api/SPEC.md（GET /wallet） */
+export interface Wallet {
+  /** 回数券の残り。期限なし */
+  credits: number;
+  /** お試しの残り。アカウントの生涯で 3 回 */
+  trialRemaining: number;
+  /** 「バナーなし」を買い切っているか */
+  noBanner: boolean;
+}
+
+/** 3D を作れる残りの回数を見る */
+export async function getWallet(): Promise<Wallet> {
+  const response = await fetch(`${API_BASE}/wallet`, {
+    headers: await authHeaders(),
+  });
+  if (!response.ok) throw await toApiError(response);
+  return response.json();
 }
 
 /**

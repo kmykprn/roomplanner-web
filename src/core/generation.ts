@@ -15,6 +15,7 @@ import { readCutout } from '@/platform/cutoutCache';
 import { saveModel } from '@/platform/modelCache';
 import { deletePreview, resolvePreview } from '@/platform/previewCache';
 import { POLL_INTERVAL_MS, RUN_TIMEOUT_MS, TOTAL_TIMEOUT_MS } from '@/config/api';
+import { refreshWallet } from '@/core/wallet';
 
 const STORAGE_KEY = 'roomplanner.generations';
 
@@ -147,6 +148,8 @@ export async function startGenerationForModel(model: GeneratedModel): Promise<vo
     }
     const jobId = await createJob(png);
     updateJob(job.id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
+    // 受け付けられた時点で 1 回減っている。残りの表示を合わせる
+    void refreshWallet();
     void watch(job.id, jobId);
   } catch (error) {
     updateJob(job.id, { phase: 'failed', error: toMessage(error) });
@@ -244,6 +247,8 @@ async function watch(id: string, jobId: string): Promise<void> {
         phase: 'failed',
         error: status.error ?? '3D モデルを作れませんでした。もう一度お試しください',
       });
+      // こちら都合の失敗はサーバーが 1 回戻す（この状態確認の時点で戻っている）
+      void refreshWallet();
       return;
     }
     rememberProgress(id, status);

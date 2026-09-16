@@ -39,6 +39,7 @@ import {
 } from '@/core/persistence';
 import { resumeGeneration } from '@/core/generation';
 import { resumeCutouts } from '@/core/cutout';
+import { watchWallet } from '@/core/wallet';
 import { restoreModelLibrary } from '@/core/modelLibrary';
 import { THEME } from '@/config/theme';
 
@@ -247,6 +248,7 @@ persistPhotoOnChange();
 // 前回の生成・切り抜きが終わっていれば、ここで保管庫に入る
 resumeGeneration();
 resumeCutouts();
+watchWallet();
 
 // --- 毎フレームの処理 ---
 viewer.onFrame(() => {
