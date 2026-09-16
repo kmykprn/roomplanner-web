@@ -18,7 +18,7 @@ import { clearBackground, photoState, setBackground, setMasking } from '@/core/p
 const IDLE_MESSAGE = '部屋の写真を選ぶと、その上に家具を置けます';
 /** 形式と大きさのどちらでも起こる。利用者にできることを先に出す。キャンバスの案内（ui/photoEmpty.ts）も使う */
 export const FAILED_MESSAGE = '写真を読み込めませんでした。別の写真をお試しください';
-const MASK_NOTE = 'なぞった部分が家具より手前に表示されます';
+const MASK_NOTE = '指でなぞった部分は、家具よりも手前に表示されます';
 
 export function createPhotoPanel(): HTMLElement {
   const panel = document.createElement('div');

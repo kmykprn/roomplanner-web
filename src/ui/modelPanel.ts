@@ -116,6 +116,12 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   normal.append(filterBar, grid, failureDetail);
 
   // --- 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る ---
+  /** 作り始めたものが絞り込みで隠れないように、「すべて」に戻す */
+  function showAll(): void {
+    filter = 'all';
+    render();
+  }
+
   const chooser = createChooser({
     photo: () => void pickAndStart(startCutout),
     product: () => productForm.open(),
@@ -126,6 +132,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const productForm = createProductForm({
     onSubmit: (url) => {
       void startProductImport(url);
+      showAll();
       chooser.close();
     },
     onToggle: (opened) => chooser.markProductOpen(opened),
@@ -138,6 +145,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     const files = await pickImages();
     if (files.length === 0) return;
     void start(files);
+    showAll();
     chooser.close();
   }
 
@@ -155,6 +163,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
         return;
       }
       void startGenerationForModel(model);
+      showAll();
       editor.close();
     },
   });
@@ -383,7 +392,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const productSlot = document.createElement('div');
   productSlot.className = 'way__open';
   const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
-    { way: 'photo', icon: 'camera', label: '写真から', note: '写真の家具だけを切り抜いて、2D で置けます（数秒）' },
+    { way: 'photo', icon: 'camera', label: '写真から', note: '写真の中の家具を切り抜いて、画面に置けるようにします（数秒）' },
     { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天市場の商品ページから取り込み、実際の寸法の 2D で置けます' },
   ];
   for (const { way, icon, label, note } of WAYS) {

@@ -156,11 +156,11 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 
 ## 基本の家具について
 
-「基本」に並ぶ 3D モデル（`public/models/*.glb`）は、すべて自前で作ったものです。
+「基本」に並ぶ 3D モデル（`src/assets/furniture/*.glb`）は、すべて自前で作ったものです。
 画像生成（SDXL base 1.0、CreativeML Open RAIL++-M）で「白背景の商品写真」風の画像を作り
 （`assets-src/furniture/sdxl.py`、元画像は `assets-src/furniture/inputs/`）、それを自前の 3D 生成
 （Hunyuan3D-2GP、背景除去は BiRefNet）に通しました（`assets-src/furniture/generate.sh`）。
-第三者の写真や製品の意匠は使っていません。タイルの画像（`public/models/thumbs/`）はそのモデルを描いたものです。
+第三者の写真や製品の意匠は使っていません。タイルの画像（`src/assets/furniture/*.webp`）はそのモデルを描いたものです。
 
 ## 商品リンクについて
 

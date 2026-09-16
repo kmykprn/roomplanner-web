@@ -97,6 +97,9 @@ export function createFurnitureScene<T extends FurnitureSceneState>(
  *
  * `limit` を渡すとその範囲からはみ出す候補を除く（部屋の壁）。
  * 渡さなければ制限なし。**写真モードには壁が無い。**
+ *
+ * 探すのは中心から PLACEMENT_RADIUS 以内だけ。遠くの空きに置くと画面の外に出て
+ * 「置いたのに見えない」になる。近くに空きが無ければ中心に重ねて置く（動かせばよい）
  */
 export function findFreeSpot(
   furniture: PlacedFurniture[],
@@ -107,15 +110,14 @@ export function findFreeSpot(
   const [width, , depth] = size;
 
   const STEP = 0.5; // 候補を探す間隔（メートル）
-  // 制限が無いときは無限に広がってしまうので、探す範囲を決め打ちで区切る
-  const maxRings = limit
-    ? Math.ceil(Math.max(limit.halfWidth, limit.halfDepth) / STEP)
-    : 8;
+  const maxRings = Math.ceil(PLACEMENT_RADIUS / STEP);
 
   for (let ring = 0; ring <= maxRings; ring++) {
     for (const [gridX, gridZ] of ringOffsets(ring)) {
       const x = gridX * STEP;
       const z = gridZ * STEP;
+
+      if (Math.hypot(x, z) > PLACEMENT_RADIUS) continue;
 
       // 家具が範囲からはみ出す候補は除外する（新規設置なので回転は 0）
       if (limit && Math.abs(x) + width / 2 > limit.halfWidth) continue;
@@ -130,6 +132,9 @@ export function findFreeSpot(
 
   return [0, 0, 0];
 }
+
+/** 新しく置くとき、空きを探す範囲（中心からの距離、メートル）。これより外は画面に入らないことがある */
+const PLACEMENT_RADIUS = 1.5;
 
 /** 上に載れる家具の大きさの上限（いちばん長い辺、メートル）。ランプや小物はこれ以下 */
 const STACKABLE_MAX_EDGE = 0.6;

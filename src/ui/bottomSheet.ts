@@ -43,7 +43,7 @@ const SIZE_LIMITS = { min: 0.1, max: 5 };
 /** 1 回のボタン操作で家具を上下させる量（メートル） */
 const HEIGHT_STEP = 0.05;
 
-/** 1 回のボタン操作で切り抜きの板を傾ける角度 */
+/** 1 回のボタン操作で傾ける角度（板の回転と、3D の前後の傾き） */
 const TILT_STEP = Math.PI / 36; // 5 度
 
 export function createBottomSheet(container: HTMLElement): void {
@@ -139,11 +139,17 @@ export function createBottomSheet(container: HTMLElement): void {
     }
 
     const { id } = selected;
-    const rows = [
-      createManageRow('向き', [
-        ['rotateLeft', '左に回す', () => rotate(id, -ROTATION_STEP)],
-        ['rotateRight', '右に回す', () => rotate(id, ROTATION_STEP)],
-      ], (item) => formatAngle(item.rotationY)),
+    const rows: ReturnType<typeof createManageRow>[] = [];
+    // 切り抜きの板はカメラの方を向くので「向き」は効かない。板は画面の中で回す「傾き」だけ
+    if (!isBillboard(selected)) {
+      rows.push(
+        createManageRow('向き', [
+          ['rotateLeft', '左に回す', () => rotate(id, -ROTATION_STEP)],
+          ['rotateRight', '右に回す', () => rotate(id, ROTATION_STEP)],
+        ], (item) => formatAngle(item.rotationY))
+      );
+    }
+    rows.push(
       createManageRow('大きさ', [
         ['shrink', '小さくする', () => resize(id, 1 / SIZE_STEP_RATIO)],
         ['grow', '大きくする', () => resize(id, SIZE_STEP_RATIO)],
@@ -151,15 +157,22 @@ export function createBottomSheet(container: HTMLElement): void {
       createManageRow('高さ', [
         ['down', '下げる', () => lift(id, -HEIGHT_STEP)],
         ['up', '上げる', () => lift(id, HEIGHT_STEP)],
-      ], (item) => formatHeight(item.position[1])),
-    ];
-    // 傾きは切り抜きの板にだけ意味がある（3D は向きで回す）
+      ], (item) => formatHeight(item.position[1]))
+    );
     if (isBillboard(selected)) {
       rows.push(
         createManageRow('傾き', [
           ['rotateLeft', '左に傾ける', () => tilt(id, TILT_STEP)],
           ['rotateRight', '右に傾ける', () => tilt(id, -TILT_STEP)],
         ], (item) => formatTilt(item.tilt ?? 0))
+      );
+    } else {
+      // 3D は前後に倒す（寄りかかった椅子、傾いた看板など）
+      rows.push(
+        createManageRow('傾き', [
+          ['down', '前に傾ける', () => pitch(id, -TILT_STEP)],
+          ['up', '後ろに傾ける', () => pitch(id, TILT_STEP)],
+        ], (item) => formatTilt(item.pitch ?? 0))
       );
     }
 
@@ -285,6 +298,14 @@ export function createBottomSheet(container: HTMLElement): void {
   /** 切り抜きの板か（3D を持たず、切り抜きだけを持つ家具） */
   function isBillboard(item: PlacedFurniture): boolean {
     return Boolean(item.imageUrl) && !item.modelUrl;
+  }
+
+  /** 3D を前後に倒す。上限は無し（横倒しにしたい人もいる） */
+  function pitch(id: string, step: number): void {
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
+    if (!item) return;
+    scene.update(id, { pitch: (item.pitch ?? 0) + step });
   }
 
   /** 切り抜きの板を画面の中で回す。上限は無し（逆さまにしたい人もいる） */

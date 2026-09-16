@@ -39,7 +39,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}'],
         // three.js を含むバンドルは既定の上限（2MB）を超えるため引き上げる。
         // ここが足りないとオフライン起動できなくなる
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
