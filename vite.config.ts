@@ -13,10 +13,18 @@ import { fileURLToPath, URL } from 'node:url';
  */
 const base = process.env.DEPLOY_BASE ?? './';
 
+/**
+ * iOS アプリ（Capacitor）向けのビルドか。`npm run build:app` が立てる。
+ *
+ * アプリでは Service Worker を入れない。WKWebView は端末内のファイルを直接開くので
+ * オフライン化も更新の入れ替えも要らず、入れると古い dist を握り続ける事故の元になる
+ */
+const forApp = process.env.CAPACITOR === '1';
+
 export default defineConfig({
   base,
   plugins: [
-    VitePWA({
+    !forApp && VitePWA({
       // 新しいバージョンを公開したら、次回起動時に自動で入れ替える
       registerType: 'autoUpdate',
       injectRegister: 'auto',

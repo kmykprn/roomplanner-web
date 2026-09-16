@@ -137,7 +137,12 @@ mesh.position.y = height / 2;
 
 # ネイティブ依存の扱い
 
-将来 Capacitor で iOS アプリにする予定があるため、以下を守ること。
+Capacitor 8 で iOS アプリにしてある（`ios/`、README「iOS アプリ」）。以下を守ること。
+
+- **Bundle ID `io.github.kmykprn.roomplanner` は変えない。** App Store に出したあとは変えられず、
+  Sign in with Apple や課金商品もこれに紐づく
+- **アプリの中だけの分岐は `isNativeApp`（`src/platform/native.ts`）で行う。** UA では見分けない
+- `npm run build:app` は Service Worker を切る。Web のビルド（`npm run build`）と混ぜない
 
 - **OS依存の処理（カメラ・写真ライブラリ・ファイル保存）は `src/platform/` 経由でのみ呼ぶこと**
   - 差し替えが1ファイルで済むようにするため
