@@ -14,3 +14,15 @@ android/
 # 実際の値が入る。.env.example だけを追跡する
 .env
 .env.local
+
+# アプリ化（Capacitor）で増える設定と署名。公開リポジトリなので git には置かず、
+# ビルド時に GitHub の Secrets から流し込む（CLAUDE.md「秘密の置き場」）。
+# ios/ android/ ごと除いているが、生成物を追跡するようになっても入らないよう名指しで重ねる
+GoogleService-Info.plist
+google-services.json
+*.p8
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+ExportOptions.plist
