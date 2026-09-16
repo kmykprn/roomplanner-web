@@ -732,10 +732,10 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
    * 残りの回数は財布の写し（core/wallet.ts）から出す。写しが無ければ回数には触れない
    */
   function renderModelField(): void {
-    if (!current) return;
-    const making = generationState.get().jobs.some((job) => job.targetModelId === current!.id && job.phase !== 'failed');
-    const remaining = remainingGenerations();
-    const noCredits = remaining === 0;
+    const model = current;
+    if (!model) return;
+    const making = generationState.get().jobs.some((job) => job.targetModelId === model.id && job.phase !== 'failed');
+    const noCredits = remainingGenerations() === 0;
     makeModel.disabled = making || noCredits;
     modelNote.textContent = making
       ? '3D モデルを作っています。一覧の作成中のタイルで進み具合が見られます'
