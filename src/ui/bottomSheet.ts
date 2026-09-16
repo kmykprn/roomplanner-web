@@ -13,6 +13,7 @@ import { createModelPanel } from '@/ui/modelPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel } from '@/ui/photoPanel';
+import { createInteriorPanel } from '@/ui/interiorPanel';
 import { createIcon, type IconName } from '@/ui/icons';
 import { createRepeatButton } from '@/ui/repeatButton';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
@@ -20,16 +21,17 @@ import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
 import { photoState, setMasking } from '@/core/photoState';
 
-type TabId = 'background' | 'models' | 'manage';
+type TabId = 'interior' | 'background' | 'models' | 'manage';
 
 const TABS: Record<TabId, string> = {
+  interior: '内装',
   background: '背景',
   models: '家具',
   manage: '操作',
 };
 
-/** モードごとのタブの並び */
-const ROOM_TABS: TabId[] = ['models', 'manage'];
+/** モードごとのタブの並び。部屋は内装（壁と床）、写真は背景（部屋の写真）から始まる */
+const ROOM_TABS: TabId[] = ['interior', 'models', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
 
 /** 1 回のボタン操作で家具を回す角度 */
@@ -75,6 +77,7 @@ export function createBottomSheet(container: HTMLElement): void {
     },
   });
   const photoPanel = createPhotoPanel();
+  const interiorPanel = createInteriorPanel();
 
   function visibleTabs(): TabId[] {
     return isPhotoMode() ? PHOTO_TABS : ROOM_TABS;
@@ -111,6 +114,7 @@ export function createBottomSheet(container: HTMLElement): void {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
     if (activeTab === 'models') return modelPanel;
     if (activeTab === 'background') return photoPanel;
+    if (activeTab === 'interior') return interiorPanel;
     return renderManageTab();
   }
 

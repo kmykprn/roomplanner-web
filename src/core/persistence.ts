@@ -11,6 +11,7 @@
  */
 
 import { appState, type AppState } from '@/core/appState';
+import { roomSizeFor } from '@/config/interior';
 import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
 import { readBackground, readMask } from '@/platform/backgroundStore';
 
@@ -31,8 +32,11 @@ export function restoreRoom(): void {
 
   // 選択状態は残さない。前回選んでいた家具が消えている可能性があり、
   // 復元しても操作の手掛かりにならない
+  const interior = { ...appState.get().interior, ...(saved.interior ?? {}) };
   appState.set({
-    room: saved.room ?? appState.get().room,
+    // 部屋の大きさは内装（畳数）から決まるので、保存値ではなく内装から引き直す
+    room: roomSizeFor(interior.template, interior.mats),
+    interior,
     furniture: Array.isArray(saved.furniture) ? saved.furniture : [],
     selectedId: null,
   });
@@ -89,7 +93,7 @@ export function persistRoomOnChange(): void {
       // 選択状態は保存しない（上と同じ理由）
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ room: state.room, furniture: state.furniture })
+        JSON.stringify({ room: state.room, interior: state.interior, furniture: state.furniture })
       );
     } catch {
       // 容量超過やプライベートモード。保存できなくても操作は続けられる

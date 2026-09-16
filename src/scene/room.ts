@@ -8,16 +8,22 @@
 import * as THREE from 'three';
 import { WALL_DIRECTIONS, getWallTransform, type RoomSize, type WallDirection } from '@/config/room';
 import { SCENE_COLORS, SURFACES } from '@/config/theme';
+import type { InteriorTextures } from '@/scene/interiorTextures';
 
 export interface RoomObjects {
   group: THREE.Group;
   floor: THREE.Mesh;
   /** 壁の可視性を切り替えるために方向で引けるようにしておく */
   walls: Record<WallDirection, THREE.Mesh>;
+  /** 部屋の大きさを変える（和室は畳数で大きさが決まる）。メッシュは作り直さず形だけ差し替える */
+  resize(size: RoomSize): void;
+  /** 内装の柄を床と壁に貼る */
+  applyInterior(textures: InteriorTextures): void;
 }
 
-export function createRoom(size: RoomSize): RoomObjects {
+export function createRoom(initialSize: RoomSize): RoomObjects {
   const group = new THREE.Group();
+  let size = initialSize;
 
   const floor = createFloor(size);
   group.add(floor);
@@ -29,7 +35,48 @@ export function createRoom(size: RoomSize): RoomObjects {
     group.add(wall);
   }
 
-  return { group, floor, walls };
+  function resize(next: RoomSize): void {
+    size = next;
+    floor.geometry.dispose();
+    floor.geometry = new THREE.PlaneGeometry(size.width, size.depth);
+    for (const direction of WALL_DIRECTIONS) {
+      const wall = walls[direction];
+      const transform = getWallTransform(direction, size);
+      wall.geometry.dispose();
+      wall.geometry = new THREE.PlaneGeometry(transform.planeWidth, size.height);
+      wall.position.set(...transform.position);
+      const edges = wall.getObjectByName('edges') as THREE.LineSegments | undefined;
+      if (edges) {
+        edges.geometry.dispose();
+        edges.geometry = new THREE.EdgesGeometry(wall.geometry);
+      }
+    }
+  }
+
+  function applyInterior(textures: InteriorTextures): void {
+    const floorMaterial = floor.material as THREE.MeshStandardMaterial;
+    floorMaterial.map?.dispose();
+    floorMaterial.map = textures.floor;
+    floorMaterial.color.set('#ffffff');
+    floorMaterial.needsUpdate = true;
+
+    for (const direction of WALL_DIRECTIONS) {
+      const wall = walls[direction];
+      const material = wall.material as THREE.MeshBasicMaterial;
+      material.map?.dispose();
+      // 壁ごとに横幅が違うので、繰り返しの回数も壁ごとに決める（絵は同じ 1 枚）
+      const texture = new THREE.CanvasTexture(textures.wall);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(getWallTransform(direction, size).planeWidth / textures.wallTileWidth, 1);
+      texture.anisotropy = 8;
+      material.map = texture;
+      material.color.set('#ffffff');
+      material.needsUpdate = true;
+    }
+  }
+
+  return { group, floor, walls, resize, applyInterior };
 }
 
 function createFloor(size: RoomSize): THREE.Mesh {
