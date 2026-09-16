@@ -45,6 +45,8 @@ import {
   type GeneratedModel,
 } from '@/core/modelLibrary';
 import { authState, redirectLogin } from '@/platform/auth';
+import { walletState, remainingGenerations } from '@/core/wallet';
+import { NO_CREDITS_MESSAGE } from '@/platform/api';
 import { pickImage, pickImages } from '@/platform/picker';
 import { savePreview } from '@/platform/previewCache';
 import { createIcon, type IconName } from '@/ui/icons';
@@ -725,19 +727,49 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
 
   element.append(head, iconRow, nameField, productField, modelField, actions, divider, remove, confirm);
 
+  /**
+   * 3D の段の案内と押せるか。作っている最中と、回数を使い切ったときは押せない。
+   * 残りの回数は財布の写し（core/wallet.ts）から出す。写しが無ければ回数には触れない
+   */
+  function renderModelField(): void {
+    if (!current) return;
+    const making = generationState.get().jobs.some((job) => job.targetModelId === current!.id && job.phase !== 'failed');
+    const remaining = remainingGenerations();
+    const noCredits = remaining === 0;
+    makeModel.disabled = making || noCredits;
+    modelNote.textContent = making
+      ? '3D モデルを作っています。一覧の作成中のタイルで進み具合が見られます'
+      : noCredits
+        ? NO_CREDITS_MESSAGE
+        : `この切り抜きから立体を作ると、向きを変えて置けるようになります${remainingNote()}`;
+  }
+
+  /** 「。お試しはあと 2 回です」のような添え書き。匿名なら、ログインすると使えることを伝える */
+  function remainingNote(): string {
+    if (authState.get().anonymous) return '。Google でログインすると、お試しで 3 回まで作れます';
+    const { status, trialRemaining, credits } = walletState.get();
+    if (status !== 'ready') return '';
+    if (trialRemaining > 0) return `。お試しはあと ${trialRemaining} 回です`;
+    return `。残り ${credits} 回です`;
+  }
+
+  // 開いている間に残高やログインの状態が変わったら（作成を頼んだ直後など）、案内を追いかける
+  walletState.subscribe(() => {
+    if (!element.hidden) renderModelField();
+  });
+  generationState.subscribe(() => {
+    if (!element.hidden) renderModelField();
+  });
+
   function open(model: GeneratedModel): void {
     current = model;
     nameInput.value = model.name;
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
     confirmText.textContent = `「${model.name}」を削除します。よろしいですか？`;
-    // 3D 化は 2D の家具だけ。作っている最中なら押せないようにする
+    // 3D 化は 2D の家具だけ
     modelField.hidden = model.modelKey !== null || model.imageKey === null;
-    const making = generationState.get().jobs.some((job) => job.targetModelId === model.id && job.phase !== 'failed');
-    makeModel.disabled = making;
-    modelNote.textContent = making
-      ? '3D モデルを作っています。一覧の作成中のタイルで進み具合が見られます'
-      : 'この切り抜きから立体を作ると、向きを変えて置けるようになります';
+    renderModelField();
     productField.hidden = !model.product;
     if (model.product) {
       productNote.textContent = model.size
