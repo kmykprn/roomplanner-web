@@ -18,6 +18,7 @@
 import type { PlacedFurniture } from '@/config/furniture';
 import { IS_CONFIGURED } from '@/config/api';
 import { activeScene } from '@/core/mode';
+import { currentEngine, ENGINES, setEngine, type Engine } from '@/core/engine';
 import { progressFor } from '@/core/progress';
 import {
   dismissError,
@@ -332,6 +333,64 @@ interface Chooser {
   requireLogin(note: string): void;
 }
 
+/**
+ * 3D の作り方の切り替え。
+ *
+ * 限定公開中の試用なので目立たせない。既定は「ふつう」のままで、
+ * 選んだ結果は端末に残る（`src/core/engine.ts`）。
+ * 作成中のものには影響しない（依頼した時点の作り方で進み具合を出す）
+ */
+function createEngineChoice(): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'engine';
+
+  const label = document.createElement('span');
+  label.className = 'engine__label';
+  label.id = 'engine-label';
+  label.textContent = '3D の作り方';
+
+  const bar = document.createElement('div');
+  bar.className = 'seg';
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-labelledby', label.id);
+
+  const buttons = new Map<Engine, HTMLButtonElement>();
+  for (const { value, label: text, note } of ENGINES) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = `engine-${value}`;
+    button.className = 'seg__item';
+    button.textContent = text;
+    button.title = note;
+    button.addEventListener('click', () => {
+      setEngine(value);
+      renderChoice();
+    });
+    buttons.set(value, button);
+    bar.append(button);
+  }
+
+  const note = document.createElement('p');
+  note.className = 'hint engine__note';
+
+  function renderChoice(): void {
+    const engine = currentEngine();
+    for (const [value, button] of buttons) {
+      const active = value === engine;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    }
+    note.textContent =
+      engine === 'trellis'
+        ? 'お試しの作り方です。約 2 分でできますが、裏側が暗くなることがあります'
+        : '約 8 分かかります';
+  }
+
+  renderChoice();
+  wrap.append(label, bar, note);
+  return wrap;
+}
+
 function createChooser(actions: Record<Way, () => void> & { onClose(): void }): Chooser {
   const element = document.createElement('div');
   element.className = 'lib__chooser';
@@ -433,7 +492,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     afterLoginNote = null;
   });
 
-  element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
+  element.append(head, menu, createEngineChoice(), loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
 
   function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
@@ -829,7 +888,7 @@ function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
     thumb.name.textContent = describe(current);
     ring.update(
       current.phase === 'running'
-        ? progressFor(current.serverPhase, elapsedInPhase(current)).ratio
+        ? progressFor(current.serverPhase, elapsedInPhase(current), current.engine).ratio
         : 0,
       ''
     );
@@ -940,7 +999,7 @@ function describe(job: GenerationJob): string {
       return '順番待ち';
     case 'running':
       // 「あと5分」「まもなく」。見込みであって約束ではない（core/progress.ts）
-      return progressFor(job.serverPhase, elapsedInPhase(job)).centerText;
+      return progressFor(job.serverPhase, elapsedInPhase(job), job.engine).centerText;
     case 'saving':
       return '保存中';
     case 'failed':

@@ -8,6 +8,7 @@
  */
 
 import { createStore } from '@/core/store';
+import { currentEngine, type Engine } from '@/core/engine';
 import { ApiError, createJob, getJob, type JobStatus } from '@/platform/api';
 import { ensureRegistered } from '@/platform/auth';
 import { addModel, attachModel, modelNameFrom, type GeneratedModel } from '@/core/modelLibrary';
@@ -54,6 +55,13 @@ export interface GenerationJob {
    * 端末側で滑らかに進められる
    */
   serverPhaseStartedAt: number | null;
+  /**
+   * どのモデルで作っているか。工程表（進み具合の見積もり）がこれで変わる。
+   *
+   * 依頼した時点の設定を持ち回る。作成中に設定を変えても、走っているものの
+   * 見積もりは変わらない
+   */
+  engine: Engine;
   /**
    * 切り抜き（2D）の家具から作っているなら、その保管庫の項目の id。
    * できあがったら新しい項目を足さず、この項目に 3D を付ける
@@ -133,6 +141,7 @@ export async function startGenerationForModel(model: GeneratedModel): Promise<vo
     startedRunningAt: null,
     serverPhase: null,
     serverPhaseStartedAt: null,
+    engine: currentEngine(),
     targetModelId: model.id,
     error: null,
   };
@@ -146,7 +155,9 @@ export async function startGenerationForModel(model: GeneratedModel): Promise<vo
       const url = await resolvePreview(model.previewKey);
       if (url) updateJob(job.id, { previewUrl: url });
     }
-    const jobId = await createJob(png);
+    const engine = currentEngine();
+    updateJob(job.id, { engine });
+    const jobId = await createJob(png, engine);
     updateJob(job.id, { jobId, phase: 'queued', startedAt: Date.now(), error: null });
     // 受け付けられた時点で 1 回減っている。残りの表示を合わせる
     void refreshWallet();
@@ -190,6 +201,8 @@ export function resumeGeneration(): void {
       startedRunningAt: null,
       serverPhase: null,
       serverPhaseStartedAt: null,
+      // 端末に残していないので既定に倒す。次の応答でサーバーの値に上書きされる
+      engine: 'hunyuan',
       targetModelId: job.targetModelId ?? null,
       error: null,
     }));
@@ -292,6 +305,8 @@ function rememberProgress(id: string, status: JobStatus): void {
   if (status.state === 'running' && !current.startedRunningAt) {
     patch.startedRunningAt = Date.now();
   }
+  // 復帰したジョブは端末側に作り方を残していないので、サーバーの値で直す
+  if (status.engine && status.engine !== current.engine) patch.engine = status.engine;
   const serverPhase = status.phase ?? null;
   if (serverPhase !== current.serverPhase) {
     patch.serverPhase = serverPhase;

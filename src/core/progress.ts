@@ -17,7 +17,12 @@
  *
  * 止まるのは正直な表示で、実際に長引いているという情報になる。
  * 次の工程に進めば円もまた動き出す。
+ *
+ * ## 作り方ごとに工程表が違う
+ *
+ * `engine`（hunyuan / trellis）で工程の名前も所要時間も違うので、表を分けてある。
  */
+import type { Engine } from '@/core/engine';
 
 /** 各工程の実測時間（秒）。円の持ち分はこの比で決まる */
 interface Step {
@@ -28,7 +33,8 @@ interface Step {
   readonly label: string;
 }
 
-const STEPS: readonly Step[] = [
+/** Hunyuan（既定）の工程。実測は Hunyuan3D-2GP の api/SPEC.md */
+const HUNYUAN_STEPS: readonly Step[] = [
   { phase: null, seconds: 10, label: '順番を待っています' },
   // 重みのダウンロード（10.9GB、15 秒）と import を含む
   { phase: 'preparing', seconds: 45, label: '写真を読み込んでいます' },
@@ -44,14 +50,34 @@ const STEPS: readonly Step[] = [
   { phase: 'finishing', seconds: 15, label: 'もうすぐできあがります' },
 ];
 
-/** 全工程の合計。円の持ち分の分母になる */
-const TOTAL_SECONDS = STEPS.reduce((sum, step) => sum + step.seconds, 0);
+/**
+ * TRELLIS（お試し）の工程。全体で約 100 秒と Hunyuan の 1/5 で、工程の名前も違う。
+ * 実測は Hunyuan3D-2GP の api/SPEC.md（engine=trellis の表）
+ */
+const TRELLIS_STEPS: readonly Step[] = [
+  { phase: null, seconds: 10, label: '順番を待っています' },
+  // コンテナの起動と、重み 4.1GB のダウンロード
+  { phase: 'preparing', seconds: 30, label: '写真を読み込んでいます' },
+  { phase: 'loading_model', seconds: 30, label: '形を作っています' },
+  { phase: 'generating_shape', seconds: 10, label: '形を作っています' },
+  { phase: 'postprocessing', seconds: 4, label: '形を整えています' },
+  { phase: 'baking_texture', seconds: 6, label: '色と模様をつけています' },
+  { phase: 'finishing', seconds: 15, label: 'もうすぐできあがります' },
+];
 
-/** 各工程が始まる時点までの累計秒。`STEPS` から一度だけ作る（手で書くとずれる） */
-const STARTS_AT: readonly number[] = STEPS.reduce<number[]>((acc, _step, index) => {
-  acc.push(index === 0 ? 0 : acc[index - 1] + STEPS[index - 1].seconds);
-  return acc;
-}, []);
+/** 工程表ごとに、合計秒と「各工程が始まる時点までの累計秒」を用意する（手で書くとずれる） */
+function tableFor(steps: readonly Step[]) {
+  const startsAt = steps.reduce<number[]>((acc, _step, index) => {
+    acc.push(index === 0 ? 0 : acc[index - 1] + steps[index - 1].seconds);
+    return acc;
+  }, []);
+  return { steps, startsAt, total: steps.reduce((sum, step) => sum + step.seconds, 0) };
+}
+
+const TABLES = {
+  hunyuan: tableFor(HUNYUAN_STEPS),
+  trellis: tableFor(TRELLIS_STEPS),
+} as const;
 
 /**
  * 円を満杯にしない上限。
@@ -79,20 +105,25 @@ export interface Progress {
  * @param phase サーバーが返した工程。まだ無ければ null
  * @param elapsedInPhaseSec その工程に入ってからの経過秒
  */
-export function progressFor(phase: string | null, elapsedInPhaseSec: number): Progress {
-  const index = STEPS.findIndex((step) => step.phase === phase);
+export function progressFor(
+  phase: string | null,
+  elapsedInPhaseSec: number,
+  engine: Engine = 'hunyuan',
+): Progress {
+  const { steps, startsAt, total } = TABLES[engine] ?? TABLES.hunyuan;
+  const index = steps.findIndex((step) => step.phase === phase);
   if (index < 0) {
     // 知らない工程。サーバーが工程を増やしても画面が壊れないようにする
     return unknownPhase(phase);
   }
 
-  const step = STEPS[index];
+  const step = steps[index];
   const within = clamp(elapsedInPhaseSec, 0, step.seconds);
-  const done = STARTS_AT[index] + within;
+  const done = startsAt[index] + within;
 
   return {
-    ratio: Math.min(done / TOTAL_SECONDS, MAX_RATIO),
-    centerText: remainingText(TOTAL_SECONDS - done),
+    ratio: Math.min(done / total, MAX_RATIO),
+    centerText: remainingText(total - done),
     label: step.label,
   };
 }
