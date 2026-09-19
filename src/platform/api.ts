@@ -8,6 +8,7 @@
  */
 
 import { API_BASE, CUTOUT_BASE, CUTOUT_WAIT_SECONDS } from '@/config/api';
+import type { Engine } from '@/core/engine';
 import { getIdToken } from '@/platform/auth';
 import { isNativeApp } from '@/platform/native';
 
@@ -16,6 +17,8 @@ export type JobState = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export interface JobStatus {
   state: JobState;
+  /** どのモデルで作っているか。工程表がこれで変わる。古いサーバーは返さない */
+  engine?: Engine;
   /**
    * いまサーバーが何をしているか。
    *
@@ -117,13 +120,15 @@ function toCutoutError(response: Response): ApiError {
 /**
  * 画像を送って生成を頼む。返るのは受付番号だけで、完成はしていない。
  *
+ * @param engine どのモデルで作るか。省くとサーバーの既定（hunyuan）
  * @returns jobId。以後この番号で状態を見に行く
  */
-export async function createJob(image: Blob): Promise<string> {
+export async function createJob(image: Blob, engine?: Engine): Promise<string> {
   const body = new FormData();
   // 拡張子はサーバー側の判定に使われない（中身をデコードして判定している）が、
   // 付けないと一部のブラウザが filename を空にして multipart が崩れる
   body.append('image', image, 'photo.jpg');
+  if (engine) body.append('engine', engine);
 
   const response = await fetch(`${API_BASE}/jobs`, {
     method: 'POST',

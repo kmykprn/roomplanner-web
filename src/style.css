@@ -1182,3 +1182,20 @@ body {
   flex-basis: 100%;
   margin: 0;
 }
+
+/* 3D の作り方の切り替え（家具を追加の画面の下に、控えめに置く） */
+.engine {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.engine__label {
+  font-size: 12px;
+  color: #687076;
+}
+
+.engine__note {
+  margin: 0;
+}
