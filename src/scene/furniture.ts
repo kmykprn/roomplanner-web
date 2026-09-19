@@ -211,10 +211,18 @@ function replaceWithBillboard(
     });
 }
 
-/** GPU 上のメモリを解放する。消しっぱなしにすると使用量が増え続ける */
+/**
+ * GPU 上のメモリを解放する。消しっぱなしにすると使用量が増え続ける。
+ *
+ * **GLB の中身は捨てない。** 読み込んだモデルは使い回し（scene/modelLoader.ts のキャッシュ）で、
+ * 形もマテリアルもテクスチャも複製どうしで共有している。ここで捨てると、
+ * 同じ家具をもう 1 つ置いてあるときにその見た目まで壊れる。
+ * 目印は読み込み側が付けている（`userData.sharedAssets`）
+ */
 function disposeObject(object: THREE.Object3D): void {
   object.traverse((child) => {
     if (!(child instanceof THREE.Mesh) && !(child instanceof THREE.LineSegments)) return;
+    if (child.userData.sharedAssets) return;
     child.geometry.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     for (const material of materials) {

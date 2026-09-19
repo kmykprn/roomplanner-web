@@ -8,7 +8,6 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { SURFACES } from '@/config/theme';
 
 const loader = new GLTFLoader();
 
@@ -32,7 +31,10 @@ export async function loadFurnitureModel(
 ): Promise<THREE.Group> {
   let entry = cache.get(url);
   if (!entry) {
-    entry = loader.loadAsync(url).then((gltf) => gltf.scene);
+    entry = loader.loadAsync(url).then((gltf) => {
+      useBakedTexture(gltf.scene);
+      return gltf.scene;
+    });
     cache.set(url, entry);
   }
 
@@ -65,22 +67,52 @@ function prepareForRoom(model: THREE.Object3D, fitSize: [number, number, number]
   applySceneSettings(model);
 }
 
-/** 影の設定と、質感の補正をモデル全体にかける */
+/** 影の設定をモデル全体にかける。マテリアルは読み込み時に済ませてある（useBakedTexture） */
 function applySceneSettings(model: THREE.Object3D): void {
   model.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-
+    // 光を当てないマテリアルは影を受け取れない（受け取る先の陰影が無い）。
+    // 落とす側は深度だけで決まるので、床に落ちる影はこれまでどおり出る
     child.castShadow = true;
-    child.receiveShadow = true;
+  });
+}
 
-    // 写真から起こしたモデルはつやが強すぎて内装に馴染まないことがあるため、
-    // 金属でないものは家具らしいざらつきに寄せる
+/**
+ * 写真から起こしたモデルを、**光を当てずに**描くようにする。
+ *
+ * このアプリの 3D モデルは、どれも家具の写真から作られている。そのテクスチャは
+ * **撮影したときの光がすでに入った色**で、部屋の光を掛ける前の色（アルベド）ではない。
+ * そこへ部屋の光と環境光を掛けると光が二重になり、黒い家具が灰色に浮き、
+ * 上を向いた面は環境光の天井を映して白く飛ぶ（実機で確認）。
+ *
+ * 入力写真との近さを 10 指標で測ったところ、**光を当てないのが 3 点とも最良**だった
+ * （彩度とその分布。furniture3d の docs/07-appearance-metrics.md）。
+ * 切り抜き（2D）の板も同じく光を当てていないので、2D と 3D で見え方も揃う。
+ *
+ * 読み込み時に一度だけ掛ける。**複製どうしはマテリアルを共有している**ので、
+ * ここで差し替えれば、そのモデルを何個置いても描き方は揃う
+ */
+function useBakedTexture(model: THREE.Object3D): void {
+  model.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
     const materials = Array.isArray(child.material) ? child.material : [child.material];
-    for (const material of materials) {
-      if (!(material instanceof THREE.MeshStandardMaterial)) continue;
-      if (material.metalness > 0.5) continue; // 本当に金属のものはそのまま
-      material.roughness = Math.max(material.roughness, SURFACES.furniture.roughness);
-      material.metalness = 0;
-    }
+    const replaced = materials.map((material) => {
+      if (!(material instanceof THREE.MeshStandardMaterial)) return material;
+      // テクスチャが無いモデルは、色だけを引き継ぐ（真っ白になってしまうため）
+      const unlit = new THREE.MeshBasicMaterial({
+        map: material.map,
+        color: material.color,
+        vertexColors: material.vertexColors,
+        transparent: material.transparent,
+        opacity: material.opacity,
+        alphaTest: material.alphaTest,
+        side: material.side,
+      });
+      material.dispose(); // 差し替えたので元は要らない。テクスチャは unlit が引き継ぐので捨てない
+      return unlit;
+    });
+    child.material = Array.isArray(child.material) ? replaced : replaced[0];
+    // 使い回している中身なので、置いた家具を消すときに一緒に捨てない目印
+    child.userData.sharedAssets = true;
   });
 }
