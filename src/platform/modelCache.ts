@@ -38,11 +38,17 @@ export async function saveModel(jobId: string, signedUrl: string): Promise<strin
  *
  * GLTFLoader は URL しか受け取らないので、Blob から一時的なURLを作る。
  * 見つからなければ null（端末のデータが消された場合など）。
+ *
+ * **鍵の形では見分けない。** 生成した家具の鍵は `/generated/…`、サンプルの家具は
+ * Vite が取り込んだ `/…/chair-abc123.glb` で、**どちらも `/` で始まる**。
+ * 形で振り分けると生成した家具まで「そのまま読める URL」とみなし、
+ * 端末に保存した中身を読まずに存在しないパスを取りに行く（仮の箱のまま残る）。
+ * 先に保存庫を見て、無ければ URL として扱う。
  */
-export function resolveModelUrl(key: string): Promise<string | null> {
-  // サンプルの家具は Vite が取り込んだ GLB の URL をそのまま鍵にしている
-  if (isPlainUrl(key)) return Promise.resolve(key);
-  return resolveAssetUrl(CACHE_NAME, key);
+export async function resolveModelUrl(key: string): Promise<string | null> {
+  const saved = await resolveAssetUrl(CACHE_NAME, key);
+  if (saved) return saved;
+  return isPlainUrl(key) ? key : null;
 }
 
 /** 端末の保存庫の鍵ではなく、そのまま読める URL か */
