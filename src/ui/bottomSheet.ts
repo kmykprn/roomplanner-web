@@ -180,21 +180,25 @@ export function createBottomSheet(container: HTMLElement): void {
       );
     }
 
-    // 削除は右下に寄せる（誤タップを避ける）。塗りつぶしの赤で「消せる」ことをはっきり出す。
-    // 赤はここ 1 つだけなので、青のステッパーと並んでも主従は崩れない
+    // 削除は右下に寄せる（誤タップを避ける）。
+    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
+    // 同じ見た目にすると同じ重さに見えるので、グレーにして下に残ることを添える
     const foot = document.createElement('div');
     foot.className = 'manage__foot';
     // 商品ページから取り込んだ家具なら、ここから買いに行ける（削除の左に置く）
     if (selected.product) foot.append(createProductLink(selected.product));
-    const remove = createButton('削除', () => {
+    const remove = createButton('画面から削除', () => {
       scene.remove(id);
       // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる
       releaseFurnitureAssets(selected);
-    }, 'is-danger is-small manage__delete');
-    remove.prepend(createIcon('trash'));
+    }, 'is-small manage__delete');
     foot.append(remove);
 
-    wrapper.append(...rows.map((row) => row.element), foot);
+    const footNote = document.createElement('p');
+    footNote.className = 'hint manage__note';
+    footNote.textContent = '画面から削除しても、「家具」タブには残ります';
+
+    wrapper.append(...rows.map((row) => row.element), foot, footNote);
 
     manageView = {
       itemId: id,
@@ -289,8 +293,8 @@ export function createBottomSheet(container: HTMLElement): void {
       const remove = createButton('', () => {
         scene.remove(item.id);
         releaseFurnitureAssets(item);
-      }, 'is-danger is-small manage__delete');
-      remove.setAttribute('aria-label', `${name.textContent} を削除`);
+      }, 'is-small manage__delete');
+      remove.setAttribute('aria-label', `${name.textContent} を画面から削除`);
       remove.append(createIcon('trash'));
 
       row.append(pick, remove);

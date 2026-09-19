@@ -1,24 +1,25 @@
 /**
  * 3D の作り方（どのモデルで作るか）の設定。
  *
- * 限定公開中の試用のため、既定は従来どおり Hunyuan のまま。端末ごとの設定で、
- * サーバーには生成を頼むときだけ渡す（`POST /jobs` の `engine`、Hunyuan3D-2GP の api/SPEC.md）。
+ * 端末ごとの設定で、サーバーには生成を頼むときだけ渡す
+ * （`POST /jobs` の `engine`、Hunyuan3D-2GP の api/SPEC.md）。
  *
  * | | 作り方 | 所要 |
  * |---|---|---|
- * | `hunyuan` | 既定。写真からでも切り抜きからでも作れる | 約 8 分 |
- * | `trellis` | 試用。**切り抜きからのみ**。速くて安いが、背面が暗くなることがある | 約 2 分 |
+ * | `trellis` | 既定。**切り抜きからのみ**。速くて安いが、背面が暗くなることがある | 約 2 分 |
+ * | `hunyuan` | 写真からでも切り抜きからでも作れる。時間はかかるが裏側まで作る | 約 8 分 |
  */
 
 export type Engine = 'hunyuan' | 'trellis';
 
+/** 並び順がそのまま画面の並びになる。既定を先に出す */
 export const ENGINES: readonly { value: Engine; label: string; note: string }[] = [
-  { value: 'hunyuan', label: 'ふつう', note: '約 8 分' },
-  { value: 'trellis', label: 'お試し（速い）', note: '約 2 分' },
+  { value: 'trellis', label: '速い', note: '約 2 分' },
+  { value: 'hunyuan', label: 'きれい', note: '約 8 分' },
 ];
 
 const STORAGE_KEY = 'roomplanner.engine';
-const DEFAULT: Engine = 'hunyuan';
+const DEFAULT: Engine = 'trellis';
 
 function isEngine(value: unknown): value is Engine {
   return value === 'hunyuan' || value === 'trellis';

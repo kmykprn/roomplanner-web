@@ -211,7 +211,11 @@ export async function startCutout(files: File[]): Promise<void> {
  * 楽天の商品ページの URL から取り込む。
  *
  * サーバーが商品情報と画像を返すので、その画像を写真と同じ切り抜きの流れに通す。
- * 寸法が取れていれば置くときの大きさに、商品情報は「楽天で見る」に使う
+ * 寸法が取れていれば置くときの大きさに、商品情報は「楽天で見る」に使う。
+ *
+ * **画面からの入口は廃止した**（「家具を追加」は 2D / 3D の 2 つだけ）。
+ * すでに取り込んである家具の店名・購入リンクは残すため、ここから下は残してある。
+ * 取り込みそのものを畳むかは、サーバー側の扱いと合わせて決める
  */
 export async function startProductImport(url: string): Promise<void> {
   const job = newJob('商品', 'importing');
