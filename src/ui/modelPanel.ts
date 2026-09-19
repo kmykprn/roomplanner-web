@@ -2,14 +2,17 @@
  * 「家具」タブ。置ける家具をタイルの格子に並べ、押すといまのモード（部屋／写真）に置く。
  *
  *   格子の先頭 … 「＋ 追加」。押すと一覧と入れ替わりに「家具を追加」の姿が出る。
- *                写真から切り抜く（数秒）／商品ページの URL から（実寸で置ける）。
+ *                入口は 2 つで、2D（切り抜き）を作る（数秒）／3D モデルを作る（数分）。
  *                匿名ならその姿の中でログインを求める（ui/loginPanel.ts）。
- *                3D は切り抜き（2D）の編集画面から「3D モデルにする」（約 3 分）
+ *                3D は 2D から作るので、作る前に元の 2D を選ばせる
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
  *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
  *
  * 格子の上の「すべて / 2D / 3D」で絞れる。最初から入っている椅子・ソファ（サンプル）も作った家具と同じ扱い。2D は切り抜きの板、3D は向きを変えられるモデル。
+ *
+ * **2D と 3D は別々のタイルとして並ぶ。** 同じ家具でも 2 つ出るので、それぞれ選んで
+ * 編集・削除する。どちらを触っているのかが分かるよう、左上に 2D / 3D の印を付ける。
  *
  * 3D 生成は約 3 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
  * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
@@ -31,19 +34,18 @@ import {
   cutoutState,
   dismissCutoutError,
   startCutout,
-  startProductImport,
   type CutoutJob,
 } from '@/core/cutout';
-import { createProductForm } from '@/ui/productForm';
 import { createProductLink } from '@/ui/productLink';
 import {
   GENERATED_SIZE,
   PLACEHOLDER_COLOR,
   modelLibrary,
-  removeModel,
+  removeModelFacet,
   renamePlacedCopies,
   updateModel,
   type GeneratedModel,
+  type ModelFacet,
 } from '@/core/modelLibrary';
 import { authState, redirectLogin } from '@/platform/auth';
 import { walletState, remainingGenerations } from '@/core/wallet';
@@ -68,8 +70,18 @@ export interface ModelPanelOptions {
 type Filter = 'all' | 'flat' | 'solid';
 const FILTERS: Record<Filter, string> = { all: 'すべて', flat: '2D', solid: '3D' };
 
-/** 作り方。「作り方を選ぶ」姿の 3 行 */
-type Way = 'photo' | 'product';
+/** 家具の作り方。「家具を追加」の 2 行 */
+type Way = 'cutout' | 'model';
+
+/**
+ * 一覧に並べる 1 タイル。**同じ家具でも 2D と 3D で別のタイル**になるので、
+ * どちらの面を指しているかを持つ。id はタイルを使い回すための鍵
+ */
+interface ModelTile {
+  id: string;
+  model: GeneratedModel;
+  facet: ModelFacet;
+}
 
 /** 失敗した作成（切り抜きも 3D も同じ姿）。タイルにするための共通の形 */
 interface FailedItem {
@@ -125,22 +137,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   }
 
   const chooser = createChooser({
-    photo: () => void pickAndStart(startCutout),
-    product: () => productForm.open(),
+    cutout: () => void pickAndStart(startCutout),
+    model: () => {
+      chooser.close();
+      openMaker();
+    },
     onClose: () => {
       normal.hidden = false;
     },
   });
-  const productForm = createProductForm({
-    onSubmit: (url) => {
-      void startProductImport(url);
-      showAll();
-      chooser.close();
-    },
-    onToggle: (opened) => chooser.markProductOpen(opened),
-  });
-  // 欄は「商品の URL から」の行の中で開く（行の見出しの下）。別の囲みにしない
-  chooser.productSlot.append(productForm.element);
 
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
   async function pickAndStart(start: (files: File[]) => Promise<void>): Promise<void> {
@@ -161,7 +166,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
       if (authState.get().anonymous) {
         editor.close();
         openChooser();
-        chooser.requireLogin('ログイン後に、もう一度「⋯」→「3D モデルにする」を押してください');
+        chooser.requireLogin('ログイン後に、もう一度「3D モデルを作成」を押してください');
         return;
       }
       void startGenerationForModel(model);
@@ -169,17 +174,39 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
       editor.close();
     },
   });
-  panel.append(normal, chooser.element, editor.element);
+  const maker = createModelMaker({
+    onClose: () => {
+      normal.hidden = false;
+    },
+    onStart: (model) => {
+      if (authState.get().anonymous) {
+        maker.close();
+        openChooser();
+        chooser.requireLogin('ログイン後に、もう一度「3D モデルを作る」を選んでください');
+        return;
+      }
+      void startGenerationForModel(model);
+      showAll();
+      maker.close();
+    },
+  });
+
+  panel.append(normal, chooser.element, maker.element, editor.element);
 
   function openChooser(): void {
     normal.hidden = true;
-    productForm.close();
     chooser.open();
   }
 
-  function openEditor(model: GeneratedModel): void {
+  /** 3D にする 2D を選ぶ姿。一覧と入れ替わりに出す */
+  function openMaker(): void {
     normal.hidden = true;
-    editor.open(model);
+    maker.open();
+  }
+
+  function openEditor(tile: ModelTile): void {
+    normal.hidden = true;
+    editor.open(tile.model, tile.facet);
   }
 
   /** 押したモデルをいまのモードの空いている場所に置く。置いた直後は選択状態にする */
@@ -197,15 +224,16 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     scene.select(id);
   }
 
-  function placeGenerated(model: GeneratedModel): void {
+  /** 押したタイルを置く。2D のタイルからは板を、3D のタイルからはモデルを置く */
+  function placeGenerated({ model, facet }: ModelTile): void {
     place({
       typeId: 'generated',
       name: model.name,
       // 商品ページから寸法が取れていれば実寸。無ければいちばん長い辺 1m
       size: model.size ? [...model.size] : [...GENERATED_SIZE],
       color: PLACEHOLDER_COLOR,
-      modelUrl: model.modelKey ?? undefined,
-      imageUrl: model.imageKey ?? undefined,
+      modelUrl: facet === 'solid' ? model.modelKey ?? undefined : undefined,
+      imageUrl: facet === 'flat' ? model.imageKey ?? undefined : undefined,
       sourceImageKey: model.previewKey ?? undefined,
       product: model.product,
     });
@@ -243,15 +271,19 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
         .filter((job) => job.phase === 'failed')
         .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissError(job.id) })),
     ];
-    // 3D は modelKey を持つ。切り抜き（2D）は imageKey だけ
-    const shown = [...models].reverse().filter((model) => (model.modelKey ? showSolid : showFlat));
+    // 1 件の記録が 2D と 3D の両方を持つことがある。その場合はタイルを 2 つ並べる
+    const shown: ModelTile[] = [];
+    for (const model of [...models].reverse()) {
+      if (showFlat && model.imageKey) shown.push({ id: `${model.id}:flat`, model, facet: 'flat' });
+      if (showSolid && model.modelKey) shown.push({ id: `${model.id}:solid`, model, facet: 'solid' });
+    }
 
     const ordered: HTMLElement[] = [];
     ordered.push(addTile);
     ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
-    ordered.push(...syncThumbs(modelNodes, shown, (model) => createModelThumb(model, placeGenerated, openEditor)));
+    ordered.push(...syncThumbs(modelNodes, shown, (tile) => createModelThumb(tile, placeGenerated, openEditor)));
     grid.replaceChildren(...ordered);
 
     // 押した失敗がまだあれば理由を出す。とじる・絞り込みで見えなくなったら畳む
@@ -266,7 +298,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   const cutoutNodes = new Map<string, ThumbNode<CutoutJob>>();
   const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
   const failedNodes = new Map<string, ThumbNode<FailedItem>>();
-  const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
+  const modelNodes = new Map<string, ThumbNode<ModelTile>>();
   const addTile = createAddTile(openChooser);
 
   render();
@@ -321,10 +353,6 @@ function createAddTile(open: () => void): HTMLElement {
  */
 interface Chooser {
   element: HTMLElement;
-  /** URL を貼る欄の置き場。「商品の URL から」の行の見出しの下 */
-  productSlot: HTMLElement;
-  /** 欄が開いている間、その行を開いた見た目にする */
-  markProductOpen(opened: boolean): void;
   open(): void;
   close(): void;
   /** ログインの結果を伝える。何も言わないと「ログインしたのに何も起きない」に見える */
@@ -334,10 +362,140 @@ interface Chooser {
 }
 
 /**
+ * 3D にする 2D（切り抜き）を選ぶ姿。
+ *
+ * 3D は 2D から作るので、**先に元の 2D を選ばせる**。すでに 3D があるものは出さない
+ * （同じ家具の 3D が 2 つできてしまうため）。選ぶまで「3D モデルを作成」は押せない。
+ */
+interface ModelMakerActions {
+  onClose(): void;
+  onStart(model: GeneratedModel): void;
+}
+
+function createModelMaker({ onClose, onStart }: ModelMakerActions): {
+  element: HTMLElement;
+  open(): void;
+  close(): void;
+} {
+  const element = document.createElement('div');
+  element.className = 'lib__maker';
+  element.hidden = true;
+
+  const head = document.createElement('div');
+  head.className = 'edit__head';
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'button is-text is-small';
+  back.textContent = '‹ 戻る';
+  back.addEventListener('click', close);
+  const title = document.createElement('span');
+  title.className = 'edit__title';
+  title.textContent = '3D モデルを作る';
+  const headSpacer = document.createElement('span');
+  headSpacer.className = 'edit__spacer';
+  head.append(back, title, headSpacer);
+
+  const ask = document.createElement('p');
+  ask.className = 'hint';
+  ask.textContent = 'どの 2D（切り抜き）から作りますか？';
+
+  const grid = document.createElement('div');
+  grid.className = 'tiles';
+
+  const divider = document.createElement('div');
+  divider.className = 'divider';
+
+  const start = document.createElement('button');
+  start.type = 'button';
+  start.className = 'button is-block';
+  start.textContent = '3D モデルを作成';
+  start.addEventListener('click', () => {
+    const model = candidates().find((item) => item.id === selectedId);
+    if (model) onStart(model);
+  });
+
+  const note = document.createElement('p');
+  note.className = 'hint is-center';
+
+  /** 選んでいる 2D。閉じるたびに忘れる（前回の選択が残っていると誤って作りやすい） */
+  let selectedId: string | null = null;
+  const nodes = new Map<string, ThumbNode<GeneratedModel>>();
+
+  element.append(head, ask, grid, divider, createEngineChoice(), start, note);
+
+  /** 3D をまだ持っていない 2D。新しい順 */
+  function candidates(): GeneratedModel[] {
+    return [...modelLibrary.get().models]
+      .reverse()
+      .filter((model) => model.imageKey !== null && model.modelKey === null);
+  }
+
+  function render(): void {
+    const models = candidates();
+    if (selectedId !== null && !models.some((model) => model.id === selectedId)) selectedId = null;
+    grid.replaceChildren(
+      ...syncThumbs(nodes, models, (model) =>
+        createPickThumb(model, (id) => {
+          selectedId = selectedId === id ? null : id;
+          render();
+        })
+      )
+    );
+    for (const [id, node] of nodes) node.element.classList.toggle('is-picked', id === selectedId);
+
+    // 回数を使い切っているなら、選んでも作れない。押せない理由をそのまま出す
+    const noCredits = remainingGenerations() === 0;
+    start.disabled = selectedId === null || noCredits;
+    note.hidden = !start.disabled;
+    note.textContent = noCredits ? NO_CREDITS_MESSAGE : '2D（切り抜き）を選択してください';
+  }
+
+  function open(): void {
+    selectedId = null;
+    render();
+    element.hidden = false;
+  }
+
+  function close(): void {
+    element.hidden = true;
+    onClose();
+  }
+
+  modelLibrary.subscribe(() => {
+    if (!element.hidden) render();
+  });
+  walletState.subscribe(() => {
+    if (!element.hidden) render();
+  });
+
+  return { element, open, close };
+}
+
+/** 選ぶためのタイル。押すと選択が入れ替わる（置くのではない） */
+function createPickThumb(model: GeneratedModel, pick: (id: string) => void): ThumbNode<GeneratedModel> {
+  const thumb = createThumb(model.name);
+  let current = model;
+  const preview = createPreviewImage(thumb.image);
+  const mark = document.createElement('span');
+  mark.className = 'thumb__pick';
+  mark.append(createIcon('check'));
+  thumb.image.append(mark);
+  thumb.button.addEventListener('click', () => pick(current.id));
+
+  function update(next: GeneratedModel): void {
+    current = next;
+    thumb.name.textContent = next.name;
+    thumb.button.setAttribute('aria-label', `${next.name} から 3D モデルを作る`);
+    preview.show(next.previewKey);
+  }
+  update(model);
+  return { element: thumb.element, update, dispose: preview.dispose };
+}
+
+/**
  * 3D の作り方の切り替え。
  *
- * 限定公開中の試用なので目立たせない。既定は「ふつう」のままで、
- * 選んだ結果は端末に残る（`src/core/engine.ts`）。
+ * 選んだ結果は端末に残る（`src/core/engine.ts`）。既定は速いほう（TRELLIS）。
  * 作成中のものには影響しない（依頼した時点の作り方で進み具合を出す）
  */
 function createEngineChoice(): HTMLElement {
@@ -382,8 +540,8 @@ function createEngineChoice(): HTMLElement {
     }
     note.textContent =
       engine === 'trellis'
-        ? 'お試しの作り方です。約 2 分でできますが、裏側が暗くなることがあります'
-        : '約 8 分かかります';
+        ? '約 2 分でできます。裏側が暗くなることがあります'
+        : '約 8 分かかります。裏側まで作ります';
   }
 
   renderChoice();
@@ -418,14 +576,19 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const menu = document.createElement('div');
   menu.className = 'ways';
   const rows: HTMLButtonElement[] = [];
-  /** 「商品の URL から」の行。見出し（押すもの）と、その下で開く欄をまとめる */
-  const productRow = document.createElement('div');
-  productRow.className = 'way-group';
-  const productSlot = document.createElement('div');
-  productSlot.className = 'way__open';
   const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
-    { way: 'photo', icon: 'camera', label: '写真から', note: '写真の中の家具を切り抜いて、画面に置けるようにします（数秒）' },
-    { way: 'product', icon: 'link', label: '商品の URL から', note: '楽天市場の商品ページから取り込み、実際の寸法の 2D で置けます' },
+    {
+      way: 'cutout',
+      icon: 'camera',
+      label: '2D（切り抜き）を作る',
+      note: '画像から家具を切り抜きます。背景に物が少ない画像のほうが、きれいに切り抜けます',
+    },
+    {
+      way: 'model',
+      icon: 'cube',
+      label: '3D モデルを作る',
+      note: '2D（切り抜き）から 3D モデルを作成します。事前に 2D（切り抜き）の作成が必要です。',
+    },
   ];
   for (const { way, icon, label, note } of WAYS) {
     const row = document.createElement('button');
@@ -455,18 +618,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
       actions[way]();
     });
     rows.push(row);
-    if (way === 'product') {
-      row.setAttribute('aria-expanded', 'false');
-      productRow.append(row, productSlot);
-      menu.append(productRow);
-    } else {
-      menu.append(row);
-    }
-  }
-
-  function markProductOpen(opened: boolean): void {
-    productRow.classList.toggle('is-open', opened);
-    rows[WAYS.findIndex((item) => item.way === 'product')].setAttribute('aria-expanded', String(opened));
+    menu.append(row);
   }
 
   /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
@@ -483,21 +635,21 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
 
   // ログインを求めるパネル。行と入れ替わりで出る
   const loginPanel = createLoginPanel(() => {
-    // ポップアップでログインできた直後。商品の URL はそのまま続けられる。
-    // 写真はファイル選択を開けないので、もう一度押してもらう
-    if (pending === 'product') actions.product();
+    // ポップアップでログインできた直後。3D を作るはそのまま続けられる。
+    // 2D はファイル選択を開けないので、もう一度押してもらう
+    if (pending === 'model') actions.model();
     else if (afterLoginNote) showSignedIn(null, afterLoginNote);
     else showSignedIn();
     pending = null;
     afterLoginNote = null;
   });
 
-  element.append(head, menu, createEngineChoice(), loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
+  element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
 
   function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
     signedInNote.textContent =
-      error ?? note ?? 'ログインしました。もう一度「写真から」を押して写真を選んでください';
+      error ?? note ?? 'ログインしました。もう一度「2D（切り抜き）を作る」を押して画像を選んでください';
     signedInNote.hidden = false;
   }
 
@@ -538,7 +690,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   new MutationObserver(renderState).observe(loginPanel.element, { attributeFilter: ['hidden'] });
   renderState();
 
-  return { element, productSlot, markProductOpen, open, close, showSignedIn, requireLogin };
+  return { element, open, close, showSignedIn, requireLogin };
 }
 
 /** できあがったモデル。押すと置く。× で保管庫から外す */
@@ -580,45 +732,49 @@ function syncThumbs<T extends { id: string }>(
 }
 
 function createModelThumb(
-  model: GeneratedModel,
-  place: (model: GeneratedModel) => void,
-  edit: (model: GeneratedModel) => void
-): ThumbNode<GeneratedModel> {
-  const thumb = createThumb(model.name);
-  let current = model;
+  tile: ModelTile,
+  place: (tile: ModelTile) => void,
+  edit: (tile: ModelTile) => void
+): ThumbNode<ModelTile> {
+  const thumb = createThumb(tile.model.name);
+  let current = tile;
   thumb.button.addEventListener('click', () => place(current));
   const preview = createPreviewImage(thumb.image);
-  // 「すべて」で 2D と見分けられるように、3D には印を付ける
-  if (model.modelKey) thumb.image.append(createTag('3D'));
+  // アイコンは 2D と 3D で同じものを使うので、左上の印だけが見分けになる
+  thumb.image.append(createTag(tile.facet === 'solid' ? '3D' : '2D'));
 
   // 右上の「⋯」で編集へ。押しても置いてしまわないよう、下のボタンには渡さない
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'thumb__more';
   more.textContent = '⋯';
-  more.setAttribute('aria-label', `${model.name} を編集`);
   more.addEventListener('click', (event) => {
     event.stopPropagation();
     edit(current);
   });
   thumb.image.append(more);
 
-  function update(next: GeneratedModel): void {
+  function update(next: ModelTile): void {
     current = next;
-    thumb.name.textContent = next.name;
-    more.setAttribute('aria-label', `${next.name} を編集`);
-    preview.show(next.previewKey);
+    const kind = next.facet === 'solid' ? '3D モデル' : '2D（切り抜き）';
+    thumb.name.textContent = next.model.name;
+    thumb.button.setAttribute('aria-label', `${next.model.name} の${kind}を置く`);
+    more.setAttribute('aria-label', `${next.model.name} の${kind}を編集`);
+    preview.show(next.model.previewKey);
   }
-  update(model);
+  update(tile);
   return { element: thumb.element, update, dispose: preview.dispose };
 }
 
 /**
- * 作ったモデルの編集の姿。名前とアイコンを変え、削除もここから。
+ * 作った家具の編集の姿。名前とアイコンを変え、削除もここから。
  *
- * 削除は「このモデルを削除」→ 確認 → 「削除する」の二段階。確認にはアイコンも出し、
- * 同じ名前のモデルがあっても取り違えないようにする。
- * 一覧から外すだけで、置いてある家具はそのまま残る（removeModel の挙動）
+ * **2D と 3D は別々に開く。** 開いている面だけが消せる（2D を消しても 3D は残る）ので、
+ * 見出しも削除の文言も、いまどちらを触っているかを名指しする。
+ *
+ * 削除は「この…を完全に削除」→ 確認 → 「削除する」の二段階。確認にはアイコンも出し、
+ * 同じ名前の家具があっても取り違えないようにする。
+ * 一覧から外すだけで、置いてある家具はそのまま残る（removeModelFacet の挙動）
  */
 interface ModelEditorActions {
   onClose(): void;
@@ -626,15 +782,20 @@ interface ModelEditorActions {
   onMakeModel(model: GeneratedModel): void;
 }
 
+/** 面ごとの呼び名。見出し・ボタン・確認で同じ言い方を使う */
+const FACET_NAME: Record<ModelFacet, string> = { flat: '2D（切り抜き）', solid: '3D モデル' };
+
 function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   element: HTMLElement;
-  open(model: GeneratedModel): void;
+  open(model: GeneratedModel, facet: ModelFacet): void;
   close(): void;
 } {
   const element = document.createElement('div');
   element.className = 'lib__edit';
   element.hidden = true;
   let current: GeneratedModel | null = null;
+  /** いま開いている面。削除の対象もこれ */
+  let facet: ModelFacet = 'flat';
 
   const head = document.createElement('div');
   head.className = 'edit__head';
@@ -645,7 +806,6 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   back.addEventListener('click', close);
   const title = document.createElement('span');
   title.className = 'edit__title';
-  title.textContent = '家具の編集';
   const headSpacer = document.createElement('span');
   headSpacer.className = 'edit__spacer';
   head.append(back, title, headSpacer);
@@ -703,22 +863,19 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   const productLinkSlot = document.createElement('div');
   productField.append(productLabel, productNote, productLinkSlot);
 
-  // 切り抜き（2D）だけに出す。3D にすると向きを変えて置ける
+  // 2D を開いているときだけ出す。3D にすると向きを変えて置ける
   const modelField = document.createElement('div');
-  modelField.className = 'field';
-  const modelLabel = document.createElement('span');
-  modelLabel.className = 'field__label';
-  modelLabel.textContent = '3D モデル';
-  const modelNote = document.createElement('p');
-  modelNote.className = 'hint';
+  modelField.className = 'edit__make';
   const makeModel = document.createElement('button');
   makeModel.type = 'button';
-  makeModel.className = 'button is-quiet is-small';
-  makeModel.textContent = '3D モデルにする（約 3 分）';
+  makeModel.className = 'button is-block';
+  makeModel.textContent = '3D モデルを作成';
   makeModel.addEventListener('click', () => {
     if (current) onMakeModel(current);
   });
-  modelField.append(modelLabel, modelNote, makeModel);
+  const modelNote = document.createElement('p');
+  modelNote.className = 'hint is-center';
+  modelField.append(makeModel, modelNote);
 
   const actions = document.createElement('div');
   actions.className = 'edit__actions';
@@ -740,18 +897,28 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   const divider = document.createElement('div');
   divider.className = 'divider';
 
+  // 取り消せない操作なので、作成の青いボタンから縦に離す。
+  // 塗りつぶしも枠も付けず文字だけにして、誤って押す圧を下げる
+  const spacer = document.createElement('div');
+  spacer.className = 'edit__spacer-fill';
+
   const remove = document.createElement('button');
   remove.type = 'button';
-  remove.className = 'button is-quiet is-small is-danger-outline';
-  remove.textContent = 'この家具を削除';
+  remove.className = 'button is-text is-danger-text is-block';
   remove.addEventListener('click', () => {
-    confirm.hidden = false;
-    remove.hidden = true;
+    modal.hidden = false;
   });
 
-  const confirm = document.createElement('div');
-  confirm.className = 'confirm';
-  confirm.hidden = true;
+  // 確認は画面全体を覆って出す。背後の画面を触れなくして、答えるまで進ませない
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.hidden = true;
+  const modalBox = document.createElement('div');
+  modalBox.className = 'modal__box';
+  modalBox.setAttribute('role', 'dialog');
+  modalBox.setAttribute('aria-modal', 'true');
+  const confirmTitle = document.createElement('b');
+  confirmTitle.className = 'modal__title';
   const confirmRow = document.createElement('div');
   confirmRow.className = 'confirm__what';
   const confirmIcon = document.createElement('span');
@@ -760,8 +927,8 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   const confirmText = document.createElement('span');
   confirmRow.append(confirmIcon, confirmText);
   const confirmNote = document.createElement('p');
-  confirmNote.className = 'hint';
-  confirmNote.textContent = '部屋や写真に置いた家具はそのまま残ります';
+  confirmNote.className = 'hint is-error';
+  confirmNote.textContent = 'この端末から完全に削除します。削除後は復元はできませんがよろしいですか？';
   const confirmButtons = document.createElement('div');
   confirmButtons.className = 'confirm__buttons';
   const cancel = document.createElement('button');
@@ -769,8 +936,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   cancel.className = 'button is-quiet is-small';
   cancel.textContent = 'やめる';
   cancel.addEventListener('click', () => {
-    confirm.hidden = true;
-    remove.hidden = false;
+    modal.hidden = true;
   });
   const doRemove = document.createElement('button');
   doRemove.type = 'button';
@@ -778,13 +944,14 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   doRemove.textContent = '削除する';
   doRemove.addEventListener('click', () => {
     if (!current) return;
-    removeModel(current.id);
+    removeModelFacet(current.id, facet);
     close();
   });
   confirmButtons.append(cancel, doRemove);
-  confirm.append(confirmRow, confirmNote, confirmButtons);
+  modalBox.append(confirmTitle, confirmRow, confirmNote, confirmButtons);
+  modal.append(modalBox);
 
-  element.append(head, iconRow, nameField, productField, modelField, actions, divider, remove, confirm);
+  element.append(head, iconRow, nameField, productField, actions, modelField, spacer, divider, remove, modal);
 
   /**
    * 3D の段の案内と押せるか。作っている最中と、回数を使い切ったときは押せない。
@@ -800,16 +967,16 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
       ? '3D モデルを作っています。一覧の作成中のタイルで進み具合が見られます'
       : noCredits
         ? NO_CREDITS_MESSAGE
-        : `この切り抜きから立体を作ると、向きを変えて置けるようになります${remainingNote()}`;
+        : `2D（切り抜き）から 3D モデルを作ります。${remainingNote()}`;
   }
 
   /** 「。お試しはあと 2 回です」のような添え書き。匿名なら、ログインすると使えることを伝える */
   function remainingNote(): string {
-    if (authState.get().anonymous) return '。Google でログインすると、お試しで 3 回まで作れます';
+    if (authState.get().anonymous) return 'Google でログインすると、お試しで 3 回まで作れます';
     const { status, trialRemaining, credits } = walletState.get();
     if (status !== 'ready') return '';
-    if (trialRemaining > 0) return `。お試しはあと ${trialRemaining} 回です`;
-    return `。残り ${credits} 回です`;
+    if (trialRemaining > 0) return `お試しはあと ${trialRemaining} 回です`;
+    return `残り ${credits} 回です`;
   }
 
   // 開いている間に残高やログインの状態が変わったら（作成を頼んだ直後など）、案内を追いかける
@@ -820,14 +987,19 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     if (!element.hidden) renderModelField();
   });
 
-  function open(model: GeneratedModel): void {
+  function open(model: GeneratedModel, openedFacet: ModelFacet): void {
     current = model;
+    facet = openedFacet;
+    const kind = FACET_NAME[facet];
+    title.textContent = `${kind}の編集`;
     nameInput.value = model.name;
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
-    confirmText.textContent = `「${model.name}」を削除します。よろしいですか？`;
-    // 3D 化は 2D の家具だけ
-    modelField.hidden = model.modelKey !== null || model.imageKey === null;
+    confirmTitle.textContent = `この ${kind}を削除します`;
+    confirmText.textContent = model.name;
+    remove.textContent = `この ${kind}を完全に削除`;
+    // 3D 化は 2D を開いているときだけ。すでに 3D があるなら出さない
+    modelField.hidden = facet !== 'flat' || model.modelKey !== null;
     renderModelField();
     productField.hidden = !model.product;
     if (model.product) {
@@ -836,8 +1008,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
         : `${model.product.shop}・寸法を取得できませんでした。「操作」タブで大きさを調整してください`;
       productLinkSlot.replaceChildren(createProductLink(model.product));
     }
-    confirm.hidden = true;
-    remove.hidden = false;
+    modal.hidden = true;
     element.hidden = false;
   }
 

@@ -315,6 +315,24 @@ body {
   color: #5d6567;
 }
 
+/* 横いっぱいのボタン。画面の中で「次にすること」が 1 つだけのときに使う */
+.button.is-block {
+  width: 100%;
+}
+
+.button:disabled {
+  background: #e6e9ea;
+  color: #a9afb5;
+}
+
+/* 取り消せない削除。塗りつぶしも枠も付けず、赤い文字だけにして圧を下げる。
+   強く見せると、隣の主ボタンと競って押し間違えを招く */
+.button.is-text.is-danger-text {
+  color: var(--danger);
+  font-weight: 500;
+  font-size: 13px;
+}
+
 .hint {
   margin: 0;
   color: #7a8388;
@@ -641,15 +659,23 @@ body {
   margin-top: 2px;
 }
 
-/* 削除は塗りつぶしの赤（.button.is-danger）。アイコンと文字を並べる */
+/* 「画面から削除」は置いた分を外すだけで、置き直せる。
+   取り消せない削除（家具の完全削除）と同じ赤にすると、同じ重さに見えてしまうのでグレー */
 .manage__delete {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  background: #687076;
 }
 .manage__delete .ic {
   width: 18px;
   height: 18px;
+}
+/* 消えるのが「置いた分」だけであることを、ボタンのすぐ下で言う */
+.manage__note {
+  margin: 4px 0 0;
+  text-align: right;
+  font-size: 12px;
 }
 
 /* 線のアイコン（ui/icons.ts）。アプリのアイコンと同じ「丸い端・丸い角」。色は置いた場所の文字色 */
@@ -924,28 +950,6 @@ body {
   color: #7a8388;
 }
 
-/* 「商品の URL から」の行。見出しと、その下で開く欄の組。開いている間は薄い下地 */
-.way-group {
-  display: grid;
-  border-top: 1px solid var(--border);
-}
-.way-group .way {
-  border-top: none;
-}
-.way-group.is-open {
-  background: #f7fafb;
-}
-
-/* URL を貼る欄。行の見出しの下、文の頭（アイコンの右）に揃えて出す */
-.product-form {
-  display: grid;
-  gap: 8px;
-  padding: 0 12px 12px 60px;
-}
-.product-form .hint {
-  margin: 0;
-}
-
 /* 「楽天で見る」。リンクだがボタンの姿。下線は付けない */
 .product-link {
   text-decoration: none;
@@ -1099,23 +1103,90 @@ body {
   margin: 4px 0;
   background: var(--border);
 }
-.button.is-danger-outline {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-/* 削除の確認。赤みのある地で、ここだけ雰囲気を変える */
-.confirm {
+/* 3D にする 2D を選ぶ姿。一覧と同じ格子を出し、下に作り方と作成ボタンを置く */
+.lib__maker {
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 8px;
-  background: #f8e9e7;
-  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  gap: 10px;
+  width: 100%;
+  align-content: start;
 }
+/* 選ぶためのタイル。選んだものにだけチェックを出す */
+.thumb__pick {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: transparent;
+}
+.thumb__pick .ic {
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  stroke: currentColor;
+}
+.thumb.is-picked .thumb__pick {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.thumb.is-picked .thumb__img {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* 中央に置く添え書き。ボタンの下で、そのボタンの説明として読ませる */
+.hint.is-center {
+  text-align: center;
+  font-size: 12px;
+}
+
+/* 「3D モデルを作成」。名前の欄と削除の間に置く */
+.edit__make {
+  display: grid;
+  gap: 6px;
+}
+/* 作成の青と削除の赤を、画面の上下に離すための空き */
+.edit__spacer-fill {
+  min-height: 24px;
+  flex: 1;
+}
+
+/* 取り消せない削除の確認。画面全体を覆い、答えるまで背後を触れなくする */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(17, 24, 28, 0.45);
+}
+.modal__box {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 340px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.modal__title {
+  font-size: 15px;
+}
+
+/* 何を消すのかを、アイコンと名前で出す。同じ名前の家具があっても取り違えないため */
 .confirm__what {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
 }
 .confirm__icon {
   width: 36px;
