@@ -36,6 +36,25 @@ const IDLE = 0x18b4e0;
 const ACTIVE = 0x7ae4ff;
 
 /**
+ * 板の不透明さ。
+ *
+ * **透けると床に乗って見えない。** 向こう側が見えている物は、目には浮いている物に映る。
+ * 実物が床にあるなら、その下の床は隠れる。完全には塗りつぶさないのは、
+ * 板を置いた場所の床の様子も少しは見えたほうが、位置を決めやすいため
+ */
+const SLAB_OPACITY = 0.82;
+
+/**
+ * 板の下に敷く影の広がり（板の何倍か）と濃さ。
+ *
+ * **接地している感じは、影がいちばん強く作る。** 板そのものをいくら描き込んでも、
+ * 床との境目に影が無いと浮いて見える。写真は CSS の背景なので、
+ * 黒い面を薄く重ねて暗くする（写真そのものには触らない）
+ */
+const SHADOW_SPREAD = 1.9;
+const SHADOW_OPACITY = 0.5;
+
+/**
  * 床の面をどれだけの広さ塗るか（m）。触れている間だけ出す。
  * **広く取る。** 狭いと面の奥の端が画面に出てしまい、壁のように見える
  */
@@ -61,9 +80,31 @@ export function createFloorMarkers(): FloorMarkers {
 
   const slab = new THREE.Mesh(
     new THREE.BoxGeometry(SLAB.width, SLAB.thickness, SLAB.depth),
-    new THREE.MeshBasicMaterial({ color: IDLE, transparent: true, opacity: 0.38, depthWrite: false })
+    // depthWrite を切らない。切ると板の向こう側の面や辺まで透けて、箱の形が読めなくなる。
+    // 面をわずかに奥へずらすのは、同じ位置にある白い辺が面に負けて消えるのを防ぐため
+    new THREE.MeshBasicMaterial({
+      color: IDLE,
+      transparent: true,
+      opacity: SLAB_OPACITY,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    })
   );
   slab.position.y = SLAB.thickness / 2;
+
+  // 床との境目に敷く影。板より一回り広く、外へ向かってぼかす
+  const shadow = new THREE.Mesh(
+    new THREE.PlaneGeometry(SLAB.width * SHADOW_SPREAD, SLAB.depth * SHADOW_SPREAD),
+    new THREE.MeshBasicMaterial({
+      map: createShadowTexture(),
+      transparent: true,
+      opacity: SHADOW_OPACITY,
+      depthWrite: false,
+    })
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.001;
 
   // 辺を白く描く。**辺を床の目地と見比べる**のがこの形のねらいなので、辺がはっきり見えること
   const edges = new THREE.LineSegments(
@@ -73,7 +114,8 @@ export function createFloorMarkers(): FloorMarkers {
   edges.position.y = SLAB.thickness / 2;
 
   const marker = new THREE.Group();
-  marker.add(slab, edges);
+  // 影を先に足す。あとから足すと、薄い板より手前に描かれて板が曇る
+  marker.add(shadow, slab, edges);
 
   // 触れている間だけ出す床の面。面が動いているのが見える
   const tint = new THREE.Mesh(
@@ -117,4 +159,31 @@ export function createFloorMarkers(): FloorMarkers {
   }
 
   return { group, update, setActive, hitsSlab };
+}
+
+/**
+ * 影の濃さの分布を描いた画像を作る。
+ *
+ * **輪郭をぼかす。** くっきりした黒い四角を敷くと、影ではなく「もう 1 枚の板」に見える。
+ * 真ん中を濃く、外へ向かって薄くすると、床に落ちた影として読める
+ */
+function createShadowTexture(): THREE.Texture {
+  const SIZE = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+  const context = canvas.getContext('2d');
+  if (context) {
+    const half = SIZE / 2;
+    const gradient = context.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    // 板の縁のあたりまでは濃さを保ち、そこから外だけを薄くする
+    gradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.85)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, SIZE, SIZE);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
