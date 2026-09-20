@@ -3,6 +3,7 @@
  *
  * **動かしても何も変わらないと、効いているのか分からない。**
  * いまの傾きが動かせる幅のどのあたりかを、バーの伸び具合で返す。
+ * 指でなぞって傾ける「指で調整」のときだけ出す。
  *
  * **度数は出さない。** 何度が正しいかは誰にも分からないので、数字を見せても判断に使えない。
  * 「動いている」「端まで来た」が分かれば十分
@@ -21,9 +22,11 @@ export function createFloorHud(): HTMLElement {
   element.append(pitch.element, roll.element);
 
   function render(): void {
-    const { isFittingFloor, floorFit } = photoState.get();
-    element.hidden = !isFittingFloor;
-    if (!isFittingFloor) return;
+    const { isFittingFloor, floorFitTool, floorFit } = photoState.get();
+    // 「縁を押す」ときはなぞって傾けないので、動かない棒を出しても邪魔になるだけ
+    const showing = isFittingFloor && floorFitTool === 'manual';
+    element.hidden = !showing;
+    if (!showing) return;
     pitch.setRatio(ratioIn(floorFit.pitchDeg, FLOOR_FIT_LIMITS.pitch));
     roll.setRatio(ratioIn(floorFit.rollDeg, FLOOR_FIT_LIMITS.roll));
   }

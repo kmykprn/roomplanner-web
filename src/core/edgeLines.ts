@@ -88,12 +88,7 @@ function toGray(source: ImageData): Gray {
 }
 
 /** その行で、中心のまわりを横に見て、明暗の変化がいちばん大きい場所を返す */
-function strongestEdgeInRow(
-  gray: Gray,
-  row: number,
-  center: number,
-  minContrast = MIN_CONTRAST
-): { x: number; strength: number } | null {
+function strongestEdgeInRow(gray: Gray, row: number, center: number): { x: number; strength: number } | null {
   const from = Math.max(1, Math.round(center) - SEARCH_HALF);
   const to = Math.min(gray.width - 2, Math.round(center) + SEARCH_HALF);
   let bestX = -1;
@@ -105,7 +100,7 @@ function strongestEdgeInRow(
       bestX = x;
     }
   }
-  return best >= minContrast ? { x: bestX, strength: best } : null;
+  return best >= MIN_CONTRAST ? { x: bestX, strength: best } : null;
 }
 
 /**
@@ -115,12 +110,11 @@ function strongestEdgeInRow(
  * **拾えなかった行が続いたらそこで終わり**にする（縁が途切れた、物に隠れた）。
  * 最後に直線を当て、大きく外れた点を落としてもう一度当てる。
  *
- * `reach` は「どこまで粘るか」。1 で普通。大きくすると弱い縁も縁とみなし、
- * 途切れも長く飛び越えるので線が伸びる。伸ばす代わりに、別の物へ乗り移る危険が増える
+ * **たどれるところまで自動でたどる。** 手で伸ばす余地は残していない。実写の 13 か所で
+ * 「弱い縁も拾う」設定に緩めて測ったところ、伸びたのは 1 か所だけで、その 1 か所も
+ * 線の向きが変わっていた（別の物へ乗り移った）。縮んだ例も、何も見つからなくなる例もあった
  */
-function traceFrom(gray: Gray, seedX: number, seedY: number, reach = 1): EdgeLine | null {
-  const minContrast = MIN_CONTRAST / reach;
-  const maxMisses = Math.round(MAX_MISSES * reach);
+function traceFrom(gray: Gray, seedX: number, seedY: number): EdgeLine | null {
   const xs: number[] = [];
   const ys: number[] = [];
 
@@ -128,11 +122,11 @@ function traceFrom(gray: Gray, seedX: number, seedY: number, reach = 1): EdgeLin
     let center = seedX;
     let misses = 0;
     for (let y = seedY + direction; y > 0 && y < gray.height - 1; y += direction) {
-      const found = strongestEdgeInRow(gray, y, center, minContrast);
+      const found = strongestEdgeInRow(gray, y, center);
       if (!found) {
         misses += 1;
         // 少しの途切れ（影・汚れ）は越えるが、続いたら終わり
-        if (misses > maxMisses) break;
+        if (misses > MAX_MISSES) break;
         continue;
       }
       misses = 0;
@@ -187,20 +181,15 @@ function fitLine(xs: number[], ys: number[]): { a: number; b: number } | null {
 }
 
 /** 押された場所の縁をたどって線を返す。近くに縁が無ければ null */
-export function traceEdgeAt(
-  source: ImageData,
-  x: number,
-  y: number,
-  reach = 1
-): EdgeLine | null {
+export function traceEdgeAt(source: ImageData, x: number, y: number): EdgeLine | null {
   const gray = toGray(source);
   const row = Math.round(y * gray.scale);
   const column = Math.round(x * gray.scale);
   if (row < 1 || row >= gray.height - 1) return null;
   // 押した点のまわりで、いちばん強い縁を種にする（指は数画素ずれるため）
-  const seed = strongestEdgeInRow(gray, row, column, MIN_CONTRAST / reach);
+  const seed = strongestEdgeInRow(gray, row, column);
   if (!seed) return null;
-  return traceFrom(gray, seed.x, row, reach);
+  return traceFrom(gray, seed.x, row);
 }
 
 /**

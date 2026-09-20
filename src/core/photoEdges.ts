@@ -90,19 +90,14 @@ export async function findEdgeCandidates(url: string): Promise<PhotoEdge[]> {
   return detectVerticalLines(pixels).map((line) => toPhotoEdge(line, pixels));
 }
 
-/**
- * 押された場所の縁をたどって 1 本の線にする。
- *
- * @param reach 1 で普通。大きいほど弱い縁も追い、長く伸びる（「もっと伸ばす」用）
- */
+/** 押された場所の縁をたどって 1 本の線にする。たどれるところまで自動で伸びる */
 export async function traceEdgeAtPoint(
   url: string,
-  point: PhotoPoint,
-  reach = 1
+  point: PhotoPoint
 ): Promise<PhotoEdge | null> {
   const pixels = await pixelsFor(url);
   if (!pixels) return null;
-  const line = traceEdgeAt(pixels, point.x * pixels.width, point.y * pixels.height, reach);
+  const line = traceEdgeAt(pixels, point.x * pixels.width, point.y * pixels.height);
   return line ? toPhotoEdge(line, pixels) : null;
 }
 

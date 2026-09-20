@@ -18,7 +18,6 @@
 
 import {
   clearVerticalEdges,
-  extendVerticalEdges,
   photoState,
   setFittingFloor,
   setFloorFit,
@@ -59,11 +58,11 @@ export function createFloorPanel(): HTMLElement {
 
   // 決め方の切り替え。既定の「縁を押す」で足りるが、縁の無い写真もあるので逃げ道を残す
   const tools = document.createElement('div');
-  tools.className = 'segmented';
+  tools.className = 'seg';
   const toolButtons = TOOLS.map(({ value, label }) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'segmented__item';
+    button.className = 'seg__item';
     button.textContent = label;
     button.addEventListener('click', () => setFloorFitTool(value));
     tools.append(button);
@@ -74,14 +73,7 @@ export function createFloorPanel(): HTMLElement {
   note.className = 'hint';
 
   const notice = document.createElement('p');
-  notice.className = 'hint hint--warn';
-
-  // 線が短くしか取れなかったときの救済。短い線は向きが不正確で、傾きもぶれる
-  const extend = document.createElement('button');
-  extend.type = 'button';
-  extend.className = 'button is-quiet is-small';
-  extend.textContent = '線をもっと伸ばす';
-  extend.addEventListener('click', () => void extendVerticalEdges());
+  notice.className = 'hint is-error';
 
   // 選んだ縁を外す。押し間違えたときに戻れる場所
   const clearEdges = document.createElement('button');
@@ -102,7 +94,7 @@ export function createFloorPanel(): HTMLElement {
 
   const footer = document.createElement('div');
   footer.className = 'edit__actions';
-  footer.append(extend, clearEdges, reset);
+  footer.append(clearEdges, reset);
 
   panel.append(head, tools, note, notice, footer);
 
@@ -122,9 +114,7 @@ export function createFloorPanel(): HTMLElement {
 
     notice.textContent = edgeNotice ?? '';
     notice.hidden = !edgeNotice;
-    const hasEdges = pickingEdges && verticalEdges.length > 0;
-    extend.hidden = !hasEdges;
-    clearEdges.hidden = !hasEdges;
+    clearEdges.hidden = !pickingEdges || verticalEdges.length === 0;
   }
   render();
   photoState.subscribe(render);

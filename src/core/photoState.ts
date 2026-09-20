@@ -22,12 +22,7 @@ import {
   type PhotoView,
 } from '@/core/photoView';
 import { clampFloorFit, DEFAULT_FLOOR_FIT, type FloorFit } from '@/core/floorFit';
-import {
-  fitFromEdges,
-  forgetPhotoPixels,
-  traceEdgeAtPoint,
-  type PhotoEdge,
-} from '@/core/photoEdges';
+import { fitFromEdges, forgetPhotoPixels, type PhotoEdge } from '@/core/photoEdges';
 
 /**
  * 背景写真の読み込み具合。
@@ -263,54 +258,6 @@ export function addVerticalEdge(edge: PhotoEdge): void {
     // 近すぎる 2 本は、わずかなずれで答えが大きく動くので使わない
     photoState.set({ edgeNotice: '2 本が近すぎます。離れた場所の縁を押してください' });
   }
-}
-
-/**
- * 選んだ縁を、粘り強い設定でたどり直して伸ばす。
- *
- * **端をずらすのではなく、たどり直す。** 線の向きは決まったままで端だけ伸ばしても、
- * 精度は 1 ミリも上がらない（同じ直線のままなので）。弱い縁も縁とみなして
- * たどり直すことで、初めて長い範囲の情報が入る。
- *
- * たどり直した結果が短くなったり、向きが変わったりしたときは**採らない**。
- * 弱い縁まで拾うと、途中で別の物へ乗り移ることがあるため
- */
-export async function extendVerticalEdges(): Promise<void> {
-  const { verticalEdges, backgroundUrl, backgroundAspect } = photoState.get();
-  if (!backgroundUrl || verticalEdges.length === 0) return;
-
-  const next = await Promise.all(
-    verticalEdges.map(async (edge) => {
-      const middle = { x: (edge.x1 + edge.x2) / 2, y: (edge.y1 + edge.y2) / 2 };
-      const retraced = await traceEdgeAtPoint(backgroundUrl, middle, EXTEND_REACH);
-      return retraced && isBetterEdge(retraced, edge) ? retraced : edge;
-    })
-  );
-
-  const grew = next.some((edge, index) => edge !== verticalEdges[index]);
-  photoState.set({
-    verticalEdges: next,
-    edgeNotice: grew ? null : 'これ以上は伸ばせませんでした',
-  });
-  if (!grew || next.length < 2 || !backgroundAspect) return;
-  const fit = fitFromEdges(next, backgroundAspect);
-  if (fit) photoState.set({ floorFit: fit });
-}
-
-/** たどり直すときに、どれだけ粘るか。大きいほど弱い縁も追う */
-const EXTEND_REACH = 1.8;
-
-/** 別の物へ乗り移ったとみなす、向きの差 */
-const MAX_SLOPE_DRIFT = 0.02;
-
-/** たどり直した線を採ってよいか。長くなっていて、かつ向きが変わっていないこと */
-function isBetterEdge(retraced: PhotoEdge, previous: PhotoEdge): boolean {
-  const grew = Math.abs(retraced.y2 - retraced.y1) > Math.abs(previous.y2 - previous.y1) * 1.05;
-  return grew && Math.abs(slopeOf(retraced) - slopeOf(previous)) < MAX_SLOPE_DRIFT;
-}
-
-function slopeOf(edge: PhotoEdge): number {
-  return (edge.x2 - edge.x1) / (edge.y2 - edge.y1 || 1e-6);
 }
 
 /** 選んだ縁をすべて外す。傾きはそのまま残す（やり直しても画面が飛ばないように） */
