@@ -553,31 +553,36 @@ body {
   align-content: start;
 }
 
-/* 見出しと、右側のステッパー（減らす｜値｜増やす） */
+/* 見出しと、その右のバー */
 .manage__row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* 見出しの幅をそろえて、どの行もバーの左端が同じ位置から始まるようにする */
+  grid-template-columns: 52px 1fr;
   align-items: center;
   gap: 10px;
+}
+
+/* バー本体と、両端の目安 */
+.manage__slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /*
- * 行の下段に敷くバー。両端の数字で「どこからどこまで動くか」を示す。
- * 2 列ぶんいっぱいに広げるので、上のステッパーと同じ行の一部として見える
+ * バーの両端の目安。**行ごとに桁数が違うと、行を跨いでバーの始まりがずれる**ので
+ * 幅をそろえ、内側（バー側）に寄せる
  */
-.manage__slider {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: -4px;
-}
-
 .manage__end {
+  flex: 0 0 42px;
   color: #7a8388;
   font-size: 11px;
-  /* 桁が変わっても両端の位置がずれないようにする */
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.manage__end:first-child {
+  text-align: right;
 }
 
 /*
@@ -637,48 +642,6 @@ body {
   font-size: 12px;
   color: #7a8388;
   letter-spacing: 0.04em;
-}
-
-/* 減らす・値・増やすを 1 つの部品に見せる。角は外枠だけ丸め、中は仕切り線で分ける */
-.manage__control {
-  display: inline-grid;
-  grid-template-columns: 40px minmax(76px, auto) 40px;
-  align-items: stretch;
-  height: 36px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.manage__button {
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--primary);
-  font: inherit;
-  touch-action: manipulation;
-  /* 押しっぱなしで動かしたときに、文字が選択されるのを防ぐ */
-  user-select: none;
-}
-.manage__button:active {
-  background: var(--primary);
-  color: #fff;
-}
-
-.manage__value {
-  display: grid;
-  place-items: center;
-  padding: 0 8px;
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  color: var(--text);
-  font-size: 13px;
-  /* 数字が伸び縮みしても位置がずれないようにする */
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 /* 置いてある家具の一覧（何も選んでいないとき） */
