@@ -24,13 +24,14 @@ export interface DragTarget {
   scene: EditableScene;
   layer: FurnitureLayer;
   /**
-   * 家具をどの面に沿って動かすか。
+   * 家具をどの面に沿って動かすか。どちらも水平な面の上を滑るので、
+   * **奥へ動かせば遠近のぶんだけ小さく写る。**
    *
-   *   floor  … 床の上を滑る（部屋モード）。奥へ行けば小さく写る
-   *   screen … 画面の面に沿って動く（写真モード）。左右と上下だけで、奥行きは変えない。
-   *            写真の床と 3D の床は合っていないので、奥へ動かして縮む意味がない
+   *   floor  … 床の上（部屋モード）。載せられる物があれば、その上面に載る
+   *   ground … 同じく水平に滑るが、**高さはそのまま保つ**（写真モード）。
+   *            写真では高さをバーで決めるので、動かすたびに床へ落ちては困る
    */
-  surface: 'floor' | 'screen';
+  surface: 'floor' | 'ground';
 }
 
 export function createFurnitureDrag(
@@ -53,8 +54,6 @@ export function createFurnitureDrag(
   // 狙ったところに置けない
   const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const FLOOR_NORMAL = new THREE.Vector3(0, 1, 0);
-  /** 写真モードのカメラは正面（-Z）を向いているので、画面の面の法線は +Z */
-  const SCREEN_NORMAL = new THREE.Vector3(0, 0, 1);
   const hitPoint = new THREE.Vector3();
 
   /**
@@ -123,11 +122,7 @@ export function createFurnitureDrag(
     if (!item) return;
 
     // 平面は「法線・p + constant = 0」なので、家具を通す面は constant = -(法線方向の座標)
-    if (target.surface === 'floor') {
-      dragPlane.set(FLOOR_NORMAL, -item.position[1]);
-    } else {
-      dragPlane.set(SCREEN_NORMAL, -item.position[2]);
-    }
+    dragPlane.set(FLOOR_NORMAL, -item.position[1]);
     if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
       grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
     }
@@ -149,13 +144,12 @@ export function createFurnitureDrag(
     if (!item) return;
 
     // 床の上では、動かした先で何かの上に載るなら、その上面の高さにする（机の上のランプなど）。
-    // 画面に沿う写真モードでは奥行きをそのまま保つ。
-    // 移動先の丸め方はモードが決める（部屋なら壁の内側と床の上、写真なら丸めない）
-    const [, , z] = item.position;
+    // 写真モードでは高さをそのまま保つ（バーで決めた高さを、動かすたびに崩さない）。
+    // 移動先の丸め方はモードが決める（部屋なら壁の内側と床の上、写真なら奥行きの幅）
     const moved: [number, number, number] =
       draggingTarget.surface === 'floor'
         ? [next.x, restingHeightAt(scene.state().furniture, item, next.x, next.z), next.z]
-        : [next.x, next.y, z];
+        : [next.x, item.position[1], next.z];
     scene.update(draggingId, {
       position: scene.constrain(moved, item.size, item.rotationY),
     });

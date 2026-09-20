@@ -90,7 +90,7 @@ createFurnitureDrag(
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? { scene: photoScene, layer: photoFurniture, surface: 'screen' }
+      ? { scene: photoScene, layer: photoFurniture, surface: 'ground' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
