@@ -14,12 +14,13 @@ import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
 import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
 import { readBackground, readMask } from '@/platform/backgroundStore';
+import { normalizeFloorFit } from '@/core/floorFit';
 
 const STORAGE_KEY = 'roomplanner.room';
 const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 
 /** localStorage に残す写真モードの項目。写真そのものは大きいので IndexedDB（backgroundStore.ts） */
-type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName'>;
+type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName' | 'floorFit'>;
 
 /**
  * 保存した状態を読み戻す。**シーンを組み立てる前**に呼ぶ。
@@ -56,6 +57,8 @@ export function restorePhoto(): void {
   photoState.set({
     furniture: Array.isArray(saved.furniture) ? saved.furniture : [],
     view: saved.view ?? photoState.get().view,
+    // 壊れた値が入っていても起動できるよう、読めなければ既定の傾きに戻す
+    floorFit: normalizeFloorFit(saved.floorFit),
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
   });
@@ -109,6 +112,7 @@ export function persistPhotoOnChange(): void {
     const saved: SavedPhoto = {
       furniture: state.furniture,
       view: state.view,
+      floorFit: state.floorFit,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {

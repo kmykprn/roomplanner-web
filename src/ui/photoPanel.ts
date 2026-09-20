@@ -12,7 +12,15 @@
 
 import { pickImage } from '@/platform/picker';
 import { createMaskPanel } from '@/ui/maskPanel';
-import { clearBackground, photoState, setBackground, setMasking } from '@/core/photoState';
+import { createFloorPanel } from '@/ui/floorPanel';
+import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
+import {
+  clearBackground,
+  photoState,
+  setBackground,
+  setFittingFloor,
+  setMasking,
+} from '@/core/photoState';
 
 /** 写真がまだ無いときの案内 */
 const IDLE_MESSAGE = '部屋の写真を選ぶと、その上に家具を置けます';
@@ -29,6 +37,8 @@ export function createPhotoPanel(): HTMLElement {
   normal.className = 'photo__normal';
   /** 手前の範囲を指定する姿 */
   const mask = createMaskPanel();
+  /** 床に合わせる姿 */
+  const floor = createFloorPanel();
 
   // --- 背景の画像 ---
   const photoRow = createSettingRow('部屋の写真');
@@ -49,15 +59,23 @@ export function createPhotoPanel(): HTMLElement {
   chevron.textContent = '›';
   maskRow.element.append(chevron);
 
+  // --- 床の傾き。行ごと押せる ---
+  const floorRow = createSettingRow('床の傾き', () => setFittingFloor(true));
+  const floorChevron = document.createElement('span');
+  floorChevron.className = 'setting__chevron';
+  floorChevron.textContent = '›';
+  floorRow.element.append(floorChevron);
+
   /** 行の下の一言。案内・読み込みの失敗・手前の範囲の説明を、状況に応じて 1 つだけ出す */
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
-  normal.append(photoRow.element, maskRow.element, note);
-  panel.append(normal, mask);
+  normal.append(photoRow.element, floorRow.element, maskRow.element, note);
+  panel.append(normal, floor, mask);
 
   function render(): void {
-    const { backgroundName, backgroundStatus, isMasking, maskUrl } = photoState.get();
+    const { backgroundName, backgroundStatus, isMasking, isFittingFloor, maskUrl, floorFit } =
+      photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
     const failed = backgroundStatus === 'failed';
@@ -70,6 +88,12 @@ export function createPhotoPanel(): HTMLElement {
     pickButton.disabled = loading;
     clearButton.hidden = !ready;
 
+    floorRow.element.hidden = !ready;
+    // 度数は出さない。「何度が正しいか」は誰にも分からないので、合わせたかどうかだけ伝える
+    const fitted =
+      floorFit.pitchDeg !== DEFAULT_FLOOR_FIT.pitchDeg || floorFit.rollDeg !== DEFAULT_FLOOR_FIT.rollDeg;
+    floorRow.setValue(fitted ? '調整済み' : '未調整', fitted);
+
     maskRow.element.hidden = !ready;
     maskRow.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
@@ -77,8 +101,8 @@ export function createPhotoPanel(): HTMLElement {
     note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : maskUrl ? '' : MASK_NOTE;
     note.hidden = note.textContent === '';
 
-    // 指定している間は通常の姿を引っ込め、指定する姿だけを出す
-    normal.hidden = isMasking;
+    // どちらかの姿に入っている間は、通常の行を引っ込める
+    normal.hidden = isMasking || isFittingFloor;
     mask.hidden = !isMasking;
   }
 
