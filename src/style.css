@@ -556,8 +556,9 @@ body {
 /* 見出しと、その右のバー */
 .manage__row {
   display: grid;
-  /* 見出しの幅をそろえて、どの行もバーの左端が同じ位置から始まるようにする */
-  grid-template-columns: 52px 1fr;
+  /* 見出しの幅をそろえて、どの行もバーの左端が同じ位置から始まるようにする。
+     いちばん長い「前後の傾き」が 1 行に収まる幅 */
+  grid-template-columns: 72px 1fr;
   align-items: center;
   gap: 10px;
 }
@@ -640,6 +641,7 @@ body {
 
 .manage__label {
   font-size: 12px;
+  white-space: nowrap;
   color: #7a8388;
   letter-spacing: 0.04em;
 }
@@ -691,6 +693,7 @@ body {
 .manage__foot {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 2px;
 }
 

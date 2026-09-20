@@ -50,10 +50,10 @@ export function createFurnitureLayer(): FurnitureLayer {
       }
 
       object.position.set(...item.position);
-      // 向き（Y）を先に、前後の傾き（X）をその向きの中で掛ける。原点は底面の中心なので、
-      // 傾けると底の中心を支点に倒れる
+      // 向き（Y）を先に、前後の傾き（X）、左右の傾き（Z）をその向きの中で掛ける。
+      // 原点は底面の中心なので、傾けると底の中心を支点に倒れる
       object.rotation.order = 'YXZ';
-      object.rotation.set(item.pitch ?? 0, item.rotationY, 0);
+      object.rotation.set(item.pitch ?? 0, item.rotationY, item.roll ?? 0);
       // 板の傾き。板はカメラを向くときに毎フレーム向きを決め直すので、そこで一緒に効かせる
       object.userData.tilt = item.tilt ?? 0;
       applySize(object, item.size);

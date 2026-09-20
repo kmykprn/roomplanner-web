@@ -15,6 +15,7 @@ import { roomSizeFor } from '@/config/interior';
 import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
 import { readBackground, readMask } from '@/platform/backgroundStore';
 import { normalizeFloorFit } from '@/core/floorFit';
+import type { PlacedFurniture } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.room';
 const PHOTO_STORAGE_KEY = 'roomplanner.photo';
@@ -38,9 +39,23 @@ export function restoreRoom(): void {
     // 部屋の大きさは内装（畳数）から決まるので、保存値ではなく内装から引き直す
     room: roomSizeFor(interior.template, interior.mats),
     interior,
-    furniture: Array.isArray(saved.furniture) ? saved.furniture : [],
+    furniture: withBaseSize(saved.furniture),
     selectedId: null,
   });
+}
+
+/**
+ * 置いたときの大きさを、覚えていない記録に補う。
+ *
+ * 「大きさ」のバーは置いたときの何倍かで動くので、基準が無いと真ん中が決まらない。
+ * この項目より前に置いた家具には、いまの大きさをそのまま基準として入れる
+ * （その家具にとっては、いまが「置いたとき」になる）
+ */
+function withBaseSize(furniture: unknown): PlacedFurniture[] {
+  if (!Array.isArray(furniture)) return [];
+  return (furniture as PlacedFurniture[]).map((item) =>
+    item.baseSize ? item : { ...item, baseSize: [...item.size] as [number, number, number] }
+  );
 }
 
 /**
@@ -55,7 +70,7 @@ export function restorePhoto(): void {
   if (!saved) return;
 
   photoState.set({
-    furniture: Array.isArray(saved.furniture) ? saved.furniture : [],
+    furniture: withBaseSize(saved.furniture),
     view: saved.view ?? photoState.get().view,
     // 壊れた値が入っていても起動できるよう、読めなければ既定の傾きに戻す
     floorFit: normalizeFloorFit(saved.floorFit),
