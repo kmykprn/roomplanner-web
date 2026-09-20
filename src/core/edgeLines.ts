@@ -45,6 +45,17 @@ const MAX_RESIDUAL = 2.2;
 /** 候補を探す種を置く間隔（縮小後の画素） */
 const SEED_STEP = 12;
 
+/** 縁が途切れても、これだけの行までは飛び越えて追い続ける（影・汚れ・物の手前） */
+const MAX_MISSES = 3;
+
+/**
+ * 候補として出す線の、画面上での傾きの上限。
+ *
+ * 実写で試すと、これを緩めた分だけカーテンのひだが上位に入る（0.13〜0.29 で出てくる）。
+ * 本物の壁の角や窓枠は、見下ろしていても画面上ではもっと立っている
+ */
+const MAX_CANDIDATE_SLOPE = 0.3;
+
 /** 同じ線とみなす近さ。候補の重複を落とすのに使う */
 const SAME_LINE_X = 10;
 const SAME_LINE_SLOPE = 0.03;
@@ -77,7 +88,12 @@ function toGray(source: ImageData): Gray {
 }
 
 /** その行で、中心のまわりを横に見て、明暗の変化がいちばん大きい場所を返す */
-function strongestEdgeInRow(gray: Gray, row: number, center: number): { x: number; strength: number } | null {
+function strongestEdgeInRow(
+  gray: Gray,
+  row: number,
+  center: number,
+  minContrast = MIN_CONTRAST
+): { x: number; strength: number } | null {
   const from = Math.max(1, Math.round(center) - SEARCH_HALF);
   const to = Math.min(gray.width - 2, Math.round(center) + SEARCH_HALF);
   let bestX = -1;
@@ -89,7 +105,7 @@ function strongestEdgeInRow(gray: Gray, row: number, center: number): { x: numbe
       bestX = x;
     }
   }
-  return best >= MIN_CONTRAST ? { x: bestX, strength: best } : null;
+  return best >= minContrast ? { x: bestX, strength: best } : null;
 }
 
 /**
@@ -97,9 +113,14 @@ function strongestEdgeInRow(gray: Gray, row: number, center: number): { x: numbe
  *
  * 1 行ずつ「横に少し探して、いちばん強い変化の場所」を拾い、点を並べる。
  * **拾えなかった行が続いたらそこで終わり**にする（縁が途切れた、物に隠れた）。
- * 最後に直線を当て、大きく外れた点を落としてもう一度当てる
+ * 最後に直線を当て、大きく外れた点を落としてもう一度当てる。
+ *
+ * `reach` は「どこまで粘るか」。1 で普通。大きくすると弱い縁も縁とみなし、
+ * 途切れも長く飛び越えるので線が伸びる。伸ばす代わりに、別の物へ乗り移る危険が増える
  */
-function traceFrom(gray: Gray, seedX: number, seedY: number): EdgeLine | null {
+function traceFrom(gray: Gray, seedX: number, seedY: number, reach = 1): EdgeLine | null {
+  const minContrast = MIN_CONTRAST / reach;
+  const maxMisses = Math.round(MAX_MISSES * reach);
   const xs: number[] = [];
   const ys: number[] = [];
 
@@ -107,11 +128,11 @@ function traceFrom(gray: Gray, seedX: number, seedY: number): EdgeLine | null {
     let center = seedX;
     let misses = 0;
     for (let y = seedY + direction; y > 0 && y < gray.height - 1; y += direction) {
-      const found = strongestEdgeInRow(gray, y, center);
+      const found = strongestEdgeInRow(gray, y, center, minContrast);
       if (!found) {
         misses += 1;
         // 少しの途切れ（影・汚れ）は越えるが、続いたら終わり
-        if (misses > 3) break;
+        if (misses > maxMisses) break;
         continue;
       }
       misses = 0;
@@ -166,15 +187,20 @@ function fitLine(xs: number[], ys: number[]): { a: number; b: number } | null {
 }
 
 /** 押された場所の縁をたどって線を返す。近くに縁が無ければ null */
-export function traceEdgeAt(source: ImageData, x: number, y: number): EdgeLine | null {
+export function traceEdgeAt(
+  source: ImageData,
+  x: number,
+  y: number,
+  reach = 1
+): EdgeLine | null {
   const gray = toGray(source);
   const row = Math.round(y * gray.scale);
   const column = Math.round(x * gray.scale);
   if (row < 1 || row >= gray.height - 1) return null;
   // 押した点のまわりで、いちばん強い縁を種にする（指は数画素ずれるため）
-  const seed = strongestEdgeInRow(gray, row, column);
+  const seed = strongestEdgeInRow(gray, row, column, MIN_CONTRAST / reach);
   if (!seed) return null;
-  return traceFrom(gray, seed.x, row);
+  return traceFrom(gray, seed.x, row, reach);
 }
 
 /**
@@ -183,7 +209,7 @@ export function traceEdgeAt(source: ImageData, x: number, y: number): EdgeLine |
  * 画像に等間隔で種を置き、それぞれから縁をたどる。同じ線に行き着いたものは 1 本にまとめる。
  * **縦に近いものだけ残す**（横の縁は別の役目なので、この関数では扱わない）
  */
-export function detectVerticalLines(source: ImageData, limit = 24): EdgeLine[] {
+export function detectVerticalLines(source: ImageData, limit = 6): EdgeLine[] {
   const gray = toGray(source);
   const found: EdgeLine[] = [];
 
@@ -195,7 +221,7 @@ export function detectVerticalLines(source: ImageData, limit = 24): EdgeLine[] {
       if (!line) continue;
       // 画面の上で縦に近いものだけ（横の縁は拾わない）
       const slope = Math.abs(line.x2 - line.x1) / Math.max(1, Math.abs(line.y2 - line.y1));
-      if (slope > 0.45) continue;
+      if (slope > MAX_CANDIDATE_SLOPE) continue;
       if (!found.some((other) => isSameLine(other, line))) found.push(line);
     }
   }

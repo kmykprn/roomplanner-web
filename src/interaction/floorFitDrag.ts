@@ -1,9 +1,15 @@
 /**
  * 床を合わせる姿のときだけ、1 本指の操作を受け取る。
  *
- *   板の上をなぞる … 板がその場所へ動く（散らかっていない床へ逃がせる）
- *   板の外をなぞる … 床の傾きが変わる（上下＝手前と奥、左右＝左右の傾き）
- *   板の外をタップ … その場所へ板が動く
+ * 決め方が 2 つあるので、板の外を触ったときの意味が変わる。
+ *
+ *   縁を押す（既定）… 板の外をタップ … その場所の縦の縁をたどって選ぶ
+ *                      板の外をなぞる … 何も起きない（縁は押して選ぶものなので）
+ *   指で調整        … 板の外をタップ … その場所へ板が動く
+ *                      板の外をなぞる … 床の傾きが変わる
+ *
+ * **板の扱いはどちらでも同じ。** 板の上をなぞれば板が動く。板は「合っているか」を
+ * 見るためのものなので、どちらの決め方でも別の場所へ移して確かめられる必要がある。
  *
  * **タップした場所には必ず板の中心が来る。** 触った画素から伸ばした視線が床に
  * 当たった場所に置くので、そこでは板が浮かない。傾きのずれは板の大きさと形に出る。
@@ -13,7 +19,8 @@
  * **数字は出さない。** 板が床に寝て見えるまで動かしてもらう。
  */
 
-import { nudgeFloorFit, setDraggingFloor, setFloorProbe } from '@/core/photoState';
+import { nudgeFloorFit, photoState, setDraggingFloor, setFloorProbe } from '@/core/photoState';
+import { photoPointAt, type PhotoPoint } from '@/core/photoView';
 
 /**
  * 指 1px あたり何度動かすか。
@@ -32,6 +39,8 @@ export interface FloorFitDragOptions {
   isActive(): boolean;
   /** その画面の点が板の上か */
   hitsSlab(point: { x: number; y: number }): boolean;
+  /** 「縁を押す」で、板の外をタップしたとき。写真の中の割合で受け取る */
+  onPickEdge(point: PhotoPoint): void;
 }
 
 export function createFloorFitDrag(canvas: HTMLElement, options: FloorFitDragOptions): void {
@@ -48,6 +57,23 @@ export function createFloorFitDrag(canvas: HTMLElement, options: FloorFitDragOpt
       x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
       y: -(((event.clientY - rect.top) / rect.height) * 2 - 1),
     };
+  }
+
+  /**
+   * 画面の座標を、写真の中の割合に直す。
+   * キャンバスは写真が写っている矩形とぴったり重なっているので、寄っている分だけ戻せばよい
+   */
+  function toPhotoPoint(event: PointerEvent): PhotoPoint {
+    const rect = canvas.getBoundingClientRect();
+    return photoPointAt(photoState.get().view, {
+      u: (event.clientX - rect.left) / rect.width,
+      v: (event.clientY - rect.top) / rect.height,
+    });
+  }
+
+  /** いま「指で調整」か。なぞったときに傾きを変えてよいのはこのときだけ */
+  function isManual(): boolean {
+    return photoState.get().floorFitTool === 'manual';
   }
 
   canvas.addEventListener('pointerdown', (event) => {
@@ -72,6 +98,7 @@ export function createFloorFitDrag(canvas: HTMLElement, options: FloorFitDragOpt
       last = { x: event.clientX, y: event.clientY };
       return;
     }
+    if (!isManual()) return; // 縁を押すときは、なぞっても傾きを変えない
     const dx = event.clientX - last.x;
     const dy = event.clientY - last.y;
     last = { x: event.clientX, y: event.clientY };
@@ -80,12 +107,16 @@ export function createFloorFitDrag(canvas: HTMLElement, options: FloorFitDragOpt
   });
 
   canvas.addEventListener('pointerup', (event) => {
-    // 板の外を「なぞらずに離した」＝タップ。その場所へ板を動かす
+    // 板の外を「なぞらずに離した」＝タップ。決め方によって意味が変わる
     if (start && !movingSlab && options.isActive()) {
       const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
       if (moved < TAP_DISTANCE) {
-        const ndc = toNdc(event);
-        setFloorProbe(ndc.x, ndc.y);
+        if (isManual()) {
+          const ndc = toNdc(event);
+          setFloorProbe(ndc.x, ndc.y);
+        } else {
+          options.onPickEdge(toPhotoPoint(event));
+        }
       }
     }
     finish();

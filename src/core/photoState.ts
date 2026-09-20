@@ -22,6 +22,12 @@ import {
   type PhotoView,
 } from '@/core/photoView';
 import { clampFloorFit, DEFAULT_FLOOR_FIT, type FloorFit } from '@/core/floorFit';
+import {
+  fitFromEdges,
+  forgetPhotoPixels,
+  traceEdgeAtPoint,
+  type PhotoEdge,
+} from '@/core/photoEdges';
 
 /**
  * 背景写真の読み込み具合。
@@ -39,6 +45,14 @@ export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
  *   eraser  … 消しゴム。なぞった場所の指定を消す
  */
 export type MaskToolKind = 'brush' | 'polygon' | 'eraser';
+
+/**
+ * 床の傾きの決め方。
+ *
+ *   edges  … 写真の中の垂直な縁を 2 つ押す。押せば決まるので目測が要らない
+ *   manual … 板を見ながら指で傾ける。縁が写っていない写真のための逃げ道
+ */
+export type FloorFitTool = 'edges' | 'manual';
 
 export interface MaskTool {
   kind: MaskToolKind;
@@ -60,8 +74,22 @@ export interface PhotoState extends FurnitureSceneState {
 
   /** 写真の床に合わせたカメラの傾き（core/floorFit.ts）。写真ごとに持つ */
   floorFit: FloorFit;
-  /** 床を合わせている最中か。この間だけコーンを出し、指の動きを傾きに使う */
+  /** 床を合わせている最中か。この間だけ板を出し、指の動きを傾きに使う */
   isFittingFloor: boolean;
+  /** 傾きの決め方。既定は縁を押すほう（目測が要らないので失敗しにくい） */
+  floorFitTool: FloorFitTool;
+  /**
+   * 傾きを決めるのに選んだ、現実で垂直な縁。写真の中の割合で持つ。
+   * 2 本そろった時点で傾きが決まる。3 本目を押すと古いほうが外れる
+   */
+  verticalEdges: PhotoEdge[];
+  /** 押せる場所の目安として出している縁。写真を開いたときに一度だけ探す */
+  edgeCandidates: PhotoEdge[];
+  /**
+   * 縁を押した結果の知らせ。うまくいかなかったときだけ入る。
+   * **黙って何も起きないのが一番困る**ので、理由を短く返す
+   */
+  edgeNotice: string | null;
   /**
    * いま指が触れて傾きを変えている最中か。
    * **触れていることを画面で返すため**に持つ（触っても何も変わらないと、
@@ -101,6 +129,10 @@ export const photoState = createStore<PhotoState>({
   view: { ...DEFAULT_PHOTO_VIEW },
   floorFit: { ...DEFAULT_FLOOR_FIT },
   isFittingFloor: false,
+  floorFitTool: 'edges',
+  verticalEdges: [],
+  edgeCandidates: [],
+  edgeNotice: null,
   isDraggingFloor: false,
   floorProbe: { x: 0, y: -0.45 },
   maskUrl: null,
@@ -197,6 +229,95 @@ export function setFittingFloor(isFittingFloor: boolean): void {
   if (photoState.get().isFittingFloor !== isFittingFloor) photoState.set({ isFittingFloor });
 }
 
+/** 傾きの決め方を変える */
+export function setFloorFitTool(floorFitTool: FloorFitTool): void {
+  if (photoState.get().floorFitTool !== floorFitTool) {
+    photoState.set({ floorFitTool, edgeNotice: null });
+  }
+}
+
+export function setEdgeCandidates(edgeCandidates: PhotoEdge[]): void {
+  photoState.set({ edgeCandidates });
+}
+
+export function setEdgeNotice(edgeNotice: string | null): void {
+  if (photoState.get().edgeNotice !== edgeNotice) photoState.set({ edgeNotice });
+}
+
+/**
+ * 垂直な縁を 1 本足す。2 本そろっていれば、そのまま傾きを入れ直す。
+ *
+ * **3 本目は古いほうを押し出す。** 選び直したいときに、いちいち消さなくて済むように
+ * （消してから 2 本選ぶのは、押し間違えたときに 3 手かかる）
+ */
+export function addVerticalEdge(edge: PhotoEdge): void {
+  const { verticalEdges, backgroundAspect } = photoState.get();
+  const next = [...verticalEdges, edge].slice(-2);
+  photoState.set({ verticalEdges: next, edgeNotice: null });
+
+  if (next.length < 2 || !backgroundAspect) return;
+  const fit = fitFromEdges(next, backgroundAspect);
+  if (fit) {
+    photoState.set({ floorFit: fit });
+  } else {
+    // 近すぎる 2 本は、わずかなずれで答えが大きく動くので使わない
+    photoState.set({ edgeNotice: '2 本が近すぎます。離れた場所の縁を押してください' });
+  }
+}
+
+/**
+ * 選んだ縁を、粘り強い設定でたどり直して伸ばす。
+ *
+ * **端をずらすのではなく、たどり直す。** 線の向きは決まったままで端だけ伸ばしても、
+ * 精度は 1 ミリも上がらない（同じ直線のままなので）。弱い縁も縁とみなして
+ * たどり直すことで、初めて長い範囲の情報が入る。
+ *
+ * たどり直した結果が短くなったり、向きが変わったりしたときは**採らない**。
+ * 弱い縁まで拾うと、途中で別の物へ乗り移ることがあるため
+ */
+export async function extendVerticalEdges(): Promise<void> {
+  const { verticalEdges, backgroundUrl, backgroundAspect } = photoState.get();
+  if (!backgroundUrl || verticalEdges.length === 0) return;
+
+  const next = await Promise.all(
+    verticalEdges.map(async (edge) => {
+      const middle = { x: (edge.x1 + edge.x2) / 2, y: (edge.y1 + edge.y2) / 2 };
+      const retraced = await traceEdgeAtPoint(backgroundUrl, middle, EXTEND_REACH);
+      return retraced && isBetterEdge(retraced, edge) ? retraced : edge;
+    })
+  );
+
+  const grew = next.some((edge, index) => edge !== verticalEdges[index]);
+  photoState.set({
+    verticalEdges: next,
+    edgeNotice: grew ? null : 'これ以上は伸ばせませんでした',
+  });
+  if (!grew || next.length < 2 || !backgroundAspect) return;
+  const fit = fitFromEdges(next, backgroundAspect);
+  if (fit) photoState.set({ floorFit: fit });
+}
+
+/** たどり直すときに、どれだけ粘るか。大きいほど弱い縁も追う */
+const EXTEND_REACH = 1.8;
+
+/** 別の物へ乗り移ったとみなす、向きの差 */
+const MAX_SLOPE_DRIFT = 0.02;
+
+/** たどり直した線を採ってよいか。長くなっていて、かつ向きが変わっていないこと */
+function isBetterEdge(retraced: PhotoEdge, previous: PhotoEdge): boolean {
+  const grew = Math.abs(retraced.y2 - retraced.y1) > Math.abs(previous.y2 - previous.y1) * 1.05;
+  return grew && Math.abs(slopeOf(retraced) - slopeOf(previous)) < MAX_SLOPE_DRIFT;
+}
+
+function slopeOf(edge: PhotoEdge): number {
+  return (edge.x2 - edge.x1) / (edge.y2 - edge.y1 || 1e-6);
+}
+
+/** 選んだ縁をすべて外す。傾きはそのまま残す（やり直しても画面が飛ばないように） */
+export function clearVerticalEdges(): void {
+  photoState.set({ verticalEdges: [], edgeNotice: null });
+}
+
 /**
  * 床の傾きを変える。渡した分だけ足す（指の移動量をそのまま渡す想定）。
  * 範囲外には行かないので、勢いよく滑らせても戻せなくならない
@@ -278,7 +399,14 @@ export function setPhotoView(view: PhotoView): void {
 function replaceBackgroundUrl(url: string | null): void {
   const previous = photoState.get().backgroundUrl;
   if (previous) URL.revokeObjectURL(previous);
-  photoState.set({ backgroundUrl: url });
+  // 前の写真で選んだ縁も、覚えている画素も、別の写真では意味がない
+  forgetPhotoPixels();
+  photoState.set({
+    backgroundUrl: url,
+    verticalEdges: [],
+    edgeCandidates: [],
+    edgeNotice: null,
+  });
 }
 
 /** 実際に画像として読めるところまで確かめる。読めなければ例外になる */

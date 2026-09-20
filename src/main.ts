@@ -25,14 +25,23 @@ import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createFloorFitDrag } from '@/interaction/floorFitDrag';
+import { findEdgeCandidates, traceEdgeAtPoint } from '@/core/photoEdges';
+import type { PhotoPoint } from '@/core/photoView';
 import { createFloorMarkers } from '@/scene/floorMarkers';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createFloorHud } from '@/ui/floorHud';
+import { createEdgeOverlay } from '@/ui/edgeOverlay';
 import { appState, roomScene } from '@/core/appState';
-import { photoState, photoScene } from '@/core/photoState';
+import {
+  addVerticalEdge,
+  photoScene,
+  photoState,
+  setEdgeCandidates,
+  setEdgeNotice,
+} from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
 import {
   persistPhotoOnChange,
@@ -100,11 +109,47 @@ createFurnitureDrag(
   () => !photoState.get().isMasking && !photoState.get().isFittingFloor
 );
 
-// 床を合わせる。合わせている姿のときだけ効く。板の上なら板が動き、外なら傾きが変わる
+// 床を合わせる。合わせている姿のときだけ効く。板の上なら板が動き、外は決め方による
 createFloorFitDrag(viewer.canvas, {
   isActive: () => isPhotoMode() && photoState.get().isFittingFloor,
   hitsSlab: (point) => floorMarkers.hitsSlab(viewer.camera, point),
+  onPickEdge: pickVerticalEdge,
 });
+
+// 選んだ縁と、押せる候補を写真の上に描く
+createEdgeOverlay(viewer.edgeLayer);
+
+/**
+ * 押された場所の縦の縁をたどって、傾きを決める材料に足す。
+ *
+ * **見つからなかったことを必ず知らせる。** 押しても何も起きないと、
+ * 操作を間違えたのか縁が無いのかが分からない
+ */
+async function pickVerticalEdge(point: PhotoPoint): Promise<void> {
+  const { backgroundUrl } = photoState.get();
+  if (!backgroundUrl) return;
+  const edge = await traceEdgeAtPoint(backgroundUrl, point);
+  if (edge) {
+    addVerticalEdge(edge);
+  } else {
+    setEdgeNotice('そこには縦の縁が見つかりませんでした。はっきりした境目を押してください');
+  }
+}
+
+/**
+ * 押せる候補を探して出す。写真が変わるたびに一度だけ。
+ *
+ * **候補は目安でしかない。** カーテンのひだも縦の縁として出てくるので、
+ * どれが本物の垂直かは人が決める（自動で選ぶとひだに負けることを実測で確かめてある）
+ */
+let candidatesFor: string | null = null;
+async function refreshEdgeCandidates(): Promise<void> {
+  const { backgroundUrl, isFittingFloor } = photoState.get();
+  if (!isFittingFloor || !backgroundUrl || candidatesFor === backgroundUrl) return;
+  candidatesFor = backgroundUrl;
+  setEdgeCandidates(await findEdgeCandidates(backgroundUrl));
+}
+photoState.subscribe(refreshEdgeCandidates);
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
 createMaskPaint(viewer.canvas);

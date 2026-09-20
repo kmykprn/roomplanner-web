@@ -146,6 +146,19 @@ body {
   display: block;
 }
 
+/*
+ * 押せる縁と、選んだ縁を描く層。いちばん上に重ねる。
+ * 指の操作は下のキャンバスが受ける（この層は絵だけ）
+ */
+.viewport__edges {
+  display: none;
+  pointer-events: none;
+}
+
+.viewport--photo .viewport__edges.is-showing {
+  display: block;
+}
+
 /* 指定している間は、指定した場所に色を被せて見えるようにする（切り抜きの内側だけに乗る） */
 .viewport__mask.is-editing {
   box-shadow: inset 0 0 0 100vmax rgba(10, 126, 164, 0.4);
@@ -1269,6 +1282,18 @@ body {
 
 .engine__note {
   margin: 0;
+}
+
+/* 「床に合わせる」のパネル。決め方の切り替え・案内・やり直しを縦に積む */
+.floor-fit {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  align-content: start;
+}
+
+.floor-fit[hidden] {
+  display: none;
 }
 
 /*

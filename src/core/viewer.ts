@@ -30,6 +30,13 @@ export interface Viewer {
    */
   maskLayer: HTMLElement;
   /**
+   * 写真の上に線を描く層。**いちばん上**に重ねる。
+   *
+   * 床の傾きを決めるときに、押せる縁の候補と選んだ縁を出す。3D ではなく写真の
+   * 座標で描くものなので、キャンバスに描かず別の層にしている
+   */
+  edgeLayer: HTMLCanvasElement;
+  /**
    * 描画範囲を指定の縦横比に収める。null で画面いっぱいに戻す。
    *
    * 写真モードで要る。写真は画面いっぱいには収まらない（縦横比が違う）ので
@@ -89,7 +96,9 @@ export function createViewer(container: HTMLElement): Viewer {
   photoLayer.className = 'viewport__photo';
   const maskLayer = document.createElement('div');
   maskLayer.className = 'viewport__mask';
-  container.append(photoLayer, renderer.domElement, maskLayer);
+  const edgeLayer = document.createElement('canvas');
+  edgeLayer.className = 'viewport__edges';
+  container.append(photoLayer, renderer.domElement, maskLayer, edgeLayer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(THEME.background);
@@ -132,7 +141,7 @@ export function createViewer(container: HTMLElement): Viewer {
 
     // キャンバスと写真の層を、同じ大きさ・同じ場所に重ねる。
     // 入れ物の中央に寄せる（CSS の 100% 指定より、ここで入れる値が優先される）
-    for (const element of [renderer.domElement, photoLayer, maskLayer]) {
+    for (const element of [renderer.domElement, photoLayer, maskLayer, edgeLayer]) {
       const style = element.style;
       style.position = 'absolute';
       style.left = `${(width - drawWidth) / 2}px`;
@@ -140,6 +149,10 @@ export function createViewer(container: HTMLElement): Viewer {
       style.width = `${drawWidth}px`;
       style.height = `${drawHeight}px`;
     }
+
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    edgeLayer.width = Math.round(drawWidth * pixelRatio);
+    edgeLayer.height = Math.round(drawHeight * pixelRatio);
 
     camera.aspect = drawWidth / drawHeight;
     camera.fov = fovForDrawHeight(drawHeight, height);
@@ -209,6 +222,7 @@ export function createViewer(container: HTMLElement): Viewer {
     canvas: renderer.domElement,
     photoLayer,
     maskLayer,
+    edgeLayer,
     setContentAspect(aspect) {
       // 角をドラッグするたびに呼ばれる。変わっていないなら測り直さない
       if (contentAspect === aspect) return;
@@ -234,6 +248,7 @@ export function createViewer(container: HTMLElement): Viewer {
       renderer.domElement.remove();
       photoLayer.remove();
       maskLayer.remove();
+      edgeLayer.remove();
     },
   };
 }
