@@ -553,8 +553,11 @@ body {
   align-content: start;
 }
 
-/* 見出しと、その右のバー */
-.manage__row {
+/*
+ * 「見出し｜バー」の 1 行。「操作」タブと「床に合わせる」で同じものを使う。
+ * 触れるバーの見た目はアプリ内で 1 つに揃える
+ */
+.slider-row {
   display: grid;
   /* 見出しの幅をそろえて、どの行もバーの左端が同じ位置から始まるようにする。
      いちばん長い「前後の傾き」が 1 行に収まる幅 */
@@ -564,7 +567,7 @@ body {
 }
 
 /* バー本体と、両端の目安 */
-.manage__slider {
+.slider-row__bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -574,7 +577,7 @@ body {
  * バーの両端の目安。**行ごとに桁数が違うと、行を跨いでバーの始まりがずれる**ので
  * 幅をそろえ、内側（バー側）に寄せる
  */
-.manage__end {
+.slider-row__end {
   flex: 0 0 42px;
   color: #7a8388;
   font-size: 11px;
@@ -582,7 +585,7 @@ body {
   white-space: nowrap;
 }
 
-.manage__end:first-child {
+.slider-row__end:first-child {
   text-align: right;
 }
 
@@ -590,7 +593,7 @@ body {
  * つまみは指で掴める大きさ（22px）にする。
  * 見た目はブラウザ既定に任せず、線もつまみも自分で描く（既定は端末ごとに差が大きい）
  */
-.manage__range {
+.slider-row__range {
   flex: 1;
   width: 100%;
   height: 28px;
@@ -601,13 +604,13 @@ body {
   touch-action: none; /* 縦に引いたときシートごと動かないように */
 }
 
-.manage__range::-webkit-slider-runnable-track {
+.slider-row__range::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
   background: var(--border);
 }
 
-.manage__range::-webkit-slider-thumb {
+.slider-row__range::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 22px;
   height: 22px;
@@ -619,13 +622,13 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
-.manage__range::-moz-range-track {
+.slider-row__range::-moz-range-track {
   height: 4px;
   border-radius: 2px;
   background: var(--border);
 }
 
-.manage__range::-moz-range-thumb {
+.slider-row__range::-moz-range-thumb {
   width: 22px;
   height: 22px;
   border: 2px solid var(--surface);
@@ -634,12 +637,12 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
-.manage__range:focus-visible {
+.slider-row__range:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-.manage__label {
+.slider-row__label {
   font-size: 12px;
   white-space: nowrap;
   color: #7a8388;
@@ -1307,47 +1310,4 @@ body {
 
 .engine__note {
   margin: 0;
-}
-
-/*
- * 床を合わせている間の目安。キャンバスの上、写真の下端あたりに重ねる。
- * 触っても何も変わらないと効いているか分からないので、動いていることを返す
- */
-.floor-hud {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  display: grid;
-  gap: 6px;
-  pointer-events: none; /* 指の操作は下のキャンバスへ通す */
-}
-
-.floor-hud__bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.floor-hud__track {
-  flex: 1;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.35);
-  overflow: hidden;
-}
-
-.floor-hud__fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--primary);
-}
-
-.floor-hud__label {
-  flex: none;
-  color: #fff;
-  font-size: 11px;
-  /* 写真の明るい場所に重なっても読めるように */
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }

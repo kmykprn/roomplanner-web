@@ -15,10 +15,11 @@ import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel } from '@/ui/photoPanel';
 import { createInteriorPanel } from '@/ui/interiorPanel';
 import { createIcon } from '@/ui/icons';
+import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
-import { photoState, setMasking } from '@/core/photoState';
+import { photoState, setFittingFloor, setMasking } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
 
@@ -178,9 +179,13 @@ export function createBottomSheet(container: HTMLElement): void {
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
 
-    // 手前の範囲の指定は「背景」タブの中で行う。タブを離れたら指定を終え、
-    // 1 本指を家具のドラッグに戻す
-    if (activeTab !== 'background') setMasking(false);
+    // 手前の範囲の指定も床合わせも「背景」タブの中で行う。タブを離れたら終える。
+    // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる。**
+    // 家具をタップすると「操作」タブへ移るので、それもここで終わる
+    if (activeTab !== 'background') {
+      setMasking(false);
+      setFittingFloor(false);
+    }
 
     tabBar.replaceChildren(
       ...tabs.map((tab) => {
@@ -310,81 +315,16 @@ export function createBottomSheet(container: HTMLElement): void {
     return wrapper;
   }
 
-  /**
-   * 「見出し」とバーの 1 行。
-   *
-   * **数字は出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
-   * 画面の中の家具そのものが答えなので、そちらを見ていればよい。
-   * 動かせる幅だけはバーの両端に添える（どこまで行けるかは触る前に知りたいため）
-   */
+  /** 「操作」タブの 1 行。家具から値を取り出すところだけがここの仕事 */
   function createManageRow(
     label: string,
     slider: ManageSlider
   ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const element = document.createElement('div');
-    element.className = 'manage__row';
-
-    const heading = document.createElement('span');
-    heading.className = 'manage__label';
-    heading.textContent = label;
-
-    const bar = createManageSlider(label, slider);
-    element.append(heading, bar.element);
-    return { element, refresh: bar.refresh };
-  }
-
-  /**
-   * バー本体と、両端の目安。
-   *
-   * **つまみを動かしている間は、原則として書き戻さない。** 状態が変わるたびに
-   * refresh が来るので、書き戻すと丸めの差でつまみが指の下から逃げる。
-   * ただし**丸めでは説明できないほど離れたときは書き戻す**。部屋モードで床より下へ
-   * 引いたときのように置ける範囲で止められた場合に、つまみがそこで止まって見える
-   */
-  function createManageSlider(
-    label: string,
-    slider: ManageSlider
-  ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const element = document.createElement('div');
-    element.className = 'manage__slider';
-
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.className = 'manage__range';
-    input.min = String(slider.min);
-    input.max = String(slider.max);
-    input.step = '1';
-    input.setAttribute('aria-label', `${label}を変える`);
-
-    let holding = false;
-    input.addEventListener('pointerdown', () => {
-      holding = true;
-    });
-    input.addEventListener('input', () => slider.onInput(Number(input.value)));
-    for (const type of ['pointerup', 'pointercancel', 'blur'] as const) {
-      input.addEventListener(type, () => {
-        holding = false;
-      });
-    }
-
-    const [from, to] = slider.ends;
-    element.append(createEndLabel(from), input, createEndLabel(to));
+    const row = createSliderRow({ label, ...slider });
     return {
-      element,
-      refresh: (item) => {
-        const actual = slider.valueOf(item);
-        if (!holding || Math.abs(actual - Number(input.value)) > 1) {
-          input.value = String(actual);
-        }
-      },
+      element: row.element,
+      refresh: (item) => row.setValue(slider.valueOf(item)),
     };
-  }
-
-  function createEndLabel(text: string): HTMLElement {
-    const element = document.createElement('span');
-    element.className = 'manage__end';
-    element.textContent = text;
-    return element;
   }
 
   /**
