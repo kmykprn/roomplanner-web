@@ -30,7 +30,6 @@ import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
-import { createFloorHud } from '@/ui/floorHud';
 import { appState, roomScene } from '@/core/appState';
 import { photoState, photoScene } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
@@ -67,7 +66,6 @@ const viewer = createViewer(viewport);
 // 写真が無いときの案内。キャンバスと写真の層の上に重ねるので、viewer のあとに足す
 viewport.append(createPhotoEmpty());
 // 床を合わせている間の目安のバー。キャンバスの上に重ねる
-viewport.append(createFloorHud());
 const { room } = appState.get();
 
 // --- シーンを組み立てる ---
@@ -145,11 +143,10 @@ const roomBackground = new THREE.Color(THEME.background);
 
 function applyMode(): void {
   const photo = isPhotoMode();
-  floorMarkers.group.visible = photo && photoState.get().isFittingFloor;
 
   roomObjects.group.visible = !photo;
   roomFurniture.group.visible = !photo;
-  photoFurniture.group.visible = photo;
+  applyFloorFitting();
 
   // 写真モードは背景を塗らない。塗ると CSS の写真が隠れる
   viewer.scene.background = photo ? null : roomBackground;
@@ -252,13 +249,22 @@ function applyPhotoView(): void {
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
-// 目印は「床を合わせている間」だけ。モードだけでなく写真の状態でも切り替わる
-photoState.subscribe(() => {
+/**
+ * 床を合わせている間の見せ方。モードと、合わせているかどうかの両方で変わる。
+ *
+ * **合わせている間は家具を隠す。** 傾きを変えるとカメラが回るので、置いてある家具が
+ * 画面の中を大きく動く。板と床を見比べたいときに、それが目の邪魔になる
+ */
+function applyFloorFitting(): void {
   const { isFittingFloor, isDraggingFloor } = photoState.get();
-  floorMarkers.group.visible = isPhotoMode() && isFittingFloor;
+  const fitting = isPhotoMode() && isFittingFloor;
+
+  floorMarkers.group.visible = fitting;
+  photoFurniture.group.visible = isPhotoMode() && !fitting;
   // 触れている間は色を変え、床の面を出す（効いていることを返すため）
   floorMarkers.setActive(isDraggingFloor);
-});
+}
+photoState.subscribe(applyFloorFitting);
 applyMode();
 applyBackground();
 

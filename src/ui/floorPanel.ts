@@ -15,10 +15,11 @@
  */
 
 import { photoState, setFittingFloor, setFloorFit } from '@/core/photoState';
-import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
+import { DEFAULT_FLOOR_FIT, FLOOR_FIT_LIMITS, type FloorFit } from '@/core/floorFit';
+import { createSliderRow } from '@/ui/sliderRow';
 
-const NOTE = '板が床にぴったり寝て見えるまで、画面を指でなぞって調整してください';
-const HOW = '床をタップ … その場所に板を移す　／　板の外をなぞる … 傾きを変える';
+const NOTE = '板が床にぴったり寝て見えるまで、下のバーで調整してください';
+const HOW = '床をタップ … その場所に板を移す';
 
 export function createFloorPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -44,6 +45,15 @@ export function createFloorPanel(): HTMLElement {
   how.className = 'hint';
   how.textContent = HOW;
 
+  // 傾きはここで変える。**写真の上には置かない。**
+  // 写真の上に重ねると、指が板に取られて動かせない（板を掴む操作と同じ場所になるため）
+  const pitch = createTiltRow('前後の傾き', ['手前', '奥'], FLOOR_FIT_LIMITS.pitch, (value) =>
+    updateFit({ pitchDeg: value })
+  );
+  const roll = createTiltRow('左右の傾き', ['左', '右'], FLOOR_FIT_LIMITS.roll, (value) =>
+    updateFit({ rollDeg: value })
+  );
+
   // やり直し。触りすぎて分からなくなったときに戻れる場所を必ず残す
   const reset = document.createElement('button');
   reset.type = 'button';
@@ -55,13 +65,37 @@ export function createFloorPanel(): HTMLElement {
   footer.className = 'edit__actions';
   footer.append(reset);
 
-  panel.append(head, note, how, footer);
+  panel.append(head, note, how, pitch.element, roll.element, footer);
 
   function render(): void {
-    panel.hidden = !photoState.get().isFittingFloor;
+    const { isFittingFloor, floorFit } = photoState.get();
+    panel.hidden = !isFittingFloor;
+    if (!isFittingFloor) return;
+    pitch.setValue(Math.round(floorFit.pitchDeg));
+    roll.setValue(Math.round(floorFit.rollDeg));
   }
   render();
   photoState.subscribe(render);
 
   return panel;
+}
+
+/**
+ * 傾きの行を 1 つ作る。
+ *
+ * **両端は向きの言葉にする。** 何度が正しいかは誰にも分からないので、
+ * 度数を出しても判断に使えない。「手前へ倒すのか奥へ倒すのか」だけ分かればよい
+ */
+function createTiltRow(
+  label: string,
+  ends: [string, string],
+  limits: { min: number; max: number },
+  onInput: (value: number) => void
+): ReturnType<typeof createSliderRow> {
+  return createSliderRow({ label, min: limits.min, max: limits.max, ends, onInput });
+}
+
+/** 片方の傾きだけ差し替える */
+function updateFit(patch: Partial<FloorFit>): void {
+  setFloorFit({ ...photoState.get().floorFit, ...patch });
 }
