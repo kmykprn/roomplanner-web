@@ -37,6 +37,38 @@ interface ManageSlider {
   onInput(value: number): void;
 }
 
+/**
+ * 角度 1 つぶんのバーの設定。3 つの軸（向き・前後・左右）と板の傾きで同じ形になる。
+ *
+ * **ラジアンと度の行き来をここだけに閉じる。** 家具が持つのはラジアン、
+ * バーが扱うのは度で、両方が行の組み立てに散らばると取り違えやすい
+ */
+function angleSlider(
+  radiansOf: (item: PlacedFurniture) => number,
+  apply: (radians: number) => void
+): ManageSlider {
+  return {
+    min: ANGLE_LIMITS.min,
+    max: ANGLE_LIMITS.max,
+    ends: [`${ANGLE_LIMITS.min}°`, `+${ANGLE_LIMITS.max}°`],
+    valueOf: (item) => signedDegrees(radiansOf(item)),
+    onInput: (degrees) => apply(toRadians(degrees)),
+  };
+}
+
+/**
+ * 角度を -180〜180 の度数にする。何周も回したあとでもバーの位置が決まるように畳む。
+ *
+ * **両端はそのままにする。** -180° と +180° は同じ姿勢なので、畳むとどちらかに寄る。
+ * 寄せると、バーを端まで引いたときにつまみが反対の端へ飛ぶ
+ */
+function signedDegrees(radians: number): number {
+  const degrees = Math.round(toDegrees(radians));
+  if (Math.abs(degrees) === 180) return degrees;
+  const wrapped = ((degrees % 360) + 360) % 360;
+  return wrapped > 180 ? wrapped - 360 : wrapped;
+}
+
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
@@ -45,17 +77,23 @@ function toDegrees(radians: number): number {
   return (radians * 180) / Math.PI;
 }
 
-/** 大きさ（いちばん長い辺、メートル）を、バーの目盛りの番号にする */
-function sizeToSlider(longest: number): number {
-  const span = Math.log(SIZE_LIMITS.max / SIZE_LIMITS.min);
-  const ratio = Math.log(Math.max(SIZE_LIMITS.min, longest) / SIZE_LIMITS.min) / span;
-  return Math.round(Math.min(1, ratio) * SIZE_SLIDER_STEPS);
+function longestOf(size: [number, number, number]): number {
+  return Math.max(...size);
 }
 
-/** バーの目盛りの番号を、いちばん長い辺の長さ（メートル）にする */
-function sliderToSize(value: number): number {
-  const ratio = value / SIZE_SLIDER_STEPS;
-  return SIZE_LIMITS.min * (SIZE_LIMITS.max / SIZE_LIMITS.min) ** ratio;
+/** 置いたときの何倍かを、バーの目盛りの番号にする（等倍が 0＝真ん中） */
+function ratioToSlider(ratio: number): number {
+  const position = Math.log(Math.max(1e-6, ratio)) / Math.log(SIZE_MAX_RATIO);
+  return Math.round(clamp(position, -1, 1) * SIZE_SLIDER_STEPS);
+}
+
+/** バーの目盛りの番号を、置いたときの何倍かにする */
+function sliderToRatio(value: number): number {
+  return SIZE_MAX_RATIO ** (value / SIZE_SLIDER_STEPS);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 const TABS: Record<TabId, string> = {
@@ -69,23 +107,35 @@ const TABS: Record<TabId, string> = {
 const ROOM_TABS: TabId[] = ['interior', 'models', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
 
-/** 大きさの範囲（いちばん長い辺、メートル）。行き過ぎて見失わないように止める */
+/** 大きさの上限と下限（いちばん長い辺、メートル）。行き過ぎて見失わないように止める */
 const SIZE_LIMITS = { min: 0.1, max: 5 };
 
 /**
- * 大きさのバーの目盛りの数。
+ * 大きさのバーは「置いたときの何倍か」で動く。**真ん中が等倍**、端が 5 倍と 1/5 倍。
  *
- * **バーの位置は大きさに正比例させず、掛け算で対応させる。** 0.1m から 5m までを
- * まっすぐ割り当てると、小さい家具はバーの左端に固まって動かしづらい。
- * 掛け算なら、指を同じだけ動かせば、小さくても大きくても同じ割合だけ変わる
+ * メートルで持たないのは、真ん中が家具ごとに変わってしまうため。
+ * 倍率なら、どの家具でも真ん中が「置いたときのまま」になる
+ */
+const SIZE_MAX_RATIO = 5;
+
+/**
+ * 大きさのバーの目盛りの数（片側）。
+ *
+ * **バーの位置は倍率に正比例させず、掛け算で対応させる。** そうすると、
+ * 指を同じだけ動かせば、小さくても大きくても同じ割合だけ変わる
  */
 const SIZE_SLIDER_STEPS = 1000;
 
 /** 高さの範囲（メートル）。写真モードには床が無いので、下にも行けるようにしてある */
 const HEIGHT_LIMITS = { min: -2.5, max: 2.5 };
 
-/** 3D 家具を前後に倒せる角度。真横（±90°）まで */
-const PITCH_LIMITS = { min: -90, max: 90 };
+/**
+ * 角度のバーの範囲。**真ん中が 0°**、つまり置いたときの姿勢になる。
+ *
+ * 0〜360 にすると、いじっていない家具のつまみが左端に張り付く。
+ * 真ん中から左右に振れる形なら、「どちらへどれだけ動かしたか」が一目で分かる
+ */
+const ANGLE_LIMITS = { min: -180, max: 180 };
 
 export function createBottomSheet(container: HTMLElement): void {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
@@ -182,26 +232,42 @@ export function createBottomSheet(container: HTMLElement): void {
     }
 
     const { id } = selected;
+    // 「大きさ」のバーが基準にする、置いたときのいちばん長い辺。
+    // 置いたあとに変えても動かない値なので、行を組むときに 1 度だけ読めばよい
+    const baseLongest = longestOf(selected.baseSize ?? selected.size);
     const rows: ReturnType<typeof createManageRow>[] = [];
-    // 切り抜きの板はカメラの方を向くので「向き」は効かない。板は画面の中で回す「傾き」だけ
-    if (!isBillboard(selected)) {
+    // 切り抜きの板はカメラの方を向くので、向きも前後の傾きも効かない。
+    // 板に効くのは画面の中で回す「傾き」だけ
+    if (isBillboard(selected)) {
       rows.push(
-        createManageRow('向き', {
-          min: 0,
-          max: 359,
-          ends: ['0°', '360°'],
-          valueOf: (item) => degreesOf(item.rotationY),
-          onInput: (degrees) => setRotation(id, toRadians(degrees)),
-        })
+        createManageRow('傾き', angleSlider(
+          (item) => item.tilt ?? 0,
+          (radians) => update(id, { tilt: radians })
+        ))
+      );
+    } else {
+      rows.push(
+        createManageRow('向き', angleSlider(
+          (item) => item.rotationY,
+          (radians) => setRotation(id, radians)
+        )),
+        createManageRow('前後の傾き', angleSlider(
+          (item) => item.pitch ?? 0,
+          (radians) => update(id, { pitch: radians })
+        )),
+        createManageRow('左右の傾き', angleSlider(
+          (item) => item.roll ?? 0,
+          (radians) => update(id, { roll: radians })
+        ))
       );
     }
     rows.push(
       createManageRow('大きさ', {
-        min: 0,
+        min: -SIZE_SLIDER_STEPS,
         max: SIZE_SLIDER_STEPS,
-        ends: [`${SIZE_LIMITS.min} m`, `${SIZE_LIMITS.max} m`],
-        valueOf: (item) => sizeToSlider(Math.max(...item.size)),
-        onInput: (value) => setLongestEdge(id, sliderToSize(value)),
+        ends: [`×1/${SIZE_MAX_RATIO}`, `×${SIZE_MAX_RATIO}`],
+        valueOf: (item) => ratioToSlider(longestOf(item.size) / baseLongest),
+        onInput: (value) => setLongestEdge(id, baseLongest * sliderToRatio(value)),
       }),
       createManageRow('高さ', {
         min: HEIGHT_LIMITS.min * 100,
@@ -212,29 +278,6 @@ export function createBottomSheet(container: HTMLElement): void {
         onInput: (centimetres) => setHeight(id, centimetres / 100),
       })
     );
-    if (isBillboard(selected)) {
-      // 板は画面の中で回すだけなので一周させる（逆さまにしたい人もいる）
-      rows.push(
-        createManageRow('傾き', {
-          min: 0,
-          max: 359,
-          ends: ['0°', '360°'],
-          valueOf: (item) => degreesOf(item.tilt ?? 0),
-          onInput: (degrees) => update(id, { tilt: toRadians(degrees) }),
-        })
-      );
-    } else {
-      // 3D は前後に倒す（寄りかかった椅子、傾いた看板など）。真横まで倒せれば足りる
-      rows.push(
-        createManageRow('傾き', {
-          min: PITCH_LIMITS.min,
-          max: PITCH_LIMITS.max,
-          ends: [`${PITCH_LIMITS.min}°`, `+${PITCH_LIMITS.max}°`],
-          valueOf: (item) => Math.round(toDegrees(item.pitch ?? 0)),
-          onInput: (degrees) => update(id, { pitch: toRadians(degrees) }),
-        })
-      );
-    }
 
     // 削除は右下に寄せる（誤タップを避ける）。
     // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
@@ -243,6 +286,9 @@ export function createBottomSheet(container: HTMLElement): void {
     foot.className = 'manage__foot';
     // 商品ページから取り込んだ家具なら、ここから買いに行ける（削除の左に置く）
     if (selected.product) foot.append(createProductLink(selected.product));
+    // いじりすぎて分からなくなったときに戻れる場所。動かすバーが 5 本あるので、
+    // 1 本ずつ真ん中へ戻すのは現実的ではない
+    foot.append(createButton('初期値に戻す', () => resetItem(id), 'is-quiet is-small'));
     const remove = createButton('画面から削除', () => {
       scene.remove(id);
       // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる
@@ -401,6 +447,30 @@ export function createBottomSheet(container: HTMLElement): void {
     return Boolean(item.imageUrl) && !item.modelUrl;
   }
 
+  /**
+   * バーで変えた分をすべて置いたときの姿に戻す。
+   *
+   * **床の上のどこにいるかは動かさない。** 前後左右の位置はバーで変えるものではなく、
+   * 指で置いた場所なので、ここで動かすと「戻した」つもりが家具を見失う
+   */
+  function resetItem(id: string): void {
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
+    if (!item) return;
+
+    // 置いたときの大きさを覚えていない古い記録もあるので、その場合は大きさを変えない
+    const size = item.baseSize ? ([...item.baseSize] as [number, number, number]) : item.size;
+    const [x, , z] = item.position;
+    scene.update(id, {
+      rotationY: 0,
+      pitch: 0,
+      roll: 0,
+      tilt: 0,
+      size,
+      position: scene.constrain([x, 0, z], size, 0),
+    });
+  }
+
   /** 家具のどれか 1 つの値を差し替える。傾きのように、位置を丸め直す必要がないもの向け */
   function update(id: string, patch: Partial<PlacedFurniture>): void {
     const scene = activeScene();
@@ -419,7 +489,8 @@ export function createBottomSheet(container: HTMLElement): void {
     const item = scene.state().furniture.find((f) => f.id === id);
     if (!item) return;
 
-    const ratio = longest / Math.max(...item.size);
+    // 倍率で動かすので、家具によっては上限を超える。実寸としての限度はここで止める
+    const ratio = clamp(longest, SIZE_LIMITS.min, SIZE_LIMITS.max) / longestOf(item.size);
     const size = item.size.map((edge) => edge * ratio) as [number, number, number];
     scene.update(id, {
       size,
@@ -456,10 +527,7 @@ export function createBottomSheet(container: HTMLElement): void {
     });
   }
 
-  /** 向きを 0〜359 の度数にする。何周も回したあとでもバーの位置が決まるように畳む */
-  function degreesOf(radians: number): number {
-    return ((Math.round(toDegrees(radians)) % 360) + 360) % 360;
-  }
+
 
 
   function createButton(label: string, onClick: () => void, modifier = ''): HTMLButtonElement {
