@@ -553,60 +553,97 @@ body {
   align-content: start;
 }
 
-/* 見出しと、右側のステッパー（減らす｜値｜増やす） */
+/* 見出しと、その右のバー */
 .manage__row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* 見出しの幅をそろえて、どの行もバーの左端が同じ位置から始まるようにする。
+     いちばん長い「前後の傾き」が 1 行に収まる幅 */
+  grid-template-columns: 72px 1fr;
   align-items: center;
   gap: 10px;
 }
 
-.manage__label {
-  font-size: 12px;
+/* バー本体と、両端の目安 */
+.manage__slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * バーの両端の目安。**行ごとに桁数が違うと、行を跨いでバーの始まりがずれる**ので
+ * 幅をそろえ、内側（バー側）に寄せる
+ */
+.manage__end {
+  flex: 0 0 42px;
   color: #7a8388;
-  letter-spacing: 0.04em;
-}
-
-/* 減らす・値・増やすを 1 つの部品に見せる。角は外枠だけ丸め、中は仕切り線で分ける */
-.manage__control {
-  display: inline-grid;
-  grid-template-columns: 40px minmax(76px, auto) 40px;
-  align-items: stretch;
-  height: 36px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-}
-
-.manage__button {
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--primary);
-  font: inherit;
-  touch-action: manipulation;
-  /* 押しっぱなしで動かしたときに、文字が選択されるのを防ぐ */
-  user-select: none;
-}
-.manage__button:active {
-  background: var(--primary);
-  color: #fff;
-}
-
-.manage__value {
-  display: grid;
-  place-items: center;
-  padding: 0 8px;
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  color: var(--text);
-  font-size: 13px;
-  /* 数字が伸び縮みしても位置がずれないようにする */
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.manage__end:first-child {
+  text-align: right;
+}
+
+/*
+ * つまみは指で掴める大きさ（22px）にする。
+ * 見た目はブラウザ既定に任せず、線もつまみも自分で描く（既定は端末ごとに差が大きい）
+ */
+.manage__range {
+  flex: 1;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: none; /* 縦に引いたときシートごと動かないように */
+}
+
+.manage__range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.manage__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  /* つまみの中心を線に合わせる（つまみの高さと線の高さの差の半分） */
+  margin-top: -9px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.manage__range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.manage__range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.manage__range:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.manage__label {
+  font-size: 12px;
+  white-space: nowrap;
+  color: #7a8388;
+  letter-spacing: 0.04em;
 }
 
 /* 置いてある家具の一覧（何も選んでいないとき） */
@@ -656,6 +693,7 @@ body {
 .manage__foot {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 2px;
 }
 

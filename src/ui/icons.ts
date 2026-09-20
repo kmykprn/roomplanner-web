@@ -11,20 +11,10 @@
  */
 
 export type IconName =
-  | 'rotateLeft' | 'rotateRight' | 'shrink' | 'grow' | 'down' | 'up' | 'trash' | 'check'
-  | 'plus' | 'camera' | 'link' | 'cube';
+  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
-  // 向き: 270° の弧と、弧の終端に進む向きの矢じり
-  rotateLeft: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
-  rotateRight: ['M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8', 'M21 3v5h-5'],
-  // 大きさ: 四隅へ向く矢印。縮む／広がる
-  shrink: ['M9 4v5H4', 'M15 20v-5h5', 'M4 4l5 5', 'M20 20l-5-5'],
-  grow: ['M14 4h6v6', 'M10 20H4v-6', 'M20 4l-6 6', 'M4 20l6-6'],
-  // 高さ: 上下の矢印に床の線。「回す」の矢印と見分けるため
-  down: ['M12 4v11', 'M8 11l4 4 4-4', 'M5 20h14'],
-  up: ['M12 15V4', 'M8 8l4-4 4 4', 'M5 20h14'],
   trash: ['M4 7h16', 'M9 7V4h6v3', 'M6 7l1 13h10l1-13', 'M10 11v6M14 11v6'],
   // 完了: 「終える」操作だと分かるように
   check: ['M5 12.5l4.5 4.5L19 7.5'],

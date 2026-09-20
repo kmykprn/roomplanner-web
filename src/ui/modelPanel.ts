@@ -220,6 +220,8 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
       // 底面基準なので y = 0 が床置き。既存の家具に埋まらない場所を選ぶ
       position: scene.placementFor(item.size),
       rotationY: 0,
+      // 「初期値に戻す」で戻す先。あとから大きさを変えても、ここは書き替えない
+      baseSize: [...item.size],
     });
     scene.select(id);
   }
