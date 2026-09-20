@@ -23,6 +23,18 @@ import { photoState, setMasking } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
 
+/** 「操作」の行に敷くバーの決まりごと。値の単位は行ごとに違う（向きなら度） */
+interface ManageSlider {
+  /** 読み上げ用の名前。画面には出さない（見出しは行の左にある） */
+  label: string;
+  min: number;
+  max: number;
+  /** バーの両端に添える文字。動かせる幅が見て分かるように */
+  ends: [from: string, to: string];
+  valueOf(item: PlacedFurniture): number;
+  onInput(value: number): void;
+}
+
 const TABS: Record<TabId, string> = {
   interior: '内装',
   background: '背景',
@@ -150,7 +162,16 @@ export function createBottomSheet(container: HTMLElement): void {
         createManageRow('向き', [
           ['rotateLeft', '左に回す', () => rotate(id, -ROTATION_STEP)],
           ['rotateRight', '右に回す', () => rotate(id, ROTATION_STEP)],
-        ], (item) => formatAngle(item.rotationY))
+        ], (item) => formatAngle(item.rotationY), {
+          // ボタンは 15° ずつ。ちょうど 90° のようなキリのいい向きに合わせるのはボタンが速い。
+          // バーは 1° ずつで、その間の向きに合わせたいときと、一気に回したいときのためのもの
+          label: '向きをバーで変える',
+          min: 0,
+          max: 359,
+          ends: ['0°', '360°'],
+          valueOf: (item) => degreesOf(item.rotationY),
+          onInput: (degrees) => setRotation(id, (degrees * Math.PI) / 180),
+        })
       );
     }
     rows.push(
@@ -209,10 +230,13 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 「見出し」と「減らす｜いまの値｜増やす」の 1 行。
+   * 「見出し」と「減らす｜いまの値｜増やす」の 1 行。バーを足すと 2 段になる。
    *
    * 値をボタンの間に挟むのは、どのボタンがどの値に効くかを目で往復させないため。
-   * ボタンは押しっぱなしで動き続ける。値は refresh で書き替える
+   * ボタンは押しっぱなしで動き続ける。値は refresh で書き替える。
+   *
+   * **バーはボタンの代わりではなく、並べて置く。** ボタンは決まった刻みなので
+   * 「ちょうど 90°」に合わせるのが速く、バーはその間の値と、一気に動かすのが速い
    */
   function createManageRow(
     label: string,
@@ -220,7 +244,8 @@ export function createBottomSheet(container: HTMLElement): void {
       decrease: [icon: IconName, description: string, act: () => void],
       increase: [icon: IconName, description: string, act: () => void],
     ],
-    format: (item: PlacedFurniture) => string
+    format: (item: PlacedFurniture) => string,
+    slider?: ManageSlider
   ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
     const element = document.createElement('div');
     element.className = 'manage__row';
@@ -240,12 +265,65 @@ export function createBottomSheet(container: HTMLElement): void {
     control.append(button(decrease), value, button(increase));
 
     element.append(heading, control);
+
+    const bar = slider ? createManageSlider(slider) : null;
+    if (bar) element.append(bar.element);
+
     return {
       element,
       refresh: (item) => {
         value.textContent = format(item);
+        bar?.refresh(item);
       },
     };
+  }
+
+  /**
+   * 行の下段に敷くバー。両端に動かせる幅を数字で添える。
+   *
+   * **つまみを動かしている間は書き戻さない。** 状態が変わるたびに refresh が来るので、
+   * 書き戻すと、丸めの差でつまみが指の下から逃げることがある
+   */
+  function createManageSlider(
+    slider: ManageSlider
+  ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
+    const element = document.createElement('div');
+    element.className = 'manage__slider';
+
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.className = 'manage__range';
+    input.min = String(slider.min);
+    input.max = String(slider.max);
+    input.step = '1';
+    input.setAttribute('aria-label', slider.label);
+
+    let holding = false;
+    input.addEventListener('pointerdown', () => {
+      holding = true;
+    });
+    input.addEventListener('input', () => slider.onInput(Number(input.value)));
+    for (const type of ['pointerup', 'pointercancel', 'blur'] as const) {
+      input.addEventListener(type, () => {
+        holding = false;
+      });
+    }
+
+    const [from, to] = slider.ends;
+    element.append(createEndLabel(from), input, createEndLabel(to));
+    return {
+      element,
+      refresh: (item) => {
+        if (!holding) input.value = String(slider.valueOf(item));
+      },
+    };
+  }
+
+  function createEndLabel(text: string): HTMLElement {
+    const element = document.createElement('span');
+    element.className = 'manage__end';
+    element.textContent = text;
+    return element;
   }
 
   /**
@@ -371,11 +449,16 @@ export function createBottomSheet(container: HTMLElement): void {
    * （写真モードには壁が無いので、そのモードでは何も動かない）。
    */
   function rotate(id: string, step: number): void {
+    const item = activeScene().state().furniture.find((f) => f.id === id);
+    if (!item) return;
+    setRotation(id, item.rotationY + step);
+  }
+
+  /** 向きをその角度に決める（バーから呼ばれる）。壁への押し戻しは rotate と同じ */
+  function setRotation(id: string, rotationY: number): void {
     const scene = activeScene();
     const item = scene.state().furniture.find((f) => f.id === id);
     if (!item) return;
-
-    const rotationY = item.rotationY + step;
     scene.update(id, {
       rotationY,
       position: scene.constrain(item.position, item.size, rotationY),
@@ -384,8 +467,13 @@ export function createBottomSheet(container: HTMLElement): void {
 
   /** 向き。何周も回したときに数字が読めなくならないよう 0〜359 に畳む */
   function formatAngle(radians: number): string {
+    return `${degreesOf(radians)}°`;
+  }
+
+  /** 向きを 0〜359 の度数にする。表示にもバーの位置にも同じ値を使う */
+  function degreesOf(radians: number): number {
     const degrees = Math.round((radians * 180) / Math.PI);
-    return `${((degrees % 360) + 360) % 360}°`;
+    return ((degrees % 360) + 360) % 360;
   }
 
   /** 床からの高さ。写真モードでは床より下にも行けるので、符号を付けて出す */

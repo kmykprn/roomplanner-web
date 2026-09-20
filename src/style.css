@@ -561,6 +561,78 @@ body {
   gap: 10px;
 }
 
+/*
+ * 行の下段に敷くバー。両端の数字で「どこからどこまで動くか」を示す。
+ * 2 列ぶんいっぱいに広げるので、上のステッパーと同じ行の一部として見える
+ */
+.manage__slider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -4px;
+}
+
+.manage__end {
+  color: #7a8388;
+  font-size: 11px;
+  /* 桁が変わっても両端の位置がずれないようにする */
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * つまみは指で掴める大きさ（22px）にする。
+ * 見た目はブラウザ既定に任せず、線もつまみも自分で描く（既定は端末ごとに差が大きい）
+ */
+.manage__range {
+  flex: 1;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  touch-action: none; /* 縦に引いたときシートごと動かないように */
+}
+
+.manage__range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.manage__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  /* つまみの中心を線に合わせる（つまみの高さと線の高さの差の半分） */
+  margin-top: -9px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.manage__range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.manage__range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.manage__range:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .manage__label {
   font-size: 12px;
   color: #7a8388;
