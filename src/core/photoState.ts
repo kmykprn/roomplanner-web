@@ -96,14 +96,26 @@ export const photoState = createStore<PhotoState>({
   selectedId: null,
 });
 
+/**
+ * 写真モードで家具を置ける奥行きの幅（m）。カメラは z = 4 に立っている。
+ *
+ * **地平線の近くは、指を少し動かすだけで何十 m も奥へ飛ぶ。** 床の面と視線が
+ * ほとんど平行になるため。実際の部屋としてありえる範囲で止めておく
+ */
+const PHOTO_DEPTH_LIMITS = { near: 3, far: -12 };
+
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
   // 置くのはいつも画面のど真ん中（原点）。空きを探して端に置くと画面の外に出て見失う。
   // 重なっても、置いた直後は選択されているので動かせばよい
   placementFor: () => [0, 0, 0],
 
-  // 写真に壁は無いので丸めない。画面の外まで動かせてよい
-  constrain: (position) => position,
+  // 写真に壁は無いので左右と高さは丸めない。奥行きだけ、行き過ぎないように止める
+  constrain: ([x, y, z]) => [
+    x,
+    y,
+    Math.min(PHOTO_DEPTH_LIMITS.near, Math.max(PHOTO_DEPTH_LIMITS.far, z)),
+  ],
 });
 
 /**
