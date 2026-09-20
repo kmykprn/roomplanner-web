@@ -1,8 +1,9 @@
 /**
  * 「床を合わせる」姿。写真モードの「背景」タブから入る。
  *
- * 画面には三角コーンが 3 本立つ（scene/floorMarkers.ts）。利用者はそれを見て、
- * **倒れて見えるなら指で直す**。合わせるのは前後と左右の傾きだけで、
+ * 画面には薄い板が 1 枚置かれる（scene/floorMarkers.ts）。利用者はそれを見て、
+ * **床に寝ていないなら指で直す**。板の辺を床の目地や壁際の線と見比べられるので、
+ * 目測ではなく比較で判断できる。合わせるのは前後と左右の傾きだけで、
  * 床の上での向き（ヨー）は出てこない。
  *
  * 数字は出さない。「何度にすればよいか」は誰にも分からないので、
@@ -12,7 +13,7 @@
 import { photoState, setFittingFloor, setFloorFit } from '@/core/photoState';
 import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
 
-const NOTE = 'コーンがまっすぐ立って見えるまで、画面を指でなぞって調整してください';
+const NOTE = '板が床にぴったり寝て見えるまで、画面を指でなぞって調整してください';
 const HOW = '上下になぞる … 手前と奥の傾き　／　左右になぞる … 左右の傾き';
 
 export function createFloorPanel(): HTMLElement {

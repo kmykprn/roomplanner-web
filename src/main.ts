@@ -75,7 +75,7 @@ const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
 const roomFurniture = createFurnitureLayer();
 const photoFurniture = createFurnitureLayer();
-// 床を合わせるときの目印。合わせている間だけ出す
+// 床を合わせるときの板。合わせている間だけ出す
 const floorMarkers = createFloorMarkers();
 viewer.scene.add(
   roomObjects.group,

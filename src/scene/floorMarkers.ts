@@ -1,58 +1,51 @@
 /**
- * 床を合わせるときに立てる三角コーン。
+ * 床を合わせるときに置く「薄い板」。
  *
  * **形にはねらいがある。**
  *
- *   立っているのが当たり前の形 … 傾いていると「倒れかけている」とすぐ読める。
- *                                 立方体や方眼だと、傾いていても「そういう形」に見えてしまう
- *   回しても同じに見える       … 床の上での向き（ヨー）を合わせる作業だと誤解させない
- *   実際の大きさで置く         … 大きさが変なら、高さの決め打ちが合っていないことにも気づける
+ *   床に寝ている物      … 板の上面が、そのまま「いま決めている床の面」になる。
+ *                         浮いている・傾いていることが、面として見える
+ *   比べる相手が床にある … 板の辺を**フローリングの目地や壁際の線**と見比べられる。
+ *                         視線が床の中で完結する（コーンは壁の角まで目を往復させていた）
+ *   面積が広い          … 手前の辺と奥の辺の縮み方の違いが出るので、見下ろし角のずれが見える
+ *   厚みがある          … 側面の縦の辺が見えるので、左右の傾きも読める
  *
- * 置く場所は**画面の決まった 3 か所**（床の上の決まった場所ではない）。
- * 世界の座標に固定すると、傾きを変えたときにコーンが画面から逃げていき、
- * 利用者がコーンを追いかける羽目になる（実機で確認）。
- * 画面に固定すれば、**同じ場所で形だけが変わる**ので見比べやすい。
+ * 最初は三角コーンだったが、板のほうが上の点で読みやすかったので置き換えた。
  *
- * 利用者は**部屋の中の縦のもの（壁の角・家具の縁）と見比べて**、まっすぐ立つまで指で直す。
- * その手助けとして、コーンには次のものを添える。
- *
- *   接地の輪   … 足元の楕円。床に着いていることを示す
- *   垂直の目安 … 上に伸ばした細い線。**壁の角と見比べるための物差し**
- *   床の面     … 触れている間だけ薄く塗る。面が動いているのが見える
+ * 置く場所は**画面の決まった一点**（床の上の決まった場所ではない）。世界の座標に固定すると、
+ * 傾きを変えたときに板が画面から逃げていき、利用者が板を追いかける羽目になる。
  */
 
 import * as THREE from 'three';
 
-/**
- * 大きさ（m）。実物の三角コーンより一回り小さくしてある。
- * 実寸どおりだと手前のものが画面を覆ってしまい、肝心の床が見えなくなる（実機で確認）
- */
-const HEIGHT = 0.36;
-const RADIUS = 0.12;
+/** 板の大きさ（m）。畳の半分ほど。大きすぎると床が見えず、小さいと傾きが読めない */
+const SLAB = { width: 0.9, depth: 0.6, thickness: 0.06 };
+
+/** 画面のどこに置くか（-1〜+1 の座標。下が負）。床が写っていそうな下半分の真ん中 */
+const SPOT: [number, number] = [0, -0.45];
 
 /**
- * 画面のどこに立てるか（-1〜+1 の座標。下が負）。
- * 床が写っていそうな下半分に、左右と奥行きを散らして置く
+ * 画面の上での大きさをそろえるための、基準の距離（m）。
+ *
+ * **傾けても板の大きさが変わらないようにする。** 画面の同じ点を指していても、
+ * 傾きによって床までの距離は変わる。そのままだと板が膨らんだり縮んだりして、
+ * 動かすたびに大きさが暴れる。距離に比例して板を拡縮すれば、見た目の大きさが揃う。
+ * 2.5m は、見下ろし角 22° のときに出ていた距離（その大きさが扱いやすかった）
  */
-const SPOTS: [number, number][] = [
-  [-0.42, -0.34],
-  [0.02, -0.52],
-  [0.46, -0.2],
-];
+const REFERENCE_DISTANCE = 2.5;
 
-/** 床の面。カメラから伸ばした視線がここに当たった場所にコーンを立てる */
-const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
-const ORANGE = 0xf07018;
-/** 触れている間の色。**変化が無いと、効いているのか分からない**ので明るくする */
-const ORANGE_ACTIVE = 0xffa040;
-const WHITE = 0xfdfdfd;
+/** 目印の色。触れている間は明るくする（変化が無いと、効いているのか分からない） */
+const IDLE = 0x18b4e0;
+const ACTIVE = 0x7ae4ff;
 
 /**
  * 床の面をどれだけの広さ塗るか（m）。触れている間だけ出す。
- * **広く取る。** 狭いと面の奥の端が画面に出てしまい、壁のように見える（実機で確認）
+ * **広く取る。** 狭いと面の奥の端が画面に出てしまい、壁のように見える
  */
 const TINT_SIZE = 24;
+
+/** 床の面。カメラから伸ばした視線がここに当たった場所に板を置く */
+const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 export interface FloorMarkers {
   group: THREE.Group;
@@ -62,101 +55,60 @@ export interface FloorMarkers {
   setActive(active: boolean): void;
 }
 
-/** コーンの層を作る。`group` をシーンに足し、合わせている間だけ `visible` にする */
 export function createFloorMarkers(): FloorMarkers {
   const group = new THREE.Group();
   group.name = 'floor-markers';
   group.visible = false;
 
-  const cones = SPOTS.map(() => createCone());
-  group.add(...cones);
+  const slab = new THREE.Mesh(
+    new THREE.BoxGeometry(SLAB.width, SLAB.thickness, SLAB.depth),
+    new THREE.MeshBasicMaterial({ color: IDLE, transparent: true, opacity: 0.38, depthWrite: false })
+  );
+  slab.position.y = SLAB.thickness / 2;
 
-  // 触れている間だけ出す床の面。動いているのが面で見える
+  // 辺を白く描く。**辺を床の目地と見比べる**のがこの形のねらいなので、辺がはっきり見えること
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(slab.geometry),
+    new THREE.LineBasicMaterial({ color: 0xffffff })
+  );
+  edges.position.y = SLAB.thickness / 2;
+
+  const marker = new THREE.Group();
+  marker.add(slab, edges);
+
+  // 触れている間だけ出す床の面。面が動いているのが見える
   const tint = new THREE.Mesh(
     new THREE.PlaneGeometry(TINT_SIZE, TINT_SIZE),
-    new THREE.MeshBasicMaterial({ color: 0x0aaadc, transparent: true, opacity: 0.12, depthWrite: false })
+    new THREE.MeshBasicMaterial({ color: IDLE, transparent: true, opacity: 0.12, depthWrite: false })
   );
   tint.rotation.x = -Math.PI / 2;
   tint.position.y = 0.002;
   tint.visible = false;
-  group.add(tint);
+
+  group.add(marker, tint);
 
   const raycaster = new THREE.Raycaster();
   const hit = new THREE.Vector3();
 
-  function setActive(active: boolean): void {
-    tint.visible = active;
-    for (const cone of cones) {
-      const body = cone.getObjectByName(BODY_NAME);
-      if (body instanceof THREE.Mesh && body.material instanceof THREE.MeshBasicMaterial) {
-        body.material.color.setHex(active ? ORANGE_ACTIVE : ORANGE);
-      }
-    }
-  }
-
   function update(camera: THREE.Camera): void {
     // **回したばかりのカメラは、まだ行列に反映されていない。**
     // 更新せずに視線を出すと、1 つ前の向きで位置を決めてしまい、
-    // 傾けるたびにコーンが画面の上へずれていく（実機で確認）
+    // 傾けるたびに板が画面の上へずれていく
     camera.updateMatrixWorld(true);
-    SPOTS.forEach(([x, y], index) => {
-      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-      // 床より上を向いている視線は当たらない。そのコーンは出さない
-      const found = raycaster.ray.intersectPlane(FLOOR, hit);
-      cones[index].visible = Boolean(found);
-      if (found) cones[index].position.copy(hit);
-    });
+    raycaster.setFromCamera(new THREE.Vector2(SPOT[0], SPOT[1]), camera);
+    // 床より上を向いている視線は当たらない。そのときは板を出さない
+    const found = raycaster.ray.intersectPlane(FLOOR, hit);
+    marker.visible = Boolean(found);
+    if (!found) return;
+    marker.position.copy(hit);
+    // 遠いほど大きくして、画面の上での大きさを一定に保つ
+    marker.scale.setScalar(camera.position.distanceTo(hit) / REFERENCE_DISTANCE);
+  }
+
+  function setActive(active: boolean): void {
+    tint.visible = active;
+    slab.material.color.setHex(active ? ACTIVE : IDLE);
   }
 
   return { group, update, setActive };
-}
-
-/** 触れたときに色を変える相手を探すための名前 */
-const BODY_NAME = 'cone-body';
-
-function createCone(): THREE.Object3D {
-  const cone = new THREE.Group();
-
-  // 光の当たり方で判断させたくないので、陰影の付かないマテリアルにする。
-  // 「傾いているか」だけに目が向くほうがよい
-  const body = new THREE.Mesh(
-    new THREE.ConeGeometry(RADIUS, HEIGHT, 28),
-    new THREE.MeshBasicMaterial({ color: ORANGE })
-  );
-  body.position.y = HEIGHT / 2;
-  body.name = BODY_NAME;
-
-  // 白い帯。高さの途中に入れると、傾いたときに帯が斜めになって分かりやすい
-  const band = new THREE.Mesh(
-    new THREE.ConeGeometry(RADIUS * 0.62, HEIGHT * 0.18, 28, 1, true),
-    new THREE.MeshBasicMaterial({ color: WHITE, side: THREE.DoubleSide })
-  );
-  band.position.y = HEIGHT * 0.62;
-
-  // 底の座。床に接している面が見えると「乗っている」感じが出る
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(RADIUS * 1.25, RADIUS * 1.25, 0.02, 28),
-    new THREE.MeshBasicMaterial({ color: ORANGE })
-  );
-  base.position.y = 0.01;
-
-  // 接地の輪。床に着いていることを示す。コーンより広く取って、足元が見えるようにする
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(RADIUS * 1.9, RADIUS * 2.15, 40),
-    new THREE.MeshBasicMaterial({ color: WHITE, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.004;
-
-  // 垂直の目安。**壁の角と見比べるための物差し**なので、コーンより高く伸ばす
-  const guide = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, HEIGHT * 0.9, 0),
-      new THREE.Vector3(0, HEIGHT * 3.4, 0),
-    ]),
-    new THREE.LineBasicMaterial({ color: WHITE, transparent: true, opacity: 0.45 })
-  );
-
-  cone.add(body, band, base, ring, guide);
-  return cone;
 }
