@@ -21,6 +21,7 @@ import {
   type PhotoPoint,
   type PhotoView,
 } from '@/core/photoView';
+import { clampFloorFit, DEFAULT_FLOOR_FIT, type FloorFit } from '@/core/floorFit';
 
 /**
  * 背景写真の読み込み具合。
@@ -57,6 +58,11 @@ export interface PhotoState extends FurnitureSceneState {
   /** 写真のどこを、どれだけ寄って見ているか。写真と 3D の両方がこれに従う */
   view: PhotoView;
 
+  /** 写真の床に合わせたカメラの傾き（core/floorFit.ts）。写真ごとに持つ */
+  floorFit: FloorFit;
+  /** 床を合わせている最中か。この間だけコーンを出し、指の動きを傾きに使う */
+  isFittingFloor: boolean;
+
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
    *
@@ -79,6 +85,8 @@ export const photoState = createStore<PhotoState>({
   backgroundStatus: 'idle',
   backgroundAspect: null,
   view: { ...DEFAULT_PHOTO_VIEW },
+  floorFit: { ...DEFAULT_FLOOR_FIT },
+  isFittingFloor: false,
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -166,6 +174,30 @@ export function clearBackground(): void {
 /** 隠す場所を塗っている最中かを切り替える */
 export function setMasking(isMasking: boolean): void {
   if (photoState.get().isMasking !== isMasking) photoState.set({ isMasking });
+}
+
+/** 床を合わせる姿に入る・出る */
+export function setFittingFloor(isFittingFloor: boolean): void {
+  if (photoState.get().isFittingFloor !== isFittingFloor) photoState.set({ isFittingFloor });
+}
+
+/**
+ * 床の傾きを変える。渡した分だけ足す（指の移動量をそのまま渡す想定）。
+ * 範囲外には行かないので、勢いよく滑らせても戻せなくならない
+ */
+export function nudgeFloorFit(delta: Partial<FloorFit>): void {
+  const current = photoState.get().floorFit;
+  photoState.set({
+    floorFit: clampFloorFit({
+      pitchDeg: current.pitchDeg + (delta.pitchDeg ?? 0),
+      rollDeg: current.rollDeg + (delta.rollDeg ?? 0),
+    }),
+  });
+}
+
+/** 床の傾きを直に入れる（読み戻しと、やり直し用） */
+export function setFloorFit(fit: FloorFit): void {
+  photoState.set({ floorFit: clampFloorFit(fit) });
 }
 
 export function setMaskTool(patch: Partial<MaskTool>): void {

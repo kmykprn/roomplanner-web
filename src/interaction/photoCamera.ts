@@ -1,22 +1,33 @@
 /**
  * 写真モードのカメラ。
  *
- * **動かさない。** 部屋を立って撮ったときに近い高さ・距離に置いたまま固定する。
+ * **利用者がカメラを回すことはしない。** 写真は動かないので、カメラだけ自由に回ると嘘になる。
+ * 動かすのは「写真を撮ったときの傾き」に合わせるときだけで、それが core/floorFit.ts の値。
  *
- * 写真は動かないので、カメラだけ回ると嘘になる。使う人には画角も高さも出さず、
- * 「写真の上に家具を置く」ことだけに絞ってある。
+ * 高さは床から 1.4m の決め打ち。画角はここでは決めず、描画領域の高さに合わせて
+ * viewer が持つ（core/viewer.ts）。
  */
 
 import * as THREE from 'three';
 
-/** 床（y = 0）を見下ろす目の位置。立って部屋を撮ったときに近いあたり */
-const EYE_HEIGHT = 1.4;
+import { CAMERA_HEIGHT, type FloorFit } from '@/core/floorFit';
+
+/** 床（y = 0）の上に立つ位置。前後の位置は、家具を置く場所が画面に入るように取る */
 const EYE_DISTANCE = 4;
 
-/** 画角はここでは決めない。描画領域の高さに合わせて viewer が持つ（core/viewer.ts） */
-export function applyPhotoCamera(camera: THREE.PerspectiveCamera): void {
-  camera.position.set(0, EYE_HEIGHT, EYE_DISTANCE);
-  // 正面を向いたまま。傾けると床の水平が写真と合わなくなる
-  camera.rotation.set(0, 0, 0);
+/**
+ * 写真モードのカメラを、床の傾きに合わせて置く。
+ *
+ * 回す順を YXZ にしているのは、**ロール（Z）を最後に掛ける**ため。
+ * 先に掛けると、見下ろした分だけロールの軸まで傾いて、指の動きと画面の動きがずれる
+ */
+export function applyPhotoCamera(camera: THREE.PerspectiveCamera, fit: FloorFit): void {
+  camera.position.set(0, CAMERA_HEIGHT, EYE_DISTANCE);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.set(
+    THREE.MathUtils.degToRad(-fit.pitchDeg),
+    0,
+    THREE.MathUtils.degToRad(fit.rollDeg)
+  );
   camera.updateProjectionMatrix();
 }

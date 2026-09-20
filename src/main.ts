@@ -24,6 +24,8 @@ import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
+import { createFloorFitDrag } from '@/interaction/floorFitDrag';
+import { createFloorMarkers } from '@/scene/floorMarkers';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
@@ -70,11 +72,14 @@ const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
 const roomFurniture = createFurnitureLayer();
 const photoFurniture = createFurnitureLayer();
+// 床を合わせるときの目印。合わせている間だけ出す
+const floorMarkers = createFloorMarkers();
 viewer.scene.add(
   roomObjects.group,
   createLighting(room),
   roomFurniture.group,
-  photoFurniture.group
+  photoFurniture.group,
+  floorMarkers.group
 );
 
 // --- 操作を繋ぐ ---
@@ -88,9 +93,12 @@ createFurnitureDrag(
       ? { scene: photoScene, layer: photoFurniture, surface: 'screen' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
-  // 隠す場所を塗っている間は、1 本指の動きは筆のほうへ渡す
-  () => !photoState.get().isMasking
+  // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
+  () => !photoState.get().isMasking && !photoState.get().isFittingFloor
 );
+
+// 床を合わせる。合わせている姿のときだけ、1 本指のなぞりが傾きになる
+createFloorFitDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isFittingFloor);
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
 createMaskPaint(viewer.canvas);
@@ -131,6 +139,7 @@ const roomBackground = new THREE.Color(THEME.background);
 
 function applyMode(): void {
   const photo = isPhotoMode();
+  floorMarkers.group.visible = photo && photoState.get().isFittingFloor;
 
   roomObjects.group.visible = !photo;
   roomFurniture.group.visible = !photo;
@@ -225,16 +234,22 @@ function swapMaskImage(url: string | null): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, view } = photoState.get();
+  const { backgroundAspect, view, floorFit } = photoState.get();
 
   viewer.setContentAspect(backgroundAspect);
-  applyPhotoCamera(viewer.camera);
+  applyPhotoCamera(viewer.camera, floorFit);
   viewer.setPhotoView(view);
+  // コーンは画面の決まった場所に立てる。カメラを動かしたあとに置き直す
+  floorMarkers.update(viewer.camera);
 }
 
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
+// 目印は「床を合わせている間」だけ。モードだけでなく写真の状態でも切り替わる
+photoState.subscribe(() => {
+  floorMarkers.group.visible = isPhotoMode() && photoState.get().isFittingFloor;
+});
 applyMode();
 applyBackground();
 
