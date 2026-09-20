@@ -130,7 +130,7 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   if (item.modelUrl) {
     // 写真から生成した家具。端末に保存した中身を URL にしてから読む
     resolveModelUrl(item.modelUrl).then((url) => {
-      if (url) replaceWithModel(object, mesh, url, item.size);
+      if (url) replaceWithModel(object, mesh, outline, url, item.size);
       // 見つからなければ箱のまま。端末のデータが消された場合など
     });
   } else if (item.imageUrl) {
@@ -149,10 +149,14 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
  * レイキャストの対象は箱のまま（子として抱える）にしてある。
  * 高ポリゴンのモデルに毎回光線を当てると重く、
  * また凹凸のある形は指で狙いにくいため、当たり判定は箱のほうが具合がよい。
+ *
+ * **箱はモデルが入ったところで、モデルの実際の大きさに締め直す。**
+ * 理由は `fitBoundsToModel` を参照
  */
 function replaceWithModel(
   object: THREE.Group,
   placeholder: THREE.Mesh,
+  outline: THREE.Object3D,
   modelPath: string,
   size: [number, number, number]
 ): void {
@@ -164,12 +168,50 @@ function replaceWithModel(
       placeholder.visible = false;
       placeholder.castShadow = false;
       placeholder.receiveShadow = false;
+      // シーンに足す前に測る。足したあとだと、家具の向きや大きさが混ざった値になる
+      fitBoundsToModel(placeholder, outline, model);
       object.add(model);
     })
     .catch((error) => {
       // 読み込めなくても箱のまま操作は続けられるので、落とさず記録に留める
       console.error(`家具モデルの読み込みに失敗しました: ${modelPath}`, error);
     });
+}
+
+/**
+ * 選択枠と当たり判定の箱を、モデルの実際の大きさに合わせる。
+ *
+ * **指定の箱は「そこに収める先」でしかない。** モデルは縦横の比率を保ったまま
+ * 収められる（scene/modelLoader.ts）ので、箱に接するのは 3 軸のうち 1 軸だけで、
+ * 残りは必ず余る。写真から作った家具は実寸が分からず 1m の立方体に収めるため、
+ * 余りがとくに大きい（実測では箱の体積の 3〜4 割しかモデルが入っていない）。
+ *
+ * 締め直すと、選択枠が家具の形に沿うだけでなく、**モデルから離れた何も無い場所を
+ * 押しても掴めてしまう**のも直る。切り抜きの板では前から同じことをしている
+ * （`replaceWithBillboard`）。
+ */
+function fitBoundsToModel(
+  placeholder: THREE.Mesh,
+  outline: THREE.Object3D,
+  model: THREE.Object3D
+): void {
+  const bounds = new THREE.Box3().setFromObject(model);
+  const size = bounds.getSize(new THREE.Vector3());
+  // measure できない（中身が空、または読み違え）ときは、収める先の箱のままにしておく
+  if (size.x <= 0 || size.y <= 0 || size.z <= 0) return;
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const box = new THREE.BoxGeometry(size.x, size.y, size.z);
+
+  placeholder.geometry.dispose();
+  placeholder.geometry = box;
+  placeholder.position.copy(center);
+
+  if (outline instanceof THREE.LineSegments) {
+    outline.geometry.dispose();
+    outline.geometry = new THREE.EdgesGeometry(box);
+    outline.position.copy(center);
+  }
 }
 
 /**
