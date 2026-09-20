@@ -14,6 +14,11 @@
  * 画面に固定すれば、**同じ場所で形だけが変わる**ので見比べやすい。
  *
  * 利用者は**部屋の中の縦のもの（壁の角・家具の縁）と見比べて**、まっすぐ立つまで指で直す。
+ * その手助けとして、コーンには次のものを添える。
+ *
+ *   接地の輪   … 足元の楕円。床に着いていることを示す
+ *   垂直の目安 … 上に伸ばした細い線。**壁の角と見比べるための物差し**
+ *   床の面     … 触れている間だけ薄く塗る。面が動いているのが見える
  */
 
 import * as THREE from 'three';
@@ -39,12 +44,22 @@ const SPOTS: [number, number][] = [
 const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 const ORANGE = 0xf07018;
+/** 触れている間の色。**変化が無いと、効いているのか分からない**ので明るくする */
+const ORANGE_ACTIVE = 0xffa040;
 const WHITE = 0xfdfdfd;
+
+/**
+ * 床の面をどれだけの広さ塗るか（m）。触れている間だけ出す。
+ * **広く取る。** 狭いと面の奥の端が画面に出てしまい、壁のように見える（実機で確認）
+ */
+const TINT_SIZE = 24;
 
 export interface FloorMarkers {
   group: THREE.Group;
   /** カメラの向きに合わせて置き直す。傾きを変えるたびに呼ぶ */
   update(camera: THREE.Camera): void;
+  /** 指が触れているかを伝える。触れている間は色を変え、床の面を出す */
+  setActive(active: boolean): void;
 }
 
 /** コーンの層を作る。`group` をシーンに足し、合わせている間だけ `visible` にする */
@@ -56,8 +71,28 @@ export function createFloorMarkers(): FloorMarkers {
   const cones = SPOTS.map(() => createCone());
   group.add(...cones);
 
+  // 触れている間だけ出す床の面。動いているのが面で見える
+  const tint = new THREE.Mesh(
+    new THREE.PlaneGeometry(TINT_SIZE, TINT_SIZE),
+    new THREE.MeshBasicMaterial({ color: 0x0aaadc, transparent: true, opacity: 0.12, depthWrite: false })
+  );
+  tint.rotation.x = -Math.PI / 2;
+  tint.position.y = 0.002;
+  tint.visible = false;
+  group.add(tint);
+
   const raycaster = new THREE.Raycaster();
   const hit = new THREE.Vector3();
+
+  function setActive(active: boolean): void {
+    tint.visible = active;
+    for (const cone of cones) {
+      const body = cone.getObjectByName(BODY_NAME);
+      if (body instanceof THREE.Mesh && body.material instanceof THREE.MeshBasicMaterial) {
+        body.material.color.setHex(active ? ORANGE_ACTIVE : ORANGE);
+      }
+    }
+  }
 
   function update(camera: THREE.Camera): void {
     // **回したばかりのカメラは、まだ行列に反映されていない。**
@@ -73,8 +108,11 @@ export function createFloorMarkers(): FloorMarkers {
     });
   }
 
-  return { group, update };
+  return { group, update, setActive };
 }
+
+/** 触れたときに色を変える相手を探すための名前 */
+const BODY_NAME = 'cone-body';
 
 function createCone(): THREE.Object3D {
   const cone = new THREE.Group();
@@ -86,6 +124,7 @@ function createCone(): THREE.Object3D {
     new THREE.MeshBasicMaterial({ color: ORANGE })
   );
   body.position.y = HEIGHT / 2;
+  body.name = BODY_NAME;
 
   // 白い帯。高さの途中に入れると、傾いたときに帯が斜めになって分かりやすい
   const band = new THREE.Mesh(
@@ -101,6 +140,23 @@ function createCone(): THREE.Object3D {
   );
   base.position.y = 0.01;
 
-  cone.add(body, band, base);
+  // 接地の輪。床に着いていることを示す。コーンより広く取って、足元が見えるようにする
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(RADIUS * 1.9, RADIUS * 2.15, 40),
+    new THREE.MeshBasicMaterial({ color: WHITE, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.004;
+
+  // 垂直の目安。**壁の角と見比べるための物差し**なので、コーンより高く伸ばす
+  const guide = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, HEIGHT * 0.9, 0),
+      new THREE.Vector3(0, HEIGHT * 3.4, 0),
+    ]),
+    new THREE.LineBasicMaterial({ color: WHITE, transparent: true, opacity: 0.45 })
+  );
+
+  cone.add(body, band, base, ring, guide);
   return cone;
 }

@@ -8,7 +8,7 @@
  * 家具のドラッグや写真のズームとは、合わせている間だけ役を交代する（main.ts の配線）。
  */
 
-import { nudgeFloorFit } from '@/core/photoState';
+import { nudgeFloorFit, setDraggingFloor } from '@/core/photoState';
 
 /**
  * 指 1px あたり何度動かすか。
@@ -26,6 +26,7 @@ export function createFloorFitDrag(canvas: HTMLElement, isActive: () => boolean)
     if (!isActive() || !event.isPrimary) return;
     canvas.setPointerCapture(event.pointerId);
     last = { x: event.clientX, y: event.clientY };
+    setDraggingFloor(true);
   });
 
   canvas.addEventListener('pointermove', (event) => {
@@ -43,6 +44,7 @@ export function createFloorFitDrag(canvas: HTMLElement, isActive: () => boolean)
   for (const type of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
     canvas.addEventListener(type, () => {
       last = null;
+      setDraggingFloor(false);
     });
   }
 }

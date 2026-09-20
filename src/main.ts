@@ -30,6 +30,7 @@ import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
+import { createFloorHud } from '@/ui/floorHud';
 import { appState, roomScene } from '@/core/appState';
 import { photoState, photoScene } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
@@ -65,6 +66,8 @@ restoreModelLibrary();
 const viewer = createViewer(viewport);
 // 写真が無いときの案内。キャンバスと写真の層の上に重ねるので、viewer のあとに足す
 viewport.append(createPhotoEmpty());
+// 床を合わせている間の目安のバー。キャンバスの上に重ねる
+viewport.append(createFloorHud());
 const { room } = appState.get();
 
 // --- シーンを組み立てる ---
@@ -248,7 +251,10 @@ photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
 // 目印は「床を合わせている間」だけ。モードだけでなく写真の状態でも切り替わる
 photoState.subscribe(() => {
-  floorMarkers.group.visible = isPhotoMode() && photoState.get().isFittingFloor;
+  const { isFittingFloor, isDraggingFloor } = photoState.get();
+  floorMarkers.group.visible = isPhotoMode() && isFittingFloor;
+  // 触れている間は色を変え、床の面を出す（効いていることを返すため）
+  floorMarkers.setActive(isDraggingFloor);
 });
 applyMode();
 applyBackground();

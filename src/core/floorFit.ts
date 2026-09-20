@@ -38,12 +38,12 @@ export const CAMERA_HEIGHT = 1.4;
  * 動かせる範囲。人が部屋を撮るとき、真下を向いたり大きく傾けたりはしない。
  * 範囲を切っておくと、指が滑っても戻せなくならない
  */
-const LIMITS = { pitch: { min: -10, max: 45 }, roll: { min: -25, max: 25 } };
+export const FLOOR_FIT_LIMITS = { pitch: { min: -10, max: 45 }, roll: { min: -25, max: 25 } };
 
 export function clampFloorFit(fit: FloorFit): FloorFit {
   return {
-    pitchDeg: clamp(fit.pitchDeg, LIMITS.pitch.min, LIMITS.pitch.max),
-    rollDeg: clamp(fit.rollDeg, LIMITS.roll.min, LIMITS.roll.max),
+    pitchDeg: clamp(fit.pitchDeg, FLOOR_FIT_LIMITS.pitch.min, FLOOR_FIT_LIMITS.pitch.max),
+    rollDeg: clamp(fit.rollDeg, FLOOR_FIT_LIMITS.roll.min, FLOOR_FIT_LIMITS.roll.max),
   };
 }
 

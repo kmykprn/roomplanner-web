@@ -62,6 +62,12 @@ export interface PhotoState extends FurnitureSceneState {
   floorFit: FloorFit;
   /** 床を合わせている最中か。この間だけコーンを出し、指の動きを傾きに使う */
   isFittingFloor: boolean;
+  /**
+   * いま指が触れて傾きを変えている最中か。
+   * **触れていることを画面で返すため**に持つ（触っても何も変わらないと、
+   * 効いているのか分からない）。保存はしない
+   */
+  isDraggingFloor: boolean;
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -87,6 +93,7 @@ export const photoState = createStore<PhotoState>({
   view: { ...DEFAULT_PHOTO_VIEW },
   floorFit: { ...DEFAULT_FLOOR_FIT },
   isFittingFloor: false,
+  isDraggingFloor: false,
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -193,6 +200,11 @@ export function nudgeFloorFit(delta: Partial<FloorFit>): void {
       rollDeg: current.rollDeg + (delta.rollDeg ?? 0),
     }),
   });
+}
+
+/** 指が触れている／離れた。画面の見せ方を変えるために使う */
+export function setDraggingFloor(isDraggingFloor: boolean): void {
+  if (photoState.get().isDraggingFloor !== isDraggingFloor) photoState.set({ isDraggingFloor });
 }
 
 /** 床の傾きを直に入れる（読み戻しと、やり直し用） */
