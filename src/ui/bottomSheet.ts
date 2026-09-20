@@ -163,7 +163,7 @@ export function createBottomSheet(container: HTMLElement): void {
           ['rotateLeft', '左に回す', () => rotate(id, -ROTATION_STEP)],
           ['rotateRight', '右に回す', () => rotate(id, ROTATION_STEP)],
         ], (item) => formatAngle(item.rotationY), {
-          // ボタンは 15° ずつ。ちょうど 90° のようなキリのいい向きに合わせるのはボタンが早い。
+          // ボタンは 15° ずつ。ちょうど 90° のようなキリのいい向きに合わせるのはボタンが速い。
           // バーは 1° ずつで、その間の向きに合わせたいときと、一気に回したいときのためのもの
           label: '向きをバーで変える',
           min: 0,
