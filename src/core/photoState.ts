@@ -68,6 +68,14 @@ export interface PhotoState extends FurnitureSceneState {
    * 効いているのか分からない）。保存はしない
    */
   isDraggingFloor: boolean;
+  /**
+   * 床を合わせる板を、画面のどこに置いているか（-1〜+1 の座標。下が負）。
+   *
+   * **タップした場所に板が来る。** 触った画素から伸ばした視線が床に当たった場所に置くので、
+   * タップした点では板が必ず床に触れて見える。傾きのずれは、板の大きさと形のほうに出る。
+   * 散らかっていない床へ逃がしたり、何か所かで確かめたりするために動かせる
+   */
+  floorProbe: { x: number; y: number };
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -94,6 +102,7 @@ export const photoState = createStore<PhotoState>({
   floorFit: { ...DEFAULT_FLOOR_FIT },
   isFittingFloor: false,
   isDraggingFloor: false,
+  floorProbe: { x: 0, y: -0.45 },
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -205,6 +214,16 @@ export function nudgeFloorFit(delta: Partial<FloorFit>): void {
 /** 指が触れている／離れた。画面の見せ方を変えるために使う */
 export function setDraggingFloor(isDraggingFloor: boolean): void {
   if (photoState.get().isDraggingFloor !== isDraggingFloor) photoState.set({ isDraggingFloor });
+}
+
+/** 板を置く場所を変える。画面の座標（-1〜+1）で受ける */
+export function setFloorProbe(x: number, y: number): void {
+  photoState.set({ floorProbe: { x: clampProbe(x), y: clampProbe(y) } });
+}
+
+/** 画面の外に出すと板が見えなくなるので、少し内側に留める */
+function clampProbe(value: number): number {
+  return Math.min(0.9, Math.max(-0.9, value));
 }
 
 /** 床の傾きを直に入れる（読み戻しと、やり直し用） */

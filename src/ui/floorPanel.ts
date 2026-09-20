@@ -6,6 +6,10 @@
  * 目測ではなく比較で判断できる。合わせるのは前後と左右の傾きだけで、
  * 床の上での向き（ヨー）は出てこない。
  *
+ * 板は床をタップした場所へ移せる。**タップした点には必ず板の中心が来る**ので、
+ * そこでは板が浮かない。散らかっていない床へ逃がしたり、何か所かで確かめたりできる
+ * （傾きが違うと、手前で合っていても奥で破綻する）。
+ *
  * 数字は出さない。「何度にすればよいか」は誰にも分からないので、
  * 見た目がしっくりくるかどうかで決めてもらう。
  */
@@ -14,7 +18,7 @@ import { photoState, setFittingFloor, setFloorFit } from '@/core/photoState';
 import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
 
 const NOTE = '板が床にぴったり寝て見えるまで、画面を指でなぞって調整してください';
-const HOW = '上下になぞる … 手前と奥の傾き　／　左右になぞる … 左右の傾き';
+const HOW = '床をタップ … その場所に板を移す　／　板の外をなぞる … 傾きを変える';
 
 export function createFloorPanel(): HTMLElement {
   const panel = document.createElement('div');

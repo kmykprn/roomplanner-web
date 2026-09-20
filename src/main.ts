@@ -100,8 +100,11 @@ createFurnitureDrag(
   () => !photoState.get().isMasking && !photoState.get().isFittingFloor
 );
 
-// 床を合わせる。合わせている姿のときだけ、1 本指のなぞりが傾きになる
-createFloorFitDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isFittingFloor);
+// 床を合わせる。合わせている姿のときだけ効く。板の上なら板が動き、外なら傾きが変わる
+createFloorFitDrag(viewer.canvas, {
+  isActive: () => isPhotoMode() && photoState.get().isFittingFloor,
+  hitsSlab: (point) => floorMarkers.hitsSlab(viewer.camera, point),
+});
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
 createMaskPaint(viewer.canvas);
@@ -242,8 +245,8 @@ function applyPhotoView(): void {
   viewer.setContentAspect(backgroundAspect);
   applyPhotoCamera(viewer.camera, floorFit);
   viewer.setPhotoView(view);
-  // コーンは画面の決まった場所に立てる。カメラを動かしたあとに置き直す
-  floorMarkers.update(viewer.camera);
+  // 板は画面の指した場所に置く。カメラを動かしたあとに置き直す
+  floorMarkers.update(viewer.camera, photoState.get().floorProbe);
 }
 
 modeState.subscribe(applyMode);

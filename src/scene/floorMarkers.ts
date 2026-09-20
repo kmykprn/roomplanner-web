@@ -21,9 +21,6 @@ import * as THREE from 'three';
 /** 板の大きさ（m）。畳の半分ほど。大きすぎると床が見えず、小さいと傾きが読めない */
 const SLAB = { width: 0.9, depth: 0.6, thickness: 0.06 };
 
-/** 画面のどこに置くか（-1〜+1 の座標。下が負）。床が写っていそうな下半分の真ん中 */
-const SPOT: [number, number] = [0, -0.45];
-
 /**
  * 画面の上での大きさをそろえるための、基準の距離（m）。
  *
@@ -49,8 +46,10 @@ const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 export interface FloorMarkers {
   group: THREE.Group;
-  /** カメラの向きに合わせて置き直す。傾きを変えるたびに呼ぶ */
-  update(camera: THREE.Camera): void;
+  /** カメラの向きと、板を置く場所に合わせて置き直す。どちらかが変わるたびに呼ぶ */
+  update(camera: THREE.Camera, probe: { x: number; y: number }): void;
+  /** その画面の点が板の上か。指の動きを「板を動かす」と「傾きを変える」に振り分けるのに使う */
+  hitsSlab(camera: THREE.Camera, point: { x: number; y: number }): boolean;
   /** 指が触れているかを伝える。触れている間は色を変え、床の面を出す */
   setActive(active: boolean): void;
 }
@@ -90,12 +89,12 @@ export function createFloorMarkers(): FloorMarkers {
   const raycaster = new THREE.Raycaster();
   const hit = new THREE.Vector3();
 
-  function update(camera: THREE.Camera): void {
+  function update(camera: THREE.Camera, probe: { x: number; y: number }): void {
     // **回したばかりのカメラは、まだ行列に反映されていない。**
     // 更新せずに視線を出すと、1 つ前の向きで位置を決めてしまい、
     // 傾けるたびに板が画面の上へずれていく
     camera.updateMatrixWorld(true);
-    raycaster.setFromCamera(new THREE.Vector2(SPOT[0], SPOT[1]), camera);
+    raycaster.setFromCamera(new THREE.Vector2(probe.x, probe.y), camera);
     // 床より上を向いている視線は当たらない。そのときは板を出さない
     const found = raycaster.ray.intersectPlane(FLOOR, hit);
     marker.visible = Boolean(found);
@@ -105,10 +104,17 @@ export function createFloorMarkers(): FloorMarkers {
     marker.scale.setScalar(camera.position.distanceTo(hit) / REFERENCE_DISTANCE);
   }
 
+  function hitsSlab(camera: THREE.Camera, point: { x: number; y: number }): boolean {
+    if (!marker.visible) return false;
+    camera.updateMatrixWorld(true);
+    raycaster.setFromCamera(new THREE.Vector2(point.x, point.y), camera);
+    return raycaster.intersectObject(slab, false).length > 0;
+  }
+
   function setActive(active: boolean): void {
     tint.visible = active;
     slab.material.color.setHex(active ? ACTIVE : IDLE);
   }
 
-  return { group, update, setActive };
+  return { group, update, setActive, hitsSlab };
 }
