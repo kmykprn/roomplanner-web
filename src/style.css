@@ -1308,3 +1308,46 @@ body {
 .engine__note {
   margin: 0;
 }
+
+/*
+ * 床を合わせている間の目安。キャンバスの上、写真の下端あたりに重ねる。
+ * 触っても何も変わらないと効いているか分からないので、動いていることを返す
+ */
+.floor-hud {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  gap: 6px;
+  pointer-events: none; /* 指の操作は下のキャンバスへ通す */
+}
+
+.floor-hud__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.floor-hud__track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+
+.floor-hud__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.floor-hud__label {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  /* 写真の明るい場所に重なっても読めるように */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}

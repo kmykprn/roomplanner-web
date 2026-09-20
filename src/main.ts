@@ -30,6 +30,7 @@ import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
+import { createFloorHud } from '@/ui/floorHud';
 import { appState, roomScene } from '@/core/appState';
 import { photoState, photoScene } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
@@ -65,6 +66,8 @@ restoreModelLibrary();
 const viewer = createViewer(viewport);
 // 写真が無いときの案内。キャンバスと写真の層の上に重ねるので、viewer のあとに足す
 viewport.append(createPhotoEmpty());
+// 床を合わせている間の目安のバー。キャンバスの上に重ねる
+viewport.append(createFloorHud());
 const { room } = appState.get();
 
 // --- シーンを組み立てる ---
@@ -72,7 +75,7 @@ const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
 const roomFurniture = createFurnitureLayer();
 const photoFurniture = createFurnitureLayer();
-// 床を合わせるときの目印。合わせている間だけ出す
+// 床を合わせるときの板。合わせている間だけ出す
 const floorMarkers = createFloorMarkers();
 viewer.scene.add(
   roomObjects.group,
@@ -97,8 +100,11 @@ createFurnitureDrag(
   () => !photoState.get().isMasking && !photoState.get().isFittingFloor
 );
 
-// 床を合わせる。合わせている姿のときだけ、1 本指のなぞりが傾きになる
-createFloorFitDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isFittingFloor);
+// 床を合わせる。合わせている姿のときだけ効く。板の上なら板が動き、外なら傾きが変わる
+createFloorFitDrag(viewer.canvas, {
+  isActive: () => isPhotoMode() && photoState.get().isFittingFloor,
+  hitsSlab: (point) => floorMarkers.hitsSlab(viewer.camera, point),
+});
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
 createMaskPaint(viewer.canvas);
@@ -239,8 +245,8 @@ function applyPhotoView(): void {
   viewer.setContentAspect(backgroundAspect);
   applyPhotoCamera(viewer.camera, floorFit);
   viewer.setPhotoView(view);
-  // コーンは画面の決まった場所に立てる。カメラを動かしたあとに置き直す
-  floorMarkers.update(viewer.camera);
+  // 板は画面の指した場所に置く。カメラを動かしたあとに置き直す
+  floorMarkers.update(viewer.camera, photoState.get().floorProbe);
 }
 
 modeState.subscribe(applyMode);
@@ -248,7 +254,10 @@ photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
 // 目印は「床を合わせている間」だけ。モードだけでなく写真の状態でも切り替わる
 photoState.subscribe(() => {
-  floorMarkers.group.visible = isPhotoMode() && photoState.get().isFittingFloor;
+  const { isFittingFloor, isDraggingFloor } = photoState.get();
+  floorMarkers.group.visible = isPhotoMode() && isFittingFloor;
+  // 触れている間は色を変え、床の面を出す（効いていることを返すため）
+  floorMarkers.setActive(isDraggingFloor);
 });
 applyMode();
 applyBackground();
