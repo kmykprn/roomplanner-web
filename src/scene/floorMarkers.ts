@@ -21,6 +21,15 @@ import { loadFurnitureModel } from '@/scene/modelLoader';
 const SAMPLE = { url: chairModel, size: [0.46, 0.9, 0.5] as [number, number, number] };
 
 /**
+ * 見本を床の上で回しておく角度。
+ *
+ * **正面から見せない。** 真正面だと後ろの脚が前の脚に隠れて、床に着いている点が
+ * 2 つしか見えない。斜めにすると 4 本とも見え、接地点が四隅に散るので、
+ * 床に乗っているかどうかが読みやすくなる
+ */
+const SAMPLE_TURN = Math.PI / 4;
+
+/**
  * 画面の上での大きさをそろえるための、基準の距離（m）。
  *
  * **傾けても椅子の大きさが変わらないようにする。** 画面の同じ点を指していても、
@@ -57,6 +66,7 @@ export function createFloorMarkers(): FloorMarkers {
   group.visible = false;
 
   const marker = new THREE.Group();
+  marker.rotation.y = SAMPLE_TURN;
 
   /**
    * 指で掴む相手。**見えない箱にする。**
