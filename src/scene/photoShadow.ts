@@ -13,6 +13,12 @@
  * 床（y=0）に落とすと、影だけが背景のずっと奥に取り残されて見える。
  * そこで、**家具ごとに「その家具が乗っている面」を用意して、そこへ影を落とす。**
  *
+ * **面はどちらか一方だけ出す。** 両方出すと、浮いた家具が足元と床の 2 か所に
+ * 影を落とす。足元のほうは合っているが、床のほうが見当違いの場所に出る。
+ *
+ *   床を合わせている間 … 見本は必ず床の上にいるので、床の面だけ
+ *   ふだんの家具配置   … 家具は床の上にいるとは限らないので、家具ごとの面だけ
+ *
  * 決めていないものが 1 つだけある。**写真の中で光がどこから来ているか。**
  * ここでは左斜め上から当てている。
  */
@@ -47,19 +53,18 @@ const CATCHER_SIZE = 40;
  */
 const ITEM_CATCHER_SIZE = 3;
 
-/** これより高く浮いている家具にだけ、専用の面を敷く（床に乗っているものは床の面で足りる） */
-const FLOATING_THRESHOLD = 0.01;
-
 /** 影を計算する範囲（m）。狭いと影が切れ、広いと同じ解像度を配るのでぼやける */
 const SHADOW_EXTENT = 8;
 
 export interface PhotoShadow {
   group: THREE.Group;
   /**
-   * 宙に浮いている家具の足元に、影を受ける面を敷き直す。
-   * 家具が動くたびに呼ぶ
+   * 影を受ける面を敷き直す。家具が動くたび、姿が変わるたびに呼ぶ。
+   *
+   * @param fittingFloor 床を合わせている最中か。true なら床の面だけを出す
+   * @param itemPositions 家具の足元の位置。床を合わせている間は使わない
    */
-  setFloatingItems(positions: [number, number, number][]): void;
+  setGrounds(fittingFloor: boolean, itemPositions: [number, number, number][]): void;
 }
 
 export function createPhotoShadow(): PhotoShadow {
@@ -101,10 +106,11 @@ export function createPhotoShadow(): PhotoShadow {
    */
   const itemCatchers: THREE.Mesh[] = [];
 
-  function setFloatingItems(positions: [number, number, number][]): void {
-    const floating = positions.filter(([, y]) => y > FLOATING_THRESHOLD);
+  function setGrounds(fittingFloor: boolean, itemPositions: [number, number, number][]): void {
+    catcher.visible = fittingFloor;
+    const grounds = fittingFloor ? [] : itemPositions;
 
-    while (itemCatchers.length < floating.length) {
+    while (itemCatchers.length < grounds.length) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(ITEM_CATCHER_SIZE, ITEM_CATCHER_SIZE),
         // 材質は床の面と分ける。共有すると、濃さを変えたときに両方が動いてしまう
@@ -117,11 +123,11 @@ export function createPhotoShadow(): PhotoShadow {
     }
 
     itemCatchers.forEach((mesh, index) => {
-      const at = floating[index];
+      const at = grounds[index];
       mesh.visible = Boolean(at);
       if (at) mesh.position.set(at[0], at[1], at[2]);
     });
   }
 
-  return { group, setFloatingItems };
+  return { group, setGrounds };
 }

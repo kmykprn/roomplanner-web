@@ -264,18 +264,14 @@ photoState.subscribe(applyPhotoView);
  * **合わせている間は家具を隠す。** 傾きを変えるとカメラが回るので、置いてある家具が
  * 画面の中を大きく動く。見本の椅子と床を見比べたいときに、それが目の邪魔になる
  */
-/** 浮いている家具の足元に、影を受ける面を敷き直す */
-function applyShadowGrounds(): void {
-  photoShadow.setFloatingItems(photoState.get().furniture.map((item) => item.position));
-}
-photoState.subscribe(applyShadowGrounds);
-
 function applyFloorFitting(): void {
   const { isFittingFloor, isDraggingFloor } = photoState.get();
   const fitting = isPhotoMode() && isFittingFloor;
 
   floorMarkers.group.visible = fitting;
   photoFurniture.group.visible = isPhotoMode() && !fitting;
+  // 影を受ける面は、床を合わせている間は床のもの、ふだんは家具ごとのもの
+  photoShadow.setGrounds(fitting, photoState.get().furniture.map((item) => item.position));
   // 触れている間は色を変え、床の面を出す（効いていることを返すため）
   floorMarkers.setActive(isDraggingFloor);
 }
