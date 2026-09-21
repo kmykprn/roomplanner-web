@@ -21,7 +21,16 @@ export interface FurnitureLayer {
   group: THREE.Group;
   /** レイキャスト対象にする家具本体のメッシュ一覧 */
   pickables(): THREE.Object3D[];
-  sync(furniture: PlacedFurniture[], selectedId: string | null): void;
+  /**
+   * 状態をシーンに映す。
+   * @param displayScale 家具ごとの見た目の倍率。写真モードで「写真の中でこの大きさに
+   *   写るべき」を実寸に掛ける（core/photoMeasure.ts）。省略すれば実寸のまま
+   */
+  sync(
+    furniture: PlacedFurniture[],
+    selectedId: string | null,
+    displayScale?: (item: PlacedFurniture) => number
+  ): void;
   /** 切り抜きの板をカメラのほうへ向ける。毎フレーム呼ぶ。板が無ければ何もしない */
   faceCamera(camera: THREE.Camera): void;
 }
@@ -30,7 +39,11 @@ export function createFurnitureLayer(): FurnitureLayer {
   const group = new THREE.Group();
   const objects = new Map<string, THREE.Group>();
 
-  function sync(furniture: PlacedFurniture[], selectedId: string | null): void {
+  function sync(
+    furniture: PlacedFurniture[],
+    selectedId: string | null,
+    displayScale: (item: PlacedFurniture) => number = () => 1
+  ): void {
     const liveIds = new Set(furniture.map((item) => item.id));
 
     // 状態から消えた家具をシーンからも取り除く
@@ -56,7 +69,7 @@ export function createFurnitureLayer(): FurnitureLayer {
       object.rotation.set(item.pitch ?? 0, item.rotationY, item.roll ?? 0);
       // 板の傾き。板はカメラを向くときに毎フレーム向きを決め直すので、そこで一緒に効かせる
       object.userData.tilt = item.tilt ?? 0;
-      applySize(object, item.size);
+      applySize(object, item.size, displayScale(item));
 
       // 選択枠は子として持たせてあるので、表示を切り替えるだけでよい
       const outline = object.getObjectByName('outline');
@@ -89,9 +102,9 @@ export function createFurnitureLayer(): FurnitureLayer {
  * 大きさとの比を group に掛けるだけで足りる。原点が足元なので、拡大しても
  * 足は床に付いたまま
  */
-function applySize(object: THREE.Group, size: [number, number, number]): void {
+function applySize(object: THREE.Group, size: [number, number, number], displayScale: number): void {
   const builtWidth = object.userData.builtWidth as number;
-  object.scale.setScalar(size[0] / builtWidth);
+  object.scale.setScalar((size[0] / builtWidth) * displayScale);
 }
 
 function createFurnitureObject(item: PlacedFurniture): THREE.Group {

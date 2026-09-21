@@ -22,6 +22,7 @@ import {
   type PhotoView,
 } from '@/core/photoView';
 import { clampFloorFit, DEFAULT_FLOOR_FIT, type FloorFit } from '@/core/floorFit';
+import type { FloorMeasure } from '@/core/photoMeasure';
 
 /**
  * 背景写真の読み込み具合。
@@ -78,6 +79,16 @@ export interface PhotoState extends FurnitureSceneState {
   floorProbe: { x: number; y: number };
 
   /**
+   * 写真の中で測った、床の上にある物の幅（core/photoMeasure.ts）。写真ごとに持つ。
+   * 1 つあれば家具の見た目の大きさが決まり、2 つあれば仮定が消える
+   */
+  measures: FloorMeasure[];
+  /** 大きさの基準を測っている最中か。この間はタップが「端を押す」になる */
+  isMeasuring: boolean;
+  /** 測りかけの端。0〜2 点。2 点そろったら幅の入力を待つ */
+  measureDraft: PhotoPoint[];
+
+  /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
    *
    * 塗った形をそのまま画像で持つ。写真をこの形で切り抜いて 3D の上に重ねると、
@@ -103,6 +114,9 @@ export const photoState = createStore<PhotoState>({
   isFittingFloor: false,
   isDraggingFloor: false,
   floorProbe: { x: 0, y: -0.45 },
+  measures: [],
+  isMeasuring: false,
+  measureDraft: [],
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -226,6 +240,41 @@ function clampProbe(value: number): number {
   return Math.min(0.9, Math.max(-0.9, value));
 }
 
+/** 大きさの基準を測る姿に入る・出る。出るときは測りかけを捨てる */
+export function setMeasuring(isMeasuring: boolean): void {
+  if (photoState.get().isMeasuring === isMeasuring) return;
+  photoState.set({ isMeasuring, measureDraft: [] });
+}
+
+/** 測る物の端を 1 点押した。2 点目で線になり、幅の入力を待つ */
+export function addMeasurePoint(point: PhotoPoint): void {
+  const { measureDraft } = photoState.get();
+  if (measureDraft.length >= 2) return;
+  photoState.set({ measureDraft: [...measureDraft, point] });
+}
+
+export function clearMeasureDraft(): void {
+  photoState.set({ measureDraft: [] });
+}
+
+/** 測りかけの 2 点に幅を付けて、測定として確定する */
+export function addMeasure(metres: number): void {
+  const { measureDraft, measures } = photoState.get();
+  if (measureDraft.length !== 2 || !(metres > 0)) return;
+  photoState.set({
+    measures: [...measures, { a: measureDraft[0], b: measureDraft[1], metres }],
+    measureDraft: [],
+  });
+}
+
+export function removeMeasure(index: number): void {
+  photoState.set({ measures: photoState.get().measures.filter((_, i) => i !== index) });
+}
+
+export function clearMeasures(): void {
+  photoState.set({ measures: [], measureDraft: [] });
+}
+
 /** 床の傾きを直に入れる（読み戻しと、やり直し用） */
 export function setFloorFit(fit: FloorFit): void {
   photoState.set({ floorFit: clampFloorFit(fit) });
@@ -278,7 +327,8 @@ export function setPhotoView(view: PhotoView): void {
 function replaceBackgroundUrl(url: string | null): void {
   const previous = photoState.get().backgroundUrl;
   if (previous) URL.revokeObjectURL(previous);
-  photoState.set({ backgroundUrl: url });
+  // 前の写真で測った長さは、別の写真では意味がない
+  photoState.set({ backgroundUrl: url, measures: [], measureDraft: [] });
 }
 
 /** 実際に画像として読めるところまで確かめる。読めなければ例外になる */

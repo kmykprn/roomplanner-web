@@ -19,7 +19,7 @@ import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
-import { photoState, setFittingFloor, setMasking } from '@/core/photoState';
+import { photoState, setFittingFloor, setMasking, setMeasuring } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
 
@@ -185,6 +185,7 @@ export function createBottomSheet(container: HTMLElement): void {
     if (activeTab !== 'background') {
       setMasking(false);
       setFittingFloor(false);
+      setMeasuring(false);
     }
 
     tabBar.replaceChildren(

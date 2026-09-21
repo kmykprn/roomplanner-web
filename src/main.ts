@@ -26,6 +26,11 @@ import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createFloorFitDrag } from '@/interaction/floorFitDrag';
+import { createMeasureTap } from '@/interaction/measureTap';
+import { createMeasureOverlay } from '@/ui/measureOverlay';
+import { perMetreAt, solveFloorScale } from '@/core/photoMeasure';
+import { viewOrigin } from '@/core/photoView';
+import type { PlacedFurniture } from '@/config/furniture';
 import { createFloorMarkers } from '@/scene/floorMarkers';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
@@ -99,9 +104,18 @@ createFurnitureDrag(
       ? { scene: photoScene, layer: photoFurniture, surface: 'screen' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
-  // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
-  () => !photoState.get().isMasking && !photoState.get().isFittingFloor
+  // 隠す場所を塗っている間・床を合わせている間・大きさの基準を測っている間は、
+  // 1 本指の動きをそちらへ渡す
+  () => {
+    const { isMasking, isFittingFloor, isMeasuring } = photoState.get();
+    return !isMasking && !isFittingFloor && !isMeasuring;
+  }
 );
+
+// 大きさの基準を測る。測っている姿のときだけ、タップが「端を押す」になる
+createMeasureTap(viewer.canvas, () => isPhotoMode() && photoState.get().isMeasuring);
+// 押した点と測った線を写真の上に描く
+createMeasureOverlay(viewer.overlayLayer);
 
 // 床を合わせる。合わせている姿のときだけ効く。椅子の上なら椅子が動き、外なら傾きが変わる
 createFloorFitDrag(viewer.canvas, {
@@ -135,7 +149,8 @@ function applyInterior(state: { room: RoomSize; interior: Interior }): void {
 }
 applyInterior(appState.get());
 appState.subscribe(applyInterior);
-photoState.subscribe((state) => photoFurniture.sync(state.furniture, state.selectedId));
+// 写真モードの家具は applyPhotoView の中で映す。見た目の大きさがカメラの向きに
+// 依存するので、カメラを置き直したあとでないと正しい倍率が出ない
 
 // subscribe は登録するだけで、その場では呼ばれない。
 // 保存した部屋を読み戻したときは変化が起きないので、ここで一度だけ描く。
@@ -246,13 +261,45 @@ function swapMaskImage(url: string | null): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, view, floorFit } = photoState.get();
+  const { backgroundAspect, view, floorFit, furniture, selectedId } = photoState.get();
 
   viewer.setContentAspect(backgroundAspect);
   applyPhotoCamera(viewer.camera, floorFit);
   viewer.setPhotoView(view);
+  photoFurniture.sync(furniture, selectedId, photoDisplayScale);
   // 見本の椅子は画面の指した場所に置く。カメラを動かしたあとに置き直す
   floorMarkers.update(viewer.camera, photoState.get().floorProbe);
+}
+
+/**
+ * 写真の中でこの家具が写るべき大きさを、実寸に対する倍率で返す。
+ *
+ * 測った長さから「足元の高さでの 1m の大きさ」が分かる（core/photoMeasure.ts）。
+ * いまの描き方での 1m の大きさと比べて、その比を家具に掛ける。
+ * 家具の実寸（m）はそのままなので、測定を外せば元に戻る
+ */
+const footPoint = new THREE.Vector3();
+const headPoint = new THREE.Vector3();
+function photoDisplayScale(item: PlacedFurniture): number {
+  const { measures, backgroundAspect, view } = photoState.get();
+  if (!backgroundAspect || measures.length === 0) return 1;
+  const floorScale = solveFloorScale(measures, backgroundAspect);
+  if (!floorScale) return 1;
+
+  const camera = viewer.camera;
+  camera.updateMatrixWorld(true);
+  // 足元と、その 1m 真上を画面に映す。画面の座標は見えている矩形の中の割合なので、
+  // 寄っている分を戻して写真の中の割合にする
+  footPoint.set(...item.position).project(camera);
+  headPoint.set(item.position[0], item.position[1] + 1, item.position[2]).project(camera);
+  const footY = viewOrigin(view).y + (1 - footPoint.y) / 2 / view.scale;
+  // 画面の座標は上が正。1m 上の点のほうが大きい値になる
+  const ownPerMetre = (headPoint.y - footPoint.y) / 2 / view.scale;
+  if (!(ownPerMetre > 0)) return 1;
+
+  const wanted = perMetreAt(floorScale, footY) / ownPerMetre;
+  // 地平線のすぐ近くや測り間違いで極端な値が出ても、家具を見失わないように止める
+  return Math.min(20, Math.max(0.05, wanted));
 }
 
 modeState.subscribe(applyMode);

@@ -146,6 +146,19 @@ body {
   display: block;
 }
 
+/*
+ * 写真の上に線や点を描く層。いちばん上に重ねる。
+ * 指の操作は下のキャンバスが受ける（この層は絵だけ）
+ */
+.viewport__overlay {
+  display: none;
+  pointer-events: none;
+}
+
+.viewport--photo .viewport__overlay.is-showing {
+  display: block;
+}
+
 /* 指定している間は、指定した場所に色を被せて見えるようにする（切り抜きの内側だけに乗る） */
 .viewport__mask.is-editing {
   box-shadow: inset 0 0 0 100vmax rgba(10, 126, 164, 0.4);
@@ -1310,4 +1323,59 @@ body {
 
 .engine__note {
   margin: 0;
+}
+
+/* 「大きさの基準」のパネル。案内・幅の入力・測った一覧を縦に積む */
+.measure {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  align-content: start;
+}
+
+.measure[hidden] {
+  display: none;
+}
+
+.measure__entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.measure__entry[hidden] {
+  display: none;
+}
+
+.measure__input {
+  width: 6em;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px; /* iOS で拡大されないように 16px 以上 */
+}
+
+.measure__unit {
+  color: #7a8388;
+  font-size: 13px;
+}
+
+.measure__list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.measure__list[hidden] {
+  display: none;
+}
+
+.measure__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
 }

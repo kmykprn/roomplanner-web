@@ -16,12 +16,14 @@ import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/
 import { readBackground, readMask } from '@/platform/backgroundStore';
 import { normalizeFloorFit } from '@/core/floorFit';
 import type { PlacedFurniture } from '@/config/furniture';
+import type { FloorMeasure } from '@/core/photoMeasure';
+import type { PhotoPoint } from '@/core/photoView';
 
 const STORAGE_KEY = 'roomplanner.room';
 const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 
 /** localStorage に残す写真モードの項目。写真そのものは大きいので IndexedDB（backgroundStore.ts） */
-type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName' | 'floorFit'>;
+type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'measures'>;
 
 /**
  * 保存した状態を読み戻す。**シーンを組み立てる前**に呼ぶ。
@@ -58,6 +60,20 @@ function withBaseSize(furniture: unknown): PlacedFurniture[] {
   );
 }
 
+/** 壊れた値が保存されていても起動できるように、形の合うものだけ残す */
+function normalizeMeasures(value: unknown): FloorMeasure[] {
+  if (!Array.isArray(value)) return [];
+  const isPoint = (p: unknown): p is PhotoPoint =>
+    typeof p === 'object' && p !== null &&
+    Number.isFinite((p as PhotoPoint).x) && Number.isFinite((p as PhotoPoint).y);
+  return value.filter(
+    (m): m is FloorMeasure =>
+      typeof m === 'object' && m !== null &&
+      isPoint((m as FloorMeasure).a) && isPoint((m as FloorMeasure).b) &&
+      Number.isFinite((m as FloorMeasure).metres) && (m as FloorMeasure).metres > 0
+  );
+}
+
 /**
  * 写真モードを読み戻す。
  *
@@ -74,6 +90,7 @@ export function restorePhoto(): void {
     view: saved.view ?? photoState.get().view,
     // 壊れた値が入っていても起動できるよう、読めなければ既定の傾きに戻す
     floorFit: normalizeFloorFit(saved.floorFit),
+    measures: normalizeMeasures(saved.measures),
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
   });
@@ -128,6 +145,7 @@ export function persistPhotoOnChange(): void {
       furniture: state.furniture,
       view: state.view,
       floorFit: state.floorFit,
+      measures: state.measures,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {
