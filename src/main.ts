@@ -18,6 +18,7 @@ import { buildInteriorTextures } from '@/scene/interiorTextures';
 import type { RoomSize } from '@/config/room';
 import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
+import { createPhotoShadow } from '@/scene/photoShadow';
 import { createFurnitureLayer } from '@/scene/furniture';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
@@ -73,14 +74,18 @@ const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
 const roomFurniture = createFurnitureLayer();
 const photoFurniture = createFurnitureLayer();
-// 床を合わせるときの板。合わせている間だけ出す
+// 床を合わせるときの見本の椅子。合わせている間だけ出す
 const floorMarkers = createFloorMarkers();
+// 写真の上に落ちる影。写真モードのときだけ出す
+const photoShadow = createPhotoShadow();
+const lighting = createLighting(room);
 viewer.scene.add(
   roomObjects.group,
-  createLighting(room),
+  lighting.group,
   roomFurniture.group,
   photoFurniture.group,
-  floorMarkers.group
+  floorMarkers.group,
+  photoShadow
 );
 
 // --- 操作を繋ぐ ---
@@ -98,10 +103,10 @@ createFurnitureDrag(
   () => !photoState.get().isMasking && !photoState.get().isFittingFloor
 );
 
-// 床を合わせる。合わせている姿のときだけ効く。板の上なら板が動き、外なら傾きが変わる
+// 床を合わせる。合わせている姿のときだけ効く。椅子の上なら椅子が動き、外なら傾きが変わる
 createFloorFitDrag(viewer.canvas, {
   isActive: () => isPhotoMode() && photoState.get().isFittingFloor,
-  hitsSlab: (point) => floorMarkers.hitsSlab(viewer.camera, point),
+  hitsMarker: (point) => floorMarkers.hitsMarker(viewer.camera, point),
 });
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
@@ -146,6 +151,10 @@ function applyMode(): void {
 
   roomObjects.group.visible = !photo;
   roomFurniture.group.visible = !photo;
+  // 影を受ける面は写真モードだけ。部屋モードには本物の床があり、そちらが影を受ける。
+  // 部屋の主光源は写真モードでは影を落とさない（向きの違う影が 2 つ重なるため）
+  photoShadow.visible = photo;
+  lighting.setCastShadow(!photo);
   applyFloorFitting();
 
   // 写真モードは背景を塗らない。塗ると CSS の写真が隠れる
@@ -242,7 +251,7 @@ function applyPhotoView(): void {
   viewer.setContentAspect(backgroundAspect);
   applyPhotoCamera(viewer.camera, floorFit);
   viewer.setPhotoView(view);
-  // 板は画面の指した場所に置く。カメラを動かしたあとに置き直す
+  // 見本の椅子は画面の指した場所に置く。カメラを動かしたあとに置き直す
   floorMarkers.update(viewer.camera, photoState.get().floorProbe);
 }
 
@@ -253,7 +262,7 @@ photoState.subscribe(applyPhotoView);
  * 床を合わせている間の見せ方。モードと、合わせているかどうかの両方で変わる。
  *
  * **合わせている間は家具を隠す。** 傾きを変えるとカメラが回るので、置いてある家具が
- * 画面の中を大きく動く。板と床を見比べたいときに、それが目の邪魔になる
+ * 画面の中を大きく動く。見本の椅子と床を見比べたいときに、それが目の邪魔になる
  */
 function applyFloorFitting(): void {
   const { isFittingFloor, isDraggingFloor } = photoState.get();
