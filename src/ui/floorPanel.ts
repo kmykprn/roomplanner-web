@@ -1,13 +1,13 @@
 /**
  * 「床を合わせる」姿。写真モードの「背景」タブから入る。
  *
- * 画面には薄い板が 1 枚置かれる（scene/floorMarkers.ts）。利用者はそれを見て、
- * **床に寝ていないなら指で直す**。板の辺を床の目地や壁際の線と見比べられるので、
- * 目測ではなく比較で判断できる。合わせるのは前後と左右の傾きだけで、
- * 床の上での向き（ヨー）は出てこない。
+ * 画面には見本の椅子が 1 脚置かれる（scene/floorMarkers.ts）。利用者はそれを見て、
+ * **まっすぐ立って見えないなら指で直す**。椅子は誰でも正しい姿を知っているので、
+ * 目測ではなく「見慣れた形かどうか」で判断できる。脚の下に落ちる影も手がかりになる。
+ * 合わせるのは前後と左右の傾きだけで、床の上での向き（ヨー）は出てこない。
  *
- * 板は床をタップした場所へ移せる。**タップした点には必ず板の中心が来る**ので、
- * そこでは板が浮かない。散らかっていない床へ逃がしたり、何か所かで確かめたりできる
+ * 椅子は床をタップした場所へ移せる。**タップした点に椅子が立つ**ので、そこでは
+ * 浮かない。散らかっていない床へ逃がしたり、何か所かで確かめたりできる
  * （傾きが違うと、手前で合っていても奥で破綻する）。
  *
  * 数字は出さない。「何度にすればよいか」は誰にも分からないので、
@@ -18,8 +18,8 @@ import { photoState, setFittingFloor, setFloorFit } from '@/core/photoState';
 import { DEFAULT_FLOOR_FIT, FLOOR_FIT_LIMITS, type FloorFit } from '@/core/floorFit';
 import { createSliderRow } from '@/ui/sliderRow';
 
-const NOTE = '板が床にぴったり寝て見えるまで、下のバーで調整してください';
-const HOW = '床をタップ … その場所に板を移す';
+const NOTE = '椅子がまっすぐ立って、脚が床に着いて見えるまで、下のバーで調整してください';
+const HOW = '床をタップ … その場所へ椅子を移す';
 
 export function createFloorPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -46,7 +46,7 @@ export function createFloorPanel(): HTMLElement {
   how.textContent = HOW;
 
   // 傾きはここで変える。**写真の上には置かない。**
-  // 写真の上に重ねると、指が板に取られて動かせない（板を掴む操作と同じ場所になるため）
+  // 写真の上に重ねると、指が椅子に取られて動かせない（椅子を掴む操作と同じ場所になるため）
   const pitch = createTiltRow('前後の傾き', ['手前', '奥'], FLOOR_FIT_LIMITS.pitch, (value) =>
     updateFit({ pitchDeg: value })
   );

@@ -12,10 +12,22 @@
 import * as THREE from 'three';
 import type { RoomSize } from '@/config/room';
 
-export function createLighting(size: RoomSize): THREE.Group {
+export interface Lighting {
+  group: THREE.Group;
+  /**
+   * 影を落とすかどうかを切り替える。
+   *
+   * **写真モードでは落とさない。** 写真の上に落ちる影は専用の光源が担当する
+   * （scene/photoShadow.ts）。両方が落とすと、向きの違う影が 2 つ重なる
+   */
+  setCastShadow(enabled: boolean): void;
+}
+
+export function createLighting(size: RoomSize): Lighting {
   const group = new THREE.Group();
 
-  group.add(createSunlight(size));
+  const sun = createSunlight(size);
+  group.add(sun);
 
   // 影の側が沈みすぎないよう、主光源の反対側から弱く当てる。
   // 影を作らないので描画コストはほぼ増えない
@@ -23,7 +35,12 @@ export function createLighting(size: RoomSize): THREE.Group {
   fill.position.set(size.width, size.height, size.depth);
   group.add(fill);
 
-  return group;
+  return {
+    group,
+    setCastShadow: (enabled) => {
+      sun.castShadow = enabled;
+    },
+  };
 }
 
 /** 窓から差し込む想定の主光源。影を落とすのはこの 1 灯だけ */
