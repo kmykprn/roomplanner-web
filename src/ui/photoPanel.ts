@@ -13,6 +13,7 @@
 import { pickImage } from '@/platform/picker';
 import { createMaskPanel } from '@/ui/maskPanel';
 import { createFloorPanel } from '@/ui/floorPanel';
+import { createMeasurePanel } from '@/ui/measurePanel';
 import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
 import {
   clearBackground,
@@ -20,6 +21,7 @@ import {
   setBackground,
   setFittingFloor,
   setMasking,
+  setMeasuring,
 } from '@/core/photoState';
 
 /** 写真がまだ無いときの案内 */
@@ -39,6 +41,8 @@ export function createPhotoPanel(): HTMLElement {
   const mask = createMaskPanel();
   /** 床に合わせる姿 */
   const floor = createFloorPanel();
+  /** 大きさの基準を測る姿 */
+  const measure = createMeasurePanel();
 
   // --- 背景の画像 ---
   const photoRow = createSettingRow('部屋の写真');
@@ -66,16 +70,24 @@ export function createPhotoPanel(): HTMLElement {
   floorChevron.textContent = '›';
   floorRow.element.append(floorChevron);
 
+  // --- 大きさの基準。行ごと押せる ---
+  const measureRow = createSettingRow('大きさの基準', () => setMeasuring(true));
+  const measureChevron = document.createElement('span');
+  measureChevron.className = 'setting__chevron';
+  measureChevron.textContent = '›';
+  measureRow.element.append(measureChevron);
+
   /** 行の下の一言。案内・読み込みの失敗・手前の範囲の説明を、状況に応じて 1 つだけ出す */
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
-  normal.append(photoRow.element, floorRow.element, maskRow.element, note);
-  panel.append(normal, floor, mask);
+  normal.append(photoRow.element, floorRow.element, measureRow.element, maskRow.element, note);
+  panel.append(normal, floor, measure, mask);
 
   function render(): void {
-    const { backgroundName, backgroundStatus, isMasking, isFittingFloor, maskUrl, floorFit } =
-      photoState.get();
+    const {
+      backgroundName, backgroundStatus, isMasking, isFittingFloor, isMeasuring, maskUrl, floorFit, measures,
+    } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
     const failed = backgroundStatus === 'failed';
@@ -94,6 +106,9 @@ export function createPhotoPanel(): HTMLElement {
       floorFit.pitchDeg !== DEFAULT_FLOOR_FIT.pitchDeg || floorFit.rollDeg !== DEFAULT_FLOOR_FIT.rollDeg;
     floorRow.setValue(fitted ? '調整済み' : '未調整', fitted);
 
+    measureRow.element.hidden = !ready;
+    measureRow.setValue(measures.length === 0 ? '未設定' : `${measures.length} か所`, measures.length > 0);
+
     maskRow.element.hidden = !ready;
     maskRow.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
@@ -101,8 +116,8 @@ export function createPhotoPanel(): HTMLElement {
     note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : maskUrl ? '' : MASK_NOTE;
     note.hidden = note.textContent === '';
 
-    // どちらかの姿に入っている間は、通常の行を引っ込める
-    normal.hidden = isMasking || isFittingFloor;
+    // どれかの姿に入っている間は、通常の行を引っ込める
+    normal.hidden = isMasking || isFittingFloor || isMeasuring;
     mask.hidden = !isMasking;
   }
 
