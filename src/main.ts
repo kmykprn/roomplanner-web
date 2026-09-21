@@ -85,7 +85,7 @@ viewer.scene.add(
   roomFurniture.group,
   photoFurniture.group,
   floorMarkers.group,
-  photoShadow
+  photoShadow.group
 );
 
 // --- 操作を繋ぐ ---
@@ -153,7 +153,7 @@ function applyMode(): void {
   roomFurniture.group.visible = !photo;
   // 影を受ける面は写真モードだけ。部屋モードには本物の床があり、そちらが影を受ける。
   // 部屋の主光源は写真モードでは影を落とさない（向きの違う影が 2 つ重なるため）
-  photoShadow.visible = photo;
+  photoShadow.group.visible = photo;
   lighting.setCastShadow(!photo);
   applyFloorFitting();
 
@@ -264,6 +264,12 @@ photoState.subscribe(applyPhotoView);
  * **合わせている間は家具を隠す。** 傾きを変えるとカメラが回るので、置いてある家具が
  * 画面の中を大きく動く。見本の椅子と床を見比べたいときに、それが目の邪魔になる
  */
+/** 浮いている家具の足元に、影を受ける面を敷き直す */
+function applyShadowGrounds(): void {
+  photoShadow.setFloatingItems(photoState.get().furniture.map((item) => item.position));
+}
+photoState.subscribe(applyShadowGrounds);
+
 function applyFloorFitting(): void {
   const { isFittingFloor, isDraggingFloor } = photoState.get();
   const fitting = isPhotoMode() && isFittingFloor;
