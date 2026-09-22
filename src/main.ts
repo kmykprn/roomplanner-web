@@ -23,7 +23,7 @@ import { createFurnitureLayer } from '@/scene/furniture';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
-import { applyPhotoCamera } from '@/interaction/photoCamera';
+import { applyPhotoCamera, floorPointOnScreen } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createFloorFitDrag } from '@/interaction/floorFitDrag';
 import { createFloorMarkers } from '@/scene/floorMarkers';
@@ -32,7 +32,7 @@ import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
-import { applyCalibration, photoState, photoScene, setCalibration } from '@/core/photoState';
+import { applyCalibration, photoState, photoScene, setCalibration, setPhotoPlacement } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
 import {
   persistPhotoOnChange,
@@ -284,6 +284,16 @@ function calibrateWhenReady(): void {
     });
 }
 
+/**
+ * 新しい家具を置く場所（画面の NDC）。中央・下から 3 割の高さ。
+ * 「床に合わせる」で見本の椅子を最初に出す場所（floorProbe の既定値）とほぼ同じ
+ */
+const PLACEMENT_SCREEN_POINT = { x: 0, y: -0.4 };
+setPhotoPlacement(() => {
+  const hit = floorPointOnScreen(viewer.camera, PLACEMENT_SCREEN_POINT.x, PLACEMENT_SCREEN_POINT.y);
+  return hit ? [hit.x, hit.y, hit.z] : null;
+});
+
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
@@ -301,7 +311,10 @@ function applyFloorFitting(): void {
   floorMarkers.group.visible = fitting;
   photoFurniture.group.visible = isPhotoMode() && !fitting;
   // 影を受ける面は、床を合わせている間は床のもの、ふだんは家具ごとのもの
-  photoShadow.setGrounds(fitting, photoState.get().furniture.map((item) => item.position));
+  photoShadow.setGrounds(
+    fitting,
+    photoState.get().furniture.map((item) => ({ position: item.position, size: item.size }))
+  );
   // 触れている間は色を変え、床の面を出す（効いていることを返すため）
   floorMarkers.setActive(isDraggingFloor);
 }

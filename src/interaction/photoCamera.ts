@@ -31,3 +31,26 @@ export function applyPhotoCamera(camera: THREE.PerspectiveCamera, fit: FloorFit)
   );
   camera.updateProjectionMatrix();
 }
+
+/** 床の平面（y = 0）。写真モードの家具はすべてこの上に立つ */
+const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const raycaster = new THREE.Raycaster();
+
+/**
+ * 画面のある点（NDC、-1〜1）に見えている床の位置。床より上を向いていれば null。
+ *
+ * 見下ろし角と画角が写真に合っていれば、この点までの距離は
+ * 「カメラの高さ ÷ tan(地平線からの角度)」で決まる実際の距離になる。
+ * 決まらないのはカメラの高さ（CAMERA_HEIGHT の仮定）だけ
+ */
+export function floorPointOnScreen(
+  camera: THREE.Camera,
+  x: number,
+  y: number
+): THREE.Vector3 | null {
+  // 回したばかりのカメラは行列に反映されていないことがある（scene/floorMarkers.ts と同じ理由）
+  camera.updateMatrixWorld(true);
+  raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+  const hit = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(FLOOR, hit) ? hit : null;
+}
