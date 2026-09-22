@@ -158,6 +158,11 @@ export async function setBackground(file: File): Promise<void> {
 
   if (!(await showBackground(shrunk))) return;
 
+  // 前の写真の解析結果（画角と傾き）は、別の写真では意味がないので捨てる。
+  // ここで捨てる（showBackground では捨てない）のは、起動時の読み戻しでも
+  // showBackground を通るため。同じ写真の読み戻しで捨てると、開くたびに解析し直す
+  photoState.set({ vfovDeg: null, calibration: 'idle' });
+
   // 次に開いたときも残っているように、縮めた1枚を端末に置く。
   // 置けなくても（容量・プライベートモード）いま見えているものは変わらない
   saveBackground(shrunk).catch(() => {});
@@ -196,6 +201,9 @@ export function clearBackground(): void {
     backgroundName: null,
     backgroundStatus: 'idle',
     backgroundAspect: null,
+    // 写真に付いていた解析結果も一緒に捨てる
+    vfovDeg: null,
+    calibration: 'idle',
   });
   // 端末に残した1枚も捨てる。次に開いたときに戻ってこないように
   deleteBackground().catch(() => {});
@@ -308,8 +316,7 @@ export function setPhotoView(view: PhotoView): void {
 function replaceBackgroundUrl(url: string | null): void {
   const previous = photoState.get().backgroundUrl;
   if (previous) URL.revokeObjectURL(previous);
-  // 前の写真の解析結果は、別の写真では意味がない
-  photoState.set({ backgroundUrl: url, vfovDeg: null, calibration: 'idle' });
+  photoState.set({ backgroundUrl: url });
 }
 
 /** 実際に画像として読めるところまで確かめる。読めなければ例外になる */
