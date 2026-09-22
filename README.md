@@ -195,6 +195,14 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 （Hunyuan3D-2GP、背景除去は BiRefNet）に通しました（`assets-src/furniture/generate.sh`）。
 第三者の写真や製品の意匠は使っていません。アイコン（`src/assets/furniture/*.webp`）はそのモデルを描いたものです。
 
+## 写真の解析について
+
+写真モードで写真を選ぶと、**画角と床の傾きを写真から自動で出す。** 使っているのは
+[GeoCalib](https://github.com/cvg/GeoCalib)（Veicht ほか, ECCV 2024）のネットワークで、
+ONNX（int8）にして `public/models/geocalib-int8.onnx` に置き、onnxruntime-web で端末の中だけで動かす。
+写真は端末の外に出ない。コードは Apache-2.0、学習済みの重みは CC BY 4.0
+（© ETH Zurich, Computer Vision and Geometry Group）。
+
 ## 商品リンクについて
 
 「作る」→「商品の URL から」で取り込んだ家具の「楽天で見る」は、楽天アフィリエイトのリンクです。

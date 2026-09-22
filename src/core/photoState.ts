@@ -46,6 +46,16 @@ export interface MaskTool {
   thick: boolean;
 }
 
+/**
+ * 写真の解析（画角と傾きを自動で出す）の様子。
+ *
+ *   idle    … まだ／写真が無い
+ *   running … 解析中（数秒）
+ *   done    … 出た。floorFit と vfovDeg に入っている
+ *   failed  … 出せなかった。手で合わせてもらう
+ */
+export type CalibrationStatus = 'idle' | 'running' | 'done' | 'failed';
+
 export interface PhotoState extends FurnitureSceneState {
   /** 背景写真の表示用 URL（Blob URL）。未選択なら null */
   backgroundUrl: string | null;
@@ -60,6 +70,9 @@ export interface PhotoState extends FurnitureSceneState {
 
   /** 写真の床に合わせたカメラの傾き（core/floorFit.ts）。写真ごとに持つ */
   floorFit: FloorFit;
+  /** 写真から出した縦の画角（度）。無ければ既定の画角で描く */
+  vfovDeg: number | null;
+  calibration: CalibrationStatus;
   /** 床を合わせている最中か。この間だけコーンを出し、指の動きを傾きに使う */
   isFittingFloor: boolean;
   /**
@@ -100,6 +113,8 @@ export const photoState = createStore<PhotoState>({
   backgroundAspect: null,
   view: { ...DEFAULT_PHOTO_VIEW },
   floorFit: { ...DEFAULT_FLOOR_FIT },
+  vfovDeg: null,
+  calibration: 'idle',
   isFittingFloor: false,
   isDraggingFloor: false,
   floorProbe: { x: 0, y: -0.45 },
@@ -226,6 +241,21 @@ function clampProbe(value: number): number {
   return Math.min(0.9, Math.max(-0.9, value));
 }
 
+/** 写真の解析の進み具合を入れる */
+export function setCalibration(calibration: CalibrationStatus): void {
+  if (photoState.get().calibration !== calibration) photoState.set({ calibration });
+}
+
+/** 解析をもう一度やらせる（できなかったとき、または手で崩したあと） */
+export function retryCalibration(): void {
+  photoState.set({ calibration: 'idle' });
+}
+
+/** 解析で出た画角と傾きを入れる */
+export function applyCalibration(vfovDeg: number, fit: FloorFit): void {
+  photoState.set({ vfovDeg, floorFit: clampFloorFit(fit), calibration: 'done' });
+}
+
 /** 床の傾きを直に入れる（読み戻しと、やり直し用） */
 export function setFloorFit(fit: FloorFit): void {
   photoState.set({ floorFit: clampFloorFit(fit) });
@@ -278,7 +308,8 @@ export function setPhotoView(view: PhotoView): void {
 function replaceBackgroundUrl(url: string | null): void {
   const previous = photoState.get().backgroundUrl;
   if (previous) URL.revokeObjectURL(previous);
-  photoState.set({ backgroundUrl: url });
+  // 前の写真の解析結果は、別の写真では意味がない
+  photoState.set({ backgroundUrl: url, vfovDeg: null, calibration: 'idle' });
 }
 
 /** 実際に画像として読めるところまで確かめる。読めなければ例外になる */

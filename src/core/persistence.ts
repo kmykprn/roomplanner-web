@@ -21,7 +21,7 @@ const STORAGE_KEY = 'roomplanner.room';
 const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 
 /** localStorage に残す写真モードの項目。写真そのものは大きいので IndexedDB（backgroundStore.ts） */
-type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName' | 'floorFit'>;
+type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg'>;
 
 /**
  * 保存した状態を読み戻す。**シーンを組み立てる前**に呼ぶ。
@@ -74,6 +74,9 @@ export function restorePhoto(): void {
     view: saved.view ?? photoState.get().view,
     // 壊れた値が入っていても起動できるよう、読めなければ既定の傾きに戻す
     floorFit: normalizeFloorFit(saved.floorFit),
+    vfovDeg: Number.isFinite(saved.vfovDeg) ? (saved.vfovDeg as number) : null,
+    // 読み戻した画角があれば解析は済んでいる。無ければ次に写真が出たときに解析する
+    calibration: Number.isFinite(saved.vfovDeg) ? 'done' : 'idle',
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
   });
@@ -128,6 +131,7 @@ export function persistPhotoOnChange(): void {
       furniture: state.furniture,
       view: state.view,
       floorFit: state.floorFit,
+      vfovDeg: state.vfovDeg,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {
