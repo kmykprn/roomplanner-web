@@ -14,9 +14,11 @@ import { pickImage } from '@/platform/picker';
 import { createMaskPanel } from '@/ui/maskPanel';
 import { createFloorPanel } from '@/ui/floorPanel';
 import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
+import type { CalibrationStatus } from '@/core/photoState';
 import {
   clearBackground,
   photoState,
+  retryCalibration,
   setBackground,
   setFittingFloor,
   setMasking,
@@ -27,6 +29,13 @@ const IDLE_MESSAGE = '部屋の写真を選ぶと、その上に家具を置け�
 /** 形式と大きさのどちらでも起こる。利用者にできることを先に出す。キャンバスの案内（ui/photoEmpty.ts）も使う */
 export const FAILED_MESSAGE = '写真を読み込めませんでした。別の写真をお試しください';
 const MASK_NOTE = '指でなぞった部分は、家具よりも手前に表示されます';
+/** 写真からの自動調整の様子。度数は出さない（床の傾きと同じ理由） */
+const CALIBRATION_LABELS: Record<CalibrationStatus, string> = {
+  idle: '未実行',
+  running: '解析中…',
+  done: '済み',
+  failed: 'できませんでした',
+};
 
 export function createPhotoPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -59,6 +68,11 @@ export function createPhotoPanel(): HTMLElement {
   chevron.textContent = '›';
   maskRow.element.append(chevron);
 
+  // --- 写真からの自動調整。結果は「床の傾き」に入る ---
+  const calibRow = createSettingRow('写真から自動で合わせる');
+  const retryButton = createSmallButton('やり直す', retryCalibration);
+  calibRow.element.append(retryButton);
+
   // --- 床の傾き。行ごと押せる ---
   const floorRow = createSettingRow('床の傾き', () => setFittingFloor(true));
   const floorChevron = document.createElement('span');
@@ -70,12 +84,13 @@ export function createPhotoPanel(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
-  normal.append(photoRow.element, floorRow.element, maskRow.element, note);
+  normal.append(photoRow.element, calibRow.element, floorRow.element, maskRow.element, note);
   panel.append(normal, floor, mask);
 
   function render(): void {
-    const { backgroundName, backgroundStatus, isMasking, isFittingFloor, maskUrl, floorFit } =
-      photoState.get();
+    const {
+      backgroundName, backgroundStatus, isMasking, isFittingFloor, maskUrl, floorFit, calibration,
+    } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
     const failed = backgroundStatus === 'failed';
@@ -87,6 +102,11 @@ export function createPhotoPanel(): HTMLElement {
     // 読み込み中に押させると、どちらが背景になるのか分からなくなる
     pickButton.disabled = loading;
     clearButton.hidden = !ready;
+
+    calibRow.element.hidden = !ready;
+    calibRow.setValue(CALIBRATION_LABELS[calibration], calibration === 'done');
+    // 解析中はもう一度押させない。済んだあとは、手で崩したときに戻す手段として残す
+    retryButton.hidden = calibration === 'running';
 
     floorRow.element.hidden = !ready;
     // 度数は出さない。「何度が正しいか」は誰にも分からないので、合わせたかどうかだけ伝える

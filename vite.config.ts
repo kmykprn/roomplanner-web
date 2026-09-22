@@ -53,6 +53,13 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
+            // 写真の解析に使うモデル（約 31MB）と、それを動かす wasm（約 14MB）。
+            // 事前キャッシュに含めると初回表示が遅くなるので、一度使ったものだけ残す
+            urlPattern: /\.(onnx|wasm|mjs)$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'analysis-models', expiration: { maxEntries: 6 } },
+          },
+          {
             // GLB は 1 ファイルが数 MB あるため、事前キャッシュに含めると初回表示が遅くなる。
             // 一度使ったものだけを保存し、2 回目以降とオフラインで効くようにする
             urlPattern: /\.glb$/,

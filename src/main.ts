@@ -32,7 +32,7 @@ import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
-import { photoState, photoScene } from '@/core/photoState';
+import { applyCalibration, photoState, photoScene, setCalibration } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
 import {
   persistPhotoOnChange,
@@ -169,8 +169,9 @@ function applyMode(): void {
   } else {
     // 写真モードは描画範囲も切り取りも変えるので、両方戻す。
     // 切り取りを残すと、部屋モードの描画まで寄ったままになる。
-    // 画角は描画領域の高さから viewer が決め直すので、ここでは触らない
+    // 写真から出した画角も戻す。残すと部屋モードまで広角で描かれる
     viewer.setPhotoView(null);
+    viewer.setPhotoFov(null);
     viewer.setContentAspect(null);
   }
 }
@@ -246,18 +247,47 @@ function swapMaskImage(url: string | null): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, view, floorFit } = photoState.get();
+  const { backgroundAspect, view, floorFit, vfovDeg } = photoState.get();
 
   viewer.setContentAspect(backgroundAspect);
+  viewer.setPhotoFov(vfovDeg);
   applyPhotoCamera(viewer.camera, floorFit);
   viewer.setPhotoView(view);
   // 見本の椅子は画面の指した場所に置く。カメラを動かしたあとに置き直す
   floorMarkers.update(viewer.camera, photoState.get().floorProbe);
 }
 
+/**
+ * 写真が出たら、画角と傾きを写真から解析して入れる（core/photoCalibModel.ts）。
+ *
+ * 一枚につき一度だけ。結果は floorFit と vfovDeg に入り、床の傾きは
+ * そのまま手で直せる。出せなかったときは既定のまま（手で合わせてもらう）。
+ * 写真は端末の中だけで処理する
+ */
+function calibrateWhenReady(): void {
+  const { backgroundStatus, backgroundUrl, calibration } = photoState.get();
+  if (backgroundStatus !== 'ready' || !backgroundUrl || calibration !== 'idle') return;
+
+  setCalibration('running');
+  // 解析の道具（onnxruntime）は大きいので、写真が出てから読む。起動時の読み込みに混ぜない
+  import('@/core/photoCalibModel')
+    .then(({ calibratePhoto }) => calibratePhoto(backgroundUrl))
+    .then((result) => {
+      // 待っている間に写真が替わっていたら、その写真の結果ではないので捨てる
+      if (photoState.get().backgroundUrl !== backgroundUrl) return;
+      // 見下ろし角はそのまま。ロールはカメラの回す向きが逆なので符号を返す
+      applyCalibration(result.vfovDeg, { pitchDeg: result.pitchDeg, rollDeg: -result.rollDeg });
+    })
+    .catch((error) => {
+      console.error('写真の解析に失敗しました', error);
+      if (photoState.get().backgroundUrl === backgroundUrl) setCalibration('failed');
+    });
+}
+
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
+photoState.subscribe(calibrateWhenReady);
 /**
  * 床を合わせている間の見せ方。モードと、合わせているかどうかの両方で変わる。
  *

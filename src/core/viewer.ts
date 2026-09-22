@@ -46,6 +46,14 @@ export interface Viewer {
    */
   setPhotoView(view: PhotoView | null): void;
 
+  /**
+   * 写真モードの縦の画角（度）を決める。null なら既定（BASE_FOV から描画領域に合わせて出す）。
+   *
+   * 写真を解析して出た画角を入れる。**画角が写真と違うと、床の上の線の集まり方が
+   * 写真とずれ、手前で合わせると奥がずれる。** 傾きをどう動かしても直らない種類のずれ
+   */
+  setPhotoFov(vfovDeg: number | null): void;
+
   /** 毎フレーム呼ばれる処理を登録する */
   onFrame(callback: () => void): void;
   start(): void;
@@ -118,6 +126,8 @@ export function createViewer(container: HTMLElement): Viewer {
   /** いま描いている大きさ（CSS ピクセル）。写真をずらす量の計算に要る */
   let drawWidth = 0;
   let drawHeight = 0;
+  /** 写真から出した縦の画角。null なら既定 */
+  let photoFov: number | null = null;
 
   function resize(): void {
     const width = container.clientWidth;
@@ -142,7 +152,7 @@ export function createViewer(container: HTMLElement): Viewer {
     }
 
     camera.aspect = drawWidth / drawHeight;
-    camera.fov = fovForDrawHeight(drawHeight, height);
+    camera.fov = photoFov ?? fovForDrawHeight(drawHeight, height);
     applyPhotoView();
   }
 
@@ -214,6 +224,11 @@ export function createViewer(container: HTMLElement): Viewer {
       if (contentAspect === aspect) return;
       contentAspect = aspect;
       resize();
+    },
+    setPhotoFov(vfovDeg) {
+      if (photoFov === vfovDeg) return;
+      photoFov = vfovDeg;
+      resize(); // 画角はサイズと一緒に決めているので、そこをやり直す
     },
     setPhotoView(view) {
       photoView = view;
