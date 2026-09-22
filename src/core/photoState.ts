@@ -127,11 +127,27 @@ export const photoState = createStore<PhotoState>({
   selectedId: null,
 });
 
+/**
+ * 新しい家具を置く床の位置を、いまのカメラから決める関数。main.ts が入れる。
+ *
+ * 位置を決め打ちにしない理由: 写真の画角と傾きは写真ごとに違うので、
+ * 同じ座標でも「画面のどこに、どの大きさで出るか」が写真ごとに変わる。
+ * 広角の写真では 4 m 先が画面の真ん中に小さく出ていた
+ */
+let placementFromCamera: (() => [number, number, number] | null) | null = null;
+
+export function setPhotoPlacement(resolve: () => [number, number, number] | null): void {
+  placementFromCamera = resolve;
+}
+
+/** カメラで決められないとき（床より上を向いているなど）の置き場。カメラの 2 m 先 */
+const FALLBACK_PLACEMENT: [number, number, number] = [0, 0, 2];
+
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
-  // 置くのはいつも画面のど真ん中（原点）。空きを探して端に置くと画面の外に出て見失う。
+  // 画面の下寄りに見えている床に置く。空きを探して端に置くと画面の外に出て見失う。
   // 重なっても、置いた直後は選択されているので動かせばよい
-  placementFor: () => [0, 0, 0],
+  placementFor: () => placementFromCamera?.() ?? FALLBACK_PLACEMENT,
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
   constrain: (position) => position,

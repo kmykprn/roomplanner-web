@@ -16,6 +16,7 @@ import * as THREE from 'three';
 
 import chairModel from '@/assets/furniture/chair.glb?url';
 import { loadFurnitureModel } from '@/scene/modelLoader';
+import { floorPointOnScreen } from '@/interaction/photoCamera';
 
 /** 見本に使うモデルと、その実寸（m）。「家具」タブのサンプル 1 と同じもの */
 const SAMPLE = { url: chairModel, size: [0.46, 0.9, 0.5] as [number, number, number] };
@@ -50,9 +51,6 @@ const TINT_COLOR = 0x18b4e0;
  * **広く取る。** 狭いと面の奥の端が画面に出てしまい、壁のように見える
  */
 const TINT_SIZE = 24;
-
-/** 床の面。カメラから伸ばした視線がここに当たった場所に椅子を置く */
-const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 export interface FloorMarkers {
   group: THREE.Group;
@@ -103,18 +101,12 @@ export function createFloorMarkers(): FloorMarkers {
   group.add(marker, tint);
 
   const raycaster = new THREE.Raycaster();
-  const hit = new THREE.Vector3();
 
   function update(camera: THREE.Camera, probe: { x: number; y: number }): void {
-    // **回したばかりのカメラは、まだ行列に反映されていない。**
-    // 更新せずに視線を出すと、1 つ前の向きで位置を決めてしまい、
-    // 傾けるたびに椅子が画面の上へずれていく
-    camera.updateMatrixWorld(true);
-    raycaster.setFromCamera(new THREE.Vector2(probe.x, probe.y), camera);
     // 床より上を向いている視線は当たらない。そのときは椅子を出さない
-    const found = raycaster.ray.intersectPlane(FLOOR, hit);
-    marker.visible = Boolean(found);
-    if (!found) return;
+    const hit = floorPointOnScreen(camera, probe.x, probe.y);
+    marker.visible = Boolean(hit);
+    if (!hit) return;
     marker.position.copy(hit);
     // 遠いほど大きくして、画面の上での大きさを一定に保つ
     marker.scale.setScalar(camera.position.distanceTo(hit) / REFERENCE_DISTANCE);

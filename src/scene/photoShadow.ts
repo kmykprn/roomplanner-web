@@ -53,12 +53,19 @@ const SHADOW_COLOR = 0x000000;
 const CATCHER_SIZE = 40;
 
 /**
- * 家具ごとに敷く面の広さ（m）。
+ * 家具ごとに敷く面の広さ（m）の最低値。
  *
- * **こちらは広くしない。** 広げると、別の家具の影まで拾ってしまう。
- * 影が伸びる長さ（家具の高さと同じくらい）を覆えれば足りる
+ * **むやみに広くしない。** 広げると、別の家具の影まで拾ってしまう。
+ * 影が伸びる長さ（家具の高さと同じくらい）を覆えれば足り、
+ * 大きくした家具だけ、その大きさに合わせて広げる（ITEM_CATCHER_RATIO）
  */
 const ITEM_CATCHER_SIZE = 3;
+/**
+ * 家具ごとの面を、家具のいちばん長い辺の何倍にするか。
+ * 真上の光なので影は足元の輪郭とほぼ同じだが、傾けた家具は輪郭より外に出る。
+ * 面が小さいと、大きくした家具の影が面の縁で切れる
+ */
+const ITEM_CATCHER_RATIO = 2;
 
 /** 影を計算する範囲（m）。狭いと影が切れ、広いと同じ解像度を配るのでぼやける */
 const SHADOW_EXTENT = 8;
@@ -69,9 +76,14 @@ export interface PhotoShadow {
    * 影を受ける面を敷き直す。家具が動くたび、姿が変わるたびに呼ぶ。
    *
    * @param fittingFloor 床を合わせている最中か。true なら床の面だけを出す
-   * @param itemPositions 家具の足元の位置。床を合わせている間は使わない
+   * @param items 家具の足元の位置と大きさ。床を合わせている間は使わない
    */
-  setGrounds(fittingFloor: boolean, itemPositions: [number, number, number][]): void;
+  setGrounds(fittingFloor: boolean, items: GroundItem[]): void;
+}
+
+export interface GroundItem {
+  position: [number, number, number];
+  size: [number, number, number];
 }
 
 export function createPhotoShadow(): PhotoShadow {
@@ -113,9 +125,9 @@ export function createPhotoShadow(): PhotoShadow {
    */
   const itemCatchers: THREE.Mesh[] = [];
 
-  function setGrounds(fittingFloor: boolean, itemPositions: [number, number, number][]): void {
+  function setGrounds(fittingFloor: boolean, items: GroundItem[]): void {
     catcher.visible = fittingFloor;
-    const grounds = fittingFloor ? [] : itemPositions;
+    const grounds = fittingFloor ? [] : items;
 
     while (itemCatchers.length < grounds.length) {
       const mesh = new THREE.Mesh(
@@ -130,9 +142,13 @@ export function createPhotoShadow(): PhotoShadow {
     }
 
     itemCatchers.forEach((mesh, index) => {
-      const at = grounds[index];
-      mesh.visible = Boolean(at);
-      if (at) mesh.position.set(at[0], at[1], at[2]);
+      const item = grounds[index];
+      mesh.visible = Boolean(item);
+      if (!item) return;
+      mesh.position.set(...item.position);
+      // 面の形は 3 m 四方のまま、大きさに合わせて拡大する（最低 3 m）
+      const side = Math.max(ITEM_CATCHER_SIZE, Math.max(...item.size) * ITEM_CATCHER_RATIO);
+      mesh.scale.setScalar(side / ITEM_CATCHER_SIZE);
     });
   }
 
