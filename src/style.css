@@ -1134,6 +1134,28 @@ body {
   font: inherit;
   font-size: 14px;
 }
+/* 数値と単位を横に並べる欄（実際の高さ） */
+.field__inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field__input--short {
+  width: 110px;
+  text-align: right;
+}
+.height-step__name {
+  font-size: 14px;
+}
+/* 操作タブの「実際の高さ」。バーの行と同じ格子に、数値と添え書きを置く */
+.height-row .field__input--short {
+  width: 84px;
+  padding: 6px 8px;
+}
+.height-row__note {
+  grid-column: 2;
+  font-size: 11px;
+}
 .edit__actions {
   display: flex;
   justify-content: flex-end;

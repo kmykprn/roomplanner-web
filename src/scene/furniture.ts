@@ -26,9 +26,24 @@ export interface FurnitureLayer {
   faceCamera(camera: THREE.Camera): void;
 }
 
-export function createFurnitureLayer(): FurnitureLayer {
+export interface FurnitureLayerOptions {
+  /**
+   * 中身（GLB や切り抜き）が読めて外形を測ったときに呼ぶ。外形はいま画面に出ている大きさ（m）。
+   * 受け取る側は箱を中身の形に締め、実際の高さが決まっていればそれに合わせる（core/furnitureHeight.ts）
+   */
+  onMeasured?(itemId: string, bounds: [number, number, number]): void;
+}
+
+export function createFurnitureLayer({ onMeasured }: FurnitureLayerOptions = {}): FurnitureLayer {
   const group = new THREE.Group();
   const objects = new Map<string, THREE.Group>();
+
+  /** 測った外形を、いまの倍率で m に直して知らせる */
+  function reportBounds(object: THREE.Group, itemId: string, built: THREE.Vector3): void {
+    if (!onMeasured) return;
+    const scale = object.scale.x;
+    onMeasured(itemId, [built.x * scale, built.y * scale, built.z * scale]);
+  }
 
   function sync(furniture: PlacedFurniture[], selectedId: string | null): void {
     const liveIds = new Set(furniture.map((item) => item.id));
@@ -44,7 +59,7 @@ export function createFurnitureLayer(): FurnitureLayer {
     for (const item of furniture) {
       let object = objects.get(item.id);
       if (!object) {
-        object = createFurnitureObject(item);
+        object = createFurnitureObject(item, reportBounds);
         objects.set(item.id, object);
         group.add(object);
       }
@@ -94,7 +109,10 @@ function applySize(object: THREE.Group, size: [number, number, number]): void {
   object.scale.setScalar(size[0] / builtWidth);
 }
 
-function createFurnitureObject(item: PlacedFurniture): THREE.Group {
+/** 中身の外形を知らせる関数。層（createFurnitureLayer）が持つので、ここまで渡す */
+type ReportBounds = (object: THREE.Group, itemId: string, built: THREE.Vector3) => void;
+
+function createFurnitureObject(item: PlacedFurniture, report: ReportBounds): THREE.Group {
   const object = new THREE.Group();
   const [width, height, depth] = item.size;
   // 拡大率の基準。あとで大きさが変わったとき、これとの比で拡大する
@@ -130,12 +148,12 @@ function createFurnitureObject(item: PlacedFurniture): THREE.Group {
   if (item.modelUrl) {
     // 写真から生成した家具。端末に保存した中身を URL にしてから読む
     resolveModelUrl(item.modelUrl).then((url) => {
-      if (url) replaceWithModel(object, mesh, outline, url, item.size);
+      if (url) replaceWithModel(object, mesh, outline, url, item, report);
       // 見つからなければ箱のまま。端末のデータが消された場合など
     });
   } else if (item.imageUrl) {
     resolveCutoutUrl(item.imageUrl).then((url) => {
-      if (url) replaceWithBillboard(object, mesh, outline, url, item);
+      if (url) replaceWithBillboard(object, mesh, outline, url, item, report);
     });
   }
   // どちらも無ければ箱のまま（古い記録に残っている基本の家具など）
@@ -158,9 +176,10 @@ function replaceWithModel(
   placeholder: THREE.Mesh,
   outline: THREE.Object3D,
   modelPath: string,
-  size: [number, number, number]
+  item: PlacedFurniture,
+  report: ReportBounds
 ): void {
-  loadFurnitureModel(modelPath, size)
+  loadFurnitureModel(modelPath, item.size)
     .then((model) => {
       // 読み込み中に家具が消されていたら、シーンに足さず捨てる
       if (!object.parent) return;
@@ -169,8 +188,13 @@ function replaceWithModel(
       placeholder.castShadow = false;
       placeholder.receiveShadow = false;
       // シーンに足す前に測る。足したあとだと、家具の向きや大きさが混ざった値になる
-      fitBoundsToModel(placeholder, outline, model);
+      const measured = fitBoundsToModel(placeholder, outline, model);
       object.add(model);
+      if (measured) {
+        // 以後、状態の幅はこの締まった幅に対応する（状態側も締めた箱に書き替わる）
+        object.userData.builtWidth = measured.x;
+        report(object, item.id, measured);
+      }
     })
     .catch((error) => {
       // 読み込めなくても箱のまま操作は続けられるので、落とさず記録に留める
@@ -194,11 +218,11 @@ function fitBoundsToModel(
   placeholder: THREE.Mesh,
   outline: THREE.Object3D,
   model: THREE.Object3D
-): void {
+): THREE.Vector3 | null {
   const bounds = new THREE.Box3().setFromObject(model);
   const size = bounds.getSize(new THREE.Vector3());
   // measure できない（中身が空、または読み違え）ときは、収める先の箱のままにしておく
-  if (size.x <= 0 || size.y <= 0 || size.z <= 0) return;
+  if (size.x <= 0 || size.y <= 0 || size.z <= 0) return null;
 
   const center = bounds.getCenter(new THREE.Vector3());
   const box = new THREE.BoxGeometry(size.x, size.y, size.z);
@@ -212,6 +236,7 @@ function fitBoundsToModel(
     outline.geometry = new THREE.EdgesGeometry(box);
     outline.position.copy(center);
   }
+  return size;
 }
 
 /**
@@ -226,7 +251,8 @@ function replaceWithBillboard(
   placeholder: THREE.Mesh,
   boxOutline: THREE.Object3D,
   url: string,
-  item: PlacedFurniture
+  item: PlacedFurniture,
+  report: ReportBounds
 ): void {
   loadBillboard(url, item.size)
     .then((billboard) => {
@@ -246,6 +272,13 @@ function replaceWithBillboard(
         object.userData.pickable = plane;
       }
       object.add(billboard);
+      // 板の外形。奥行きは無いので、箱の奥行きを高さと同じ比率で縮めたものにする
+      const plate = new THREE.Box3().setFromObject(billboard).getSize(new THREE.Vector3());
+      if (plate.x > 0 && plate.y > 0) {
+        plate.z = item.size[2] * (plate.y / item.size[1]);
+        object.userData.builtWidth = plate.x;
+        report(object, item.id, plate);
+      }
     })
     .catch((error) => {
       URL.revokeObjectURL(url);

@@ -19,6 +19,7 @@ import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
+import { baseHeightOf, setPlacedHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
 import { photoState, setFittingFloor, setMasking } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
@@ -274,6 +275,7 @@ export function createBottomSheet(container: HTMLElement): void {
         valueOf: (item) => ratioToSlider(longestOf(item.size) / baseLongest),
         onInput: (value) => setLongestEdge(id, baseLongest * sliderToRatio(value)),
       }),
+      createHeightRow(id),
       createManageRow('高さ', {
         min: HEIGHT_LIMITS.min * 100,
         max: HEIGHT_LIMITS.max * 100,
@@ -324,6 +326,49 @@ export function createBottomSheet(container: HTMLElement): void {
     return {
       element: row.element,
       refresh: (item) => row.setValue(slider.valueOf(item)),
+    };
+  }
+
+  /**
+   * 「実際の高さ」の行。バーではなく cm の数値で入れる。
+   *
+   * 入れた値は置いたときの高さになり、「大きさ」のバーはそれの何倍かのまま。
+   * 保管庫の項目から置いた家具なら項目にも書き戻す（core/furnitureHeight.ts）
+   */
+  function createHeightRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
+    const element = document.createElement('div');
+    element.className = 'slider-row height-row';
+    const heading = document.createElement('label');
+    heading.className = 'slider-row__label';
+    heading.textContent = '実際の高さ';
+    heading.htmlFor = 'manage-real-height';
+    const body = document.createElement('div');
+    body.className = 'field__inline';
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.inputMode = 'decimal';
+    input.id = 'manage-real-height';
+    input.className = 'field__input field__input--short';
+    input.min = String(REAL_HEIGHT_LIMITS.min * 100);
+    input.max = String(REAL_HEIGHT_LIMITS.max * 100);
+    const unit = document.createElement('span');
+    unit.textContent = 'cm';
+    body.append(input, unit);
+    const note = document.createElement('p');
+    note.className = 'hint height-row__note';
+    note.textContent = '「大きさ」のバーは、この高さを基準にして何倍にするかを決めます。';
+    input.addEventListener('change', () => {
+      const centimetres = Number(input.value);
+      if (!Number.isFinite(centimetres) || centimetres <= 0) return;
+      setPlacedHeight(activeScene(), id, centimetres / 100);
+    });
+    element.append(heading, body, note);
+    return {
+      element,
+      refresh: (item) => {
+        // 打ち込んでいる最中に書き戻すと、入力が消える
+        if (document.activeElement !== input) input.value = String(Math.round(baseHeightOf(item) * 100));
+      },
     };
   }
 
