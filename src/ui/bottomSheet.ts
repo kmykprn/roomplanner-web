@@ -19,7 +19,7 @@ import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
-import { baseHeightOf, setPlacedHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
+import { heightOf, previewPlacedHeight, setPlacedHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
 import { photoState, setFittingFloor, setMasking } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
@@ -79,19 +79,17 @@ function toDegrees(radians: number): number {
   return (radians * 180) / Math.PI;
 }
 
-function longestOf(size: [number, number, number]): number {
-  return Math.max(...size);
+/** 高さ（m）を、バーの目盛りの番号にする */
+function heightToSlider(height: number): number {
+  const { min, max } = REAL_HEIGHT_LIMITS;
+  const position = Math.log(Math.max(min, height) / min) / Math.log(max / min);
+  return Math.round(clamp(position, 0, 1) * HEIGHT_SLIDER_STEPS);
 }
 
-/** 置いたときの何倍かを、バーの目盛りの番号にする（等倍が 0＝真ん中） */
-function ratioToSlider(ratio: number): number {
-  const position = Math.log(Math.max(1e-6, ratio)) / Math.log(SIZE_MAX_RATIO);
-  return Math.round(clamp(position, -1, 1) * SIZE_SLIDER_STEPS);
-}
-
-/** バーの目盛りの番号を、置いたときの何倍かにする */
-function sliderToRatio(value: number): number {
-  return SIZE_MAX_RATIO ** (value / SIZE_SLIDER_STEPS);
+/** バーの目盛りの番号を、高さ（m）にする */
+function sliderToHeight(value: number): number {
+  const { min, max } = REAL_HEIGHT_LIMITS;
+  return min * (max / min) ** (value / HEIGHT_SLIDER_STEPS);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -109,27 +107,17 @@ const TABS: Record<TabId, string> = {
 const ROOM_TABS: TabId[] = ['interior', 'models', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
 
-/** 大きさの上限と下限（いちばん長い辺、メートル）。行き過ぎて見失わないように止める */
-const SIZE_LIMITS = { min: 0.1, max: 5 };
-
 /**
- * 大きさのバーは「置いたときの何倍か」で動く。**真ん中が等倍**、端が 5 倍と 1/5 倍。
+ * 「高さ」のバーの目盛りの数。
  *
- * メートルで持たないのは、真ん中が家具ごとに変わってしまうため。
- * 倍率なら、どの家具でも真ん中が「置いたときのまま」になる
+ * **バーの位置は高さに正比例させず、掛け算で対応させる**（5 cm〜5 m を対数で）。
+ * そうすると、指を同じだけ動かせば、小さくても大きくても同じ割合だけ変わる。
+ * 数値の欄も同じ行にあるので、正確な値はそちらで入れる
  */
-const SIZE_MAX_RATIO = 5;
+const HEIGHT_SLIDER_STEPS = 1000;
 
-/**
- * 大きさのバーの目盛りの数（片側）。
- *
- * **バーの位置は倍率に正比例させず、掛け算で対応させる。** そうすると、
- * 指を同じだけ動かせば、小さくても大きくても同じ割合だけ変わる
- */
-const SIZE_SLIDER_STEPS = 1000;
-
-/** 高さの範囲（メートル）。写真モードには床が無いので、下にも行けるようにしてある */
-const HEIGHT_LIMITS = { min: -2.5, max: 2.5 };
+/** 床からの高さの範囲（メートル）。写真モードには床が無いので、下にも行けるようにしてある */
+const FLOOR_OFFSET_LIMITS = { min: -2.5, max: 2.5 };
 
 /**
  * 角度のバーの範囲。**真ん中が 0°**、つまり置いたときの姿勢になる。
@@ -221,6 +209,19 @@ export function createBottomSheet(container: HTMLElement): void {
    * 間は値だけを書き替え、別の家具を選んだときだけ作り直す
    */
   let manageView: { itemId: string; refresh(item: PlacedFurniture): void } | null = null;
+  /** 「細かく調整」を開いているか。別の家具を選んでも開いたままにする */
+  let moreOpen = false;
+  /** 「画面から削除」の直後に一覧へ出す一言。次に家具を選ぶまで残す */
+  let removedNote: string | null = null;
+
+  /** 削除の直後なら、その旨を一覧の下に出す */
+  function appendRemovedNote(list: HTMLElement): void {
+    if (!removedNote) return;
+    const note = document.createElement('p');
+    note.className = 'hint manage__removed';
+    note.textContent = removedNote;
+    list.append(note);
+  }
 
   /** 選択中の家具に対する操作 */
   function renderManageTab(): HTMLElement {
@@ -236,27 +237,58 @@ export function createBottomSheet(container: HTMLElement): void {
       wrapper.append(createFurnitureList(furniture));
       return wrapper;
     }
+    removedNote = null;
 
     const { id } = selected;
-    // 「大きさ」のバーが基準にする、置いたときのいちばん長い辺。
-    // 置いたあとに変えても動かない値なので、行を組むときに 1 度だけ読めばよい
-    const baseLongest = longestOf(selected.baseSize ?? selected.size);
+    // 見出し: どの家具を触っているか。削除もここ（行の下に並べるより、家具の名前の隣が自然）
+    const head = document.createElement('div');
+    head.className = 'manage__head';
+    const name = document.createElement('span');
+    name.className = 'manage__name';
+    name.textContent = selected.name ?? '家具';
+    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
+    // 同じ見た目にすると同じ重さに見えるので、グレーにして、消したあと一覧にその旨を出す
+    const remove = createButton('画面から削除', () => {
+      // 消すと同時に一覧が描かれるので、一言は消す前に用意する
+      removedNote = `「${selected.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
+      scene.remove(id);
+      // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる
+      releaseFurnitureAssets(selected);
+    }, 'is-small manage__delete');
+    head.append(name, remove);
+
+    // ふだん使う 2 行: 向き（板なら傾き）と高さ
     const rows: ReturnType<typeof createManageRow>[] = [];
     // 切り抜きの板はカメラの方を向くので、向きも前後の傾きも効かない。
     // 板に効くのは画面の中で回す「傾き」だけ
-    if (isBillboard(selected)) {
-      rows.push(
-        createManageRow('傾き', angleSlider(
-          (item) => item.tilt ?? 0,
-          (radians) => update(id, { tilt: radians })
-        ))
-      );
-    } else {
-      rows.push(
-        createManageRow('向き', angleSlider(
-          (item) => item.rotationY,
-          (radians) => setRotation(id, radians)
-        )),
+    rows.push(
+      isBillboard(selected)
+        ? createManageRow('傾き', angleSlider(
+            (item) => item.tilt ?? 0,
+            (radians) => update(id, { tilt: radians })
+          ))
+        : createManageRow('向き', angleSlider(
+            (item) => item.rotationY,
+            (radians) => setRotation(id, radians)
+          )),
+      createHeightRow(id)
+    );
+
+    // めったに使わないものは畳む。写真の傾きが合わないときの補正と、やり直し
+    const more = document.createElement('details');
+    more.className = 'manage__more';
+    more.open = moreOpen;
+    more.addEventListener('toggle', () => {
+      moreOpen = more.open;
+    });
+    const summary = document.createElement('summary');
+    summary.className = 'manage__more-summary';
+    summary.textContent = '細かく調整';
+    const moreBody = document.createElement('div');
+    moreBody.className = 'manage__more-body';
+    const moreRows: ReturnType<typeof createManageRow>[] = [];
+    if (!isBillboard(selected)) {
+      moreRows.push(
         createManageRow('前後の傾き', angleSlider(
           (item) => item.pitch ?? 0,
           (radians) => update(id, { pitch: radians })
@@ -267,51 +299,31 @@ export function createBottomSheet(container: HTMLElement): void {
         ))
       );
     }
-    rows.push(
-      createManageRow('大きさ', {
-        min: -SIZE_SLIDER_STEPS,
-        max: SIZE_SLIDER_STEPS,
-        ends: [`×1/${SIZE_MAX_RATIO}`, `×${SIZE_MAX_RATIO}`],
-        valueOf: (item) => ratioToSlider(longestOf(item.size) / baseLongest),
-        onInput: (value) => setLongestEdge(id, baseLongest * sliderToRatio(value)),
-      }),
-      createHeightRow(id),
-      createManageRow('高さ', {
-        min: HEIGHT_LIMITS.min * 100,
-        max: HEIGHT_LIMITS.max * 100,
-        ends: [`${HEIGHT_LIMITS.min} m`, `+${HEIGHT_LIMITS.max} m`],
+    moreRows.push(
+      createManageRow('床からの高さ', {
+        min: FLOOR_OFFSET_LIMITS.min * 100,
+        max: FLOOR_OFFSET_LIMITS.max * 100,
+        ends: [`${FLOOR_OFFSET_LIMITS.min} m`, `+${FLOOR_OFFSET_LIMITS.max} m`],
         // バーは 1cm きざみ。メートルのままだと小数の丸めでつまみが落ち着かない
         valueOf: (item) => Math.round(item.position[1] * 100),
-        onInput: (centimetres) => setHeight(id, centimetres / 100),
+        onInput: (centimetres) => setFloorOffset(id, centimetres / 100),
       })
     );
-
-    // 削除は右下に寄せる（誤タップを避ける）。
-    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
-    // 同じ見た目にすると同じ重さに見えるので、グレーにして下に残ることを添える
     const foot = document.createElement('div');
     foot.className = 'manage__foot';
-    // 商品ページから取り込んだ家具なら、ここから買いに行ける（削除の左に置く）
+    // 商品ページから取り込んだ家具なら、ここから買いに行ける（戻すの左に置く）
     if (selected.product) foot.append(createProductLink(selected.product));
-    // いじりすぎて分からなくなったときに戻れる場所。動かすバーが 5 本あるので、
-    // 1 本ずつ真ん中へ戻すのは現実的ではない
+    // いじりすぎて分からなくなったときに戻れる場所。バーを 1 本ずつ真ん中へ戻すのは現実的ではない
     foot.append(createButton('初期値に戻す', () => resetItem(id), 'is-quiet is-small'));
-    const remove = createButton('画面から削除', () => {
-      scene.remove(id);
-      // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる
-      releaseFurnitureAssets(selected);
-    }, 'is-small manage__delete');
-    foot.append(remove);
+    moreBody.append(...moreRows.map((row) => row.element), foot);
+    more.append(summary, moreBody);
 
-    const footNote = document.createElement('p');
-    footNote.className = 'hint manage__note';
-    footNote.textContent = '画面から削除しても、「家具」タブには残ります';
+    wrapper.append(head, ...rows.map((row) => row.element), more);
 
-    wrapper.append(...rows.map((row) => row.element), foot, footNote);
-
+    const allRows = [...rows, ...moreRows];
     manageView = {
       itemId: id,
-      refresh: (item) => rows.forEach((row) => row.refresh(item)),
+      refresh: (item) => allRows.forEach((row) => row.refresh(item)),
     };
     manageView.refresh(selected);
     return wrapper;
@@ -330,44 +342,48 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 「実際の高さ」の行。バーではなく cm の数値で入れる。
+   * 「高さ」の行。バーと cm の数値を同じ行に置く。
    *
-   * 入れた値は置いたときの高さになり、「大きさ」のバーはそれの何倍かのまま。
-   * 保管庫の項目から置いた家具なら項目にも書き戻す（core/furnitureHeight.ts）
+   * バーは 5 cm〜5 m を対数で（大きくても小さくても同じ割合で動く）、正確な値は数値で。
+   * どちらで変えても家具の実際の高さになり、比率を保って全体が変わる。
+   * 保管庫の項目から置いた家具なら、バーを離したとき・数値を入れたときに項目へ書き戻す
+   * （core/furnitureHeight.ts）
    */
   function createHeightRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const element = document.createElement('div');
-    element.className = 'slider-row height-row';
-    const heading = document.createElement('label');
-    heading.className = 'slider-row__label';
-    heading.textContent = '実際の高さ';
-    heading.htmlFor = 'manage-real-height';
-    const body = document.createElement('div');
-    body.className = 'field__inline';
     const input = document.createElement('input');
     input.type = 'number';
     input.inputMode = 'decimal';
-    input.id = 'manage-real-height';
-    input.className = 'field__input field__input--short';
+    input.className = 'field__input field__input--short slider-row__number';
     input.min = String(REAL_HEIGHT_LIMITS.min * 100);
     input.max = String(REAL_HEIGHT_LIMITS.max * 100);
+    input.setAttribute('aria-label', '高さ（cm）');
     const unit = document.createElement('span');
+    unit.className = 'slider-row__unit';
     unit.textContent = 'cm';
-    body.append(input, unit);
-    const note = document.createElement('p');
-    note.className = 'hint height-row__note';
-    note.textContent = '「大きさ」のバーは、この高さを基準にして何倍にするかを決めます。';
+    const number = document.createElement('span');
+    number.className = 'slider-row__after';
+    number.append(input, unit);
     input.addEventListener('change', () => {
       const centimetres = Number(input.value);
       if (!Number.isFinite(centimetres) || centimetres <= 0) return;
       setPlacedHeight(activeScene(), id, centimetres / 100);
     });
-    element.append(heading, body, note);
+
+    const row = createSliderRow({
+      label: '高さ',
+      min: 0,
+      max: HEIGHT_SLIDER_STEPS,
+      ends: ['5 cm', '5 m'],
+      onInput: (value) => previewPlacedHeight(activeScene(), id, sliderToHeight(value)),
+      onChange: (value) => setPlacedHeight(activeScene(), id, sliderToHeight(value)),
+      after: number,
+    });
     return {
-      element,
+      element: row.element,
       refresh: (item) => {
+        row.setValue(heightToSlider(heightOf(item)));
         // 打ち込んでいる最中に書き戻すと、入力が消える
-        if (document.activeElement !== input) input.value = String(Math.round(baseHeightOf(item) * 100));
+        if (document.activeElement !== input) input.value = String(Math.round(heightOf(item) * 100));
       },
     };
   }
@@ -386,12 +402,14 @@ export function createBottomSheet(container: HTMLElement): void {
       hint.className = 'hint';
       hint.textContent = '「家具」タブで置いた家具が、ここに並びます';
       list.append(hint);
+      appendRemovedNote(list);
       return list;
     }
     const hint = document.createElement('p');
     hint.className = 'hint';
     hint.textContent = '家具をタップすると選択できます。画面の外にある家具は、この一覧から選べます';
     list.append(hint);
+    appendRemovedNote(list);
 
     const scene = activeScene();
     for (const item of furniture) {
@@ -463,28 +481,8 @@ export function createBottomSheet(container: HTMLElement): void {
     scene.update(id, patch);
   }
 
-  /**
-   * 家具の大きさを、いちばん長い辺がこの長さになるように変える。
-   * 3 辺そろえて掛けるので形は変わらない。
-   *
-   * 部屋モードでは大きくした結果が壁を突き抜けることがあるので、位置を丸め直す
-   */
-  function setLongestEdge(id: string, longest: number): void {
-    const scene = activeScene();
-    const item = scene.state().furniture.find((f) => f.id === id);
-    if (!item) return;
-
-    // 倍率で動かすので、家具によっては上限を超える。実寸としての限度はここで止める
-    const ratio = clamp(longest, SIZE_LIMITS.min, SIZE_LIMITS.max) / longestOf(item.size);
-    const size = item.size.map((edge) => edge * ratio) as [number, number, number];
-    scene.update(id, {
-      size,
-      position: scene.constrain(item.position, size, item.rotationY),
-    });
-  }
-
-  /** 家具の高さを決める。下限はモードが決める（部屋なら床、写真なら無し） */
-  function setHeight(id: string, y: number): void {
+  /** 床からの高さを決める。下限はモードが決める（部屋なら床、写真なら無し） */
+  function setFloorOffset(id: string, y: number): void {
     const scene = activeScene();
     const item = scene.state().furniture.find((f) => f.id === id);
     if (!item) return;
