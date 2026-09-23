@@ -107,6 +107,13 @@ export interface PhotoState extends FurnitureSceneState {
   cameraHeight: number;
   /** 床を合わせている最中か。この間だけ四隅のマス目を出し、指の動きを四隅に使う */
   isFittingFloor: boolean;
+  /** 表示する範囲を調整している最中か。この間は 1 本指で写真をずらす */
+  isFramingPhoto: boolean;
+  /**
+   * 写真から画角と傾きを自動で合わせるか（EXIF の焦点距離と、写真の解析）。
+   * オフなら既定の画角・既定の傾きで描き、傾きは「床に合わせる」で手で合わせる
+   */
+  autoCalibrate: boolean;
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -140,6 +147,8 @@ export const photoState = createStore<PhotoState>({
   scaleLength: null,
   cameraHeight: CAMERA_HEIGHT,
   isFittingFloor: false,
+  isFramingPhoto: false,
+  autoCalibrate: false,
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -213,7 +222,9 @@ export async function setBackground(file: File): Promise<void> {
   // EXIF に焦点距離があれば、画角は解析を待たずにここで決まる
   const aspect = photoState.get().backgroundAspect;
   photoState.set({
-    vfovDeg: lensFocal35 && aspect ? vfovFromFocal35(lensFocal35, aspect) : null,
+    vfovDeg: photoState.get().autoCalibrate && lensFocal35 && aspect ? vfovFromFocal35(lensFocal35, aspect) : null,
+    // 自動で合わせないときは、前の写真の傾きも引き継がない
+    ...(photoState.get().autoCalibrate ? {} : { floorFit: { ...DEFAULT_FLOOR_FIT } }),
     ...FRESH_FLOOR,
   });
 
@@ -225,6 +236,8 @@ export async function setBackground(file: File): Promise<void> {
   // 隠す場所も前の写真のものなので消す
   photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
   clearMask();
+  // 選んだ直後に、表示する範囲を決めてもらう
+  setFramingPhoto(true);
 }
 
 /**
@@ -269,6 +282,29 @@ export function clearBackground(): void {
 /** 隠す場所を塗っている最中かを切り替える */
 export function setMasking(isMasking: boolean): void {
   if (photoState.get().isMasking !== isMasking) photoState.set({ isMasking });
+}
+
+/** 表示する範囲を調整する姿に入る・出る */
+export function setFramingPhoto(isFramingPhoto: boolean): void {
+  if (photoState.get().isFramingPhoto !== isFramingPhoto) photoState.set({ isFramingPhoto });
+}
+
+/**
+ * 自動で合わせるのを切り替える。
+ *
+ * どちらに切り替えても、床の合わせ方は初めからにする。四隅から出した傾きは、
+ * そのときの画角で解いたものなので、画角が変わると合わなくなる。
+ * オンにしたら解析をやり直させる（main.ts が拾う）。EXIF があれば画角はすぐ決まる
+ */
+export function setAutoCalibrate(autoCalibrate: boolean): void {
+  const { lensFocal35, backgroundAspect } = photoState.get();
+  photoState.set({
+    autoCalibrate,
+    vfovDeg: autoCalibrate && lensFocal35 && backgroundAspect ? vfovFromFocal35(lensFocal35, backgroundAspect) : null,
+    calibration: 'idle',
+    floorFit: { ...DEFAULT_FLOOR_FIT },
+    ...FRESH_FLOOR,
+  });
 }
 
 /** 床を合わせる姿に入る・出る */
@@ -324,7 +360,12 @@ export function updateFloorCorners(patch: {
 /** 写真のうち、いま画面に見えている範囲 */
 function visibleRegion(): VisibleRegion {
   const view = clampPhotoView(photoState.get().view);
-  return { ...viewOrigin(view), ...visibleSize(view) };
+  const origin = viewOrigin(view);
+  const size = visibleSize(view);
+  // 縮めて写真全体が入っているときは、写真の外（余白）には置かない
+  const x = Math.max(0, origin.x);
+  const y = Math.max(0, origin.y);
+  return { x, y, width: Math.min(1, origin.x + size.width) - x, height: Math.min(1, origin.y + size.height) - y };
 }
 
 /** 合わせる姿に入ったとき、四隅がまだ無ければいまの傾きから作る */

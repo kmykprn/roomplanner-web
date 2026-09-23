@@ -12,7 +12,7 @@
 
 import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
-import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
+import { photoState, setAutoCalibrate, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
 import { readBackground, readMask } from '@/platform/backgroundStore';
 import { CAMERA_HEIGHT, normalizeFloorFit } from '@/core/floorFit';
 import { CAMERA_HEIGHT_LIMITS, normalizeCorners } from '@/core/floorCorners';
@@ -25,7 +25,7 @@ const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 type SavedPhoto = Pick<
   PhotoState,
   | 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg' | 'lensFocal35'
-  | 'autoFit' | 'floorCorners' | 'scaleEdge' | 'scaleLength' | 'cameraHeight'
+  | 'autoFit' | 'floorCorners' | 'scaleEdge' | 'scaleLength' | 'cameraHeight' | 'autoCalibrate'
 >;
 
 /**
@@ -74,6 +74,9 @@ export function restorePhoto(): void {
   const saved = readSaved<Partial<SavedPhoto>>(PHOTO_STORAGE_KEY);
   if (!saved) return;
 
+  // 自動で合わせるのは、明示してオンにしたときだけ。それ以前の記録（自動で出した画角と傾きが
+  // 入っている）は、オフの状態に揃える
+  const autoCalibrate = saved.autoCalibrate === true;
   photoState.set({
     furniture: withBaseSize(saved.furniture),
     view: saved.view ?? photoState.get().view,
@@ -93,7 +96,9 @@ export function restorePhoto(): void {
       : CAMERA_HEIGHT,
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
+    autoCalibrate,
   });
+  if (!autoCalibrate && Number.isFinite(saved.vfovDeg)) setAutoCalibrate(false);
 
   readBackground()
     .then(async (blob) => {
@@ -152,6 +157,7 @@ export function persistPhotoOnChange(): void {
       scaleEdge: state.scaleEdge,
       scaleLength: state.scaleLength,
       cameraHeight: state.cameraHeight,
+      autoCalibrate: state.autoCalibrate,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {
