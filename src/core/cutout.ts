@@ -38,6 +38,8 @@ export type CutoutServerPhase = 'queued' | 'running';
 export interface CutoutExtras {
   name?: string;
   size?: [number, number, number];
+  /** 利用者が作るときに入れた実際の高さ（m）。入れなければ無い */
+  height?: number;
   product?: ProductInfo;
 }
 
@@ -192,7 +194,7 @@ function newJob(fileName: string, phase: CutoutPhase): CutoutJob {
  * 写真を送って切り抜きを頼む。完成を待たずに返る。
  * 各写真の進み方は cutoutState を購読して見る
  */
-export async function startCutout(files: File[]): Promise<void> {
+export async function startCutout(files: File[], heights: (number | null)[] = []): Promise<void> {
   const jobs = files.map((file) => newJob(file.name, 'uploading'));
   if (jobs.length === 0) return;
 
@@ -204,7 +206,12 @@ export async function startCutout(files: File[]): Promise<void> {
     return;
   }
 
-  await Promise.all(jobs.map((job, index) => submit(job.id, files[index])));
+  await Promise.all(
+    jobs.map((job, index) => {
+      const height = heights[index];
+      return submit(job.id, files[index], height ? { height } : {});
+    })
+  );
 }
 
 /**
@@ -381,6 +388,7 @@ async function finish(id: string, jobId: string): Promise<void> {
       imageKey: key,
       previewKey: icon?.key ?? job?.previewKey ?? null,
       size: extras.size,
+      height: extras.height,
       product: extras.product,
       createdAt: Date.now(),
     });

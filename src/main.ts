@@ -20,6 +20,7 @@ import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createPhotoShadow } from '@/scene/photoShadow';
 import { createFurnitureLayer } from '@/scene/furniture';
+import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
@@ -72,8 +73,9 @@ const { room } = appState.get();
 // --- シーンを組み立てる ---
 const roomObjects = createRoom(room);
 // 家具のレイヤーはモードごとに持つ。状態を分けてあるので 3D 側も分ける
-const roomFurniture = createFurnitureLayer();
-const photoFurniture = createFurnitureLayer();
+// 中身が読めたら、箱を中身の形に締める（実際の高さが決まっていればそれに合わせる）
+const roomFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(roomScene, id, bounds) });
+const photoFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(photoScene, id, bounds) });
 // 床を合わせるときの見本の椅子。合わせている間だけ出す
 const floorMarkers = createFloorMarkers();
 // 写真の上に落ちる影。写真モードのときだけ出す

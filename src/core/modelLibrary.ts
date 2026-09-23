@@ -63,10 +63,21 @@ export interface GeneratedModel {
    * 無ければ GENERATED_SIZE（いちばん長い辺 1m）
    */
   size?: [number, number, number];
+  /**
+   * 利用者が入れた実際の高さ（m）。作るとき、または編集の姿・操作タブから。
+   * 置くときはこの高さになるよう、比率を保って大きさを決める（core/furnitureHeight.ts）
+   */
+  height?: number;
+  /**
+   * 中身の形（3 辺の比率、いちばん長い辺が 1）。切り抜きと 3D で別々に持つ。
+   * 最初に読み込めたときに測って覚える。これがあれば、置いた瞬間から中身に沿った箱になる
+   */
+  shape?: Partial<Record<ModelFacet, [number, number, number]>>;
   /** 商品ページから取り込んだ家具なら、買うための情報 */
   product?: ProductInfo;
   createdAt: number;
 }
+
 
 export interface ModelLibraryState {
   models: GeneratedModel[];
@@ -174,7 +185,7 @@ export function addModel(model: GeneratedModel): void {
  */
 export function updateModel(
   id: string,
-  patch: Partial<Pick<GeneratedModel, 'name' | 'previewKey'>>
+  patch: Partial<Pick<GeneratedModel, 'name' | 'previewKey' | 'height' | 'shape'>>
 ): void {
   const model = modelLibrary.get().models.find((item) => item.id === id);
   if (!model) return;
@@ -216,8 +227,13 @@ export function attachModel(id: string, modelKey: string): void {
   }
 }
 
+/** 置いてある家具の元になった保管庫の項目。保管庫ができる前の記録などで無いこともある */
+export function modelFor(item: PlacedFurniture): GeneratedModel | null {
+  return modelLibrary.get().models.find((model) => isCopyOf(item, model)) ?? null;
+}
+
 /** 置いてある家具が、この保管庫の項目から置いたものか。中身のキーで見る */
-function isCopyOf(item: PlacedFurniture, model: GeneratedModel): boolean {
+export function isCopyOf(item: PlacedFurniture, model: GeneratedModel): boolean {
   return (
     (model.modelKey !== null && item.modelUrl === model.modelKey) ||
     (model.imageKey !== null && item.imageUrl === model.imageKey)

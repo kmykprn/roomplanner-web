@@ -38,7 +38,6 @@ import {
 } from '@/core/cutout';
 import { createProductLink } from '@/ui/productLink';
 import {
-  GENERATED_SIZE,
   PLACEHOLDER_COLOR,
   modelLibrary,
   removeModelFacet,
@@ -51,6 +50,8 @@ import { authState, redirectLogin } from '@/platform/auth';
 import { walletState, remainingGenerations } from '@/core/wallet';
 import { NO_CREDITS_MESSAGE } from '@/platform/api';
 import { pickImage, pickImages } from '@/platform/picker';
+import { createHeightStep, parseHeight } from '@/ui/heightStep';
+import { placementSize, setModelHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
 import { savePreview } from '@/platform/previewCache';
 import { createIcon, type IconName } from '@/ui/icons';
 import { createLoginPanel } from '@/ui/loginPanel';
@@ -137,7 +138,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   }
 
   const chooser = createChooser({
-    cutout: () => void pickAndStart(startCutout),
+    cutout: () => void pickAndStart(),
     model: () => {
       chooser.close();
       openMaker();
@@ -148,13 +149,21 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
   });
 
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
-  async function pickAndStart(start: (files: File[]) => Promise<void>): Promise<void> {
+  async function pickAndStart(): Promise<void> {
     const files = await pickImages();
     if (files.length === 0) return;
-    void start(files);
-    showAll();
     chooser.close();
+    // 切り抜く前に、写真ごとの実際の高さを聞く。「‹ 戻る」なら何もせず一覧に戻る
+    normal.hidden = true;
+    const heights = await heightStep.ask(files);
+    normal.hidden = false;
+    if (!heights) return;
+    void startCutout(files, heights);
+    showAll();
   }
+
+  /** 切り抜く前に実際の高さを聞く姿。作り方を選ぶ姿と入れ替わりに出る */
+  const heightStep = createHeightStep();
 
   // --- 編集の姿 ---
   const editor = createModelEditor({
@@ -191,7 +200,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     },
   });
 
-  panel.append(normal, chooser.element, maker.element, editor.element);
+  panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element);
 
   function openChooser(): void {
     normal.hidden = true;
@@ -231,8 +240,8 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     place({
       typeId: 'generated',
       name: model.name,
-      // 商品ページから寸法が取れていれば実寸。無ければいちばん長い辺 1m
-      size: model.size ? [...model.size] : [...GENERATED_SIZE],
+      // 商品の寸法・測ってある形・入れてもらった高さから決める（core/furnitureHeight.ts）
+      size: placementSize(model, facet),
       color: PLACEHOLDER_COLOR,
       modelUrl: facet === 'solid' ? model.modelKey ?? undefined : undefined,
       imageUrl: facet === 'flat' ? model.imageKey ?? undefined : undefined,
@@ -854,6 +863,30 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   nameInput.maxLength = 40;
   nameField.append(nameLabel, nameInput);
 
+  // 実際の高さ。保存すると、置いてある同じ家具もこの高さにそろう（core/furnitureHeight.ts）
+  const heightField = document.createElement('div');
+  heightField.className = 'field';
+  const heightLabel = document.createElement('label');
+  heightLabel.className = 'field__label';
+  heightLabel.textContent = '家具の実際の高さ';
+  heightLabel.htmlFor = 'model-editor-height';
+  const heightInline = document.createElement('div');
+  heightInline.className = 'field__inline';
+  const heightInput = document.createElement('input');
+  heightInput.type = 'number';
+  heightInput.inputMode = 'decimal';
+  heightInput.id = 'model-editor-height';
+  heightInput.className = 'field__input field__input--short';
+  heightInput.min = String(REAL_HEIGHT_LIMITS.min * 100);
+  heightInput.max = String(REAL_HEIGHT_LIMITS.max * 100);
+  const heightUnit = document.createElement('span');
+  heightUnit.textContent = 'cm';
+  heightInline.append(heightInput, heightUnit);
+  const heightNote = document.createElement('p');
+  heightNote.className = 'hint';
+  heightNote.textContent = '変更して保存すると、すでに置いてあるこの家具も、新しい高さに合わせた大きさで表示されます。';
+  heightField.append(heightLabel, heightInline, heightNote);
+
   // 商品ページから取り込んだ家具なら、店名・寸法と「楽天で見る」を出す
   const productField = document.createElement('div');
   productField.className = 'field';
@@ -892,6 +925,9 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
       updateModel(current.id, { name });
       renamePlacedCopies(current, name);
     }
+    // 空や数でないものは変えない（消して保存しても、前の高さのまま）
+    const height = parseHeight(heightInput.value);
+    if (height !== null && Math.abs(height - shownHeight(current)) > 1e-6) setModelHeight(current.id, height);
     close();
   });
   actions.append(save);
@@ -953,7 +989,12 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   modalBox.append(confirmTitle, confirmRow, confirmNote, confirmButtons);
   modal.append(modalBox);
 
-  element.append(head, iconRow, nameField, productField, actions, modelField, spacer, divider, remove, modal);
+  element.append(head, iconRow, nameField, heightField, productField, actions, modelField, spacer, divider, remove, modal);
+
+  /** 欄に出す高さ（m）。入れてあればそれ、無ければ置くときの高さ */
+  function shownHeight(model: GeneratedModel): number {
+    return model.height ?? placementSize(model, facet)[1];
+  }
 
   /**
    * 3D の段の案内と押せるか。作っている最中と、回数を使い切ったときは押せない。
@@ -995,6 +1036,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     const kind = FACET_NAME[facet];
     title.textContent = `${kind}の編集`;
     nameInput.value = model.name;
+    heightInput.value = String(Math.round(shownHeight(model) * 100));
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
     confirmTitle.textContent = `この ${kind}を削除します`;
