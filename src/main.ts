@@ -20,6 +20,7 @@ import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createPhotoShadow } from '@/scene/photoShadow';
 import { createFurnitureLayer } from '@/scene/furniture';
+import { vfovFromFocal35 } from '@/core/exifFocal';
 import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
@@ -262,18 +263,21 @@ function applyPhotoView(): void {
 /**
  * 写真が出たら、画角と傾きを写真から解析して入れる（core/photoCalibModel.ts）。
  *
- * 一枚につき一度だけ。結果は floorFit と vfovDeg に入り、床の傾きは
+ * 一枚につき一度だけ。写真の EXIF に焦点距離があれば画角はそれを使い、解析は傾きだけ出す。
+ * 結果は floorFit と vfovDeg に入り、床の傾きは
  * そのまま手で直せる。出せなかったときは既定のまま（手で合わせてもらう）。
  * 写真は端末の中だけで処理する
  */
 function calibrateWhenReady(): void {
-  const { backgroundStatus, backgroundUrl, calibration } = photoState.get();
+  const { backgroundStatus, backgroundUrl, calibration, lensFocal35, backgroundAspect } = photoState.get();
   if (backgroundStatus !== 'ready' || !backgroundUrl || calibration !== 'idle') return;
+  // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
+  const exifVfov = lensFocal35 && backgroundAspect ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
 
   setCalibration('running');
   // 解析の道具（onnxruntime）は大きいので、写真が出てから読む。起動時の読み込みに混ぜない
   import('@/core/photoCalibModel')
-    .then(({ calibratePhoto }) => calibratePhoto(backgroundUrl))
+    .then(({ calibratePhoto }) => calibratePhoto(backgroundUrl, exifVfov))
     .then((result) => {
       // 待っている間に写真が替わっていたら、その写真の結果ではないので捨てる
       if (photoState.get().backgroundUrl !== backgroundUrl) return;

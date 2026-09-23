@@ -202,11 +202,18 @@ function solve3(A: Float64Array, rhs: Float64Array): Float64Array | null {
   ]);
 }
 
-/** 場からカメラの画角と傾きを解く */
-export function calibrateFromFields(fields: CalibFields): CalibResult {
+/**
+ * 場からカメラの画角と傾きを解く。
+ *
+ * @param fixedFocalPx 焦点距離が分かっていれば（写真の EXIF から）その値（入力画像の画素）。
+ *   渡すと焦点距離は動かさず、傾き 2 つだけを解く。画角と傾きは互いに埋め合わせが効くので、
+ *   画角を正しく固定すると傾きも正しくなる
+ */
+export function calibrateFromFields(fields: CalibFields, fixedFocalPx?: number): CalibResult {
   const pixels = samplePixels(fields);
   // 初期値は GeoCalib と同じ: ロール 0・ピッチ 0・f = 0.7 × 長辺
-  let p: Params = { roll: 0, pitch: 0, logF: Math.log(0.7 * Math.max(fields.width, fields.height)) };
+  const initialFocal = fixedFocalPx ?? 0.7 * Math.max(fields.width, fields.height);
+  let p: Params = { roll: 0, pitch: 0, logF: Math.log(initialFocal) };
   let lambda = LAMBDA_INIT;
   let { cost, H, G } = accumulate(fields, p, pixels, true);
   let iterations = 0;
@@ -216,7 +223,17 @@ export function calibrateFromFields(fields: CalibFields): CalibResult {
     // 対角を λ 倍だけ強めて、谷の底へ向かう一歩を解く
     const A = new Float64Array(H);
     for (let d = 0; d < 3; d += 1) A[d * 4] += lambda * H[d * 4] + 1e-9;
-    const delta = solve3(A, G);
+    const rhs = new Float64Array(G);
+    if (fixedFocalPx !== undefined) {
+      // 焦点距離の行と列を切り離し、その一歩を 0 にする
+      for (let d = 0; d < 3; d += 1) {
+        A[2 * 3 + d] = 0;
+        A[d * 3 + 2] = 0;
+      }
+      A[8] = 1;
+      rhs[2] = 0;
+    }
+    const delta = solve3(A, rhs);
     if (!delta) break;
     const next: Params = { roll: p.roll - delta[0], pitch: p.pitch - delta[1], logF: p.logF - delta[2] };
     const trial = accumulate(fields, next, pixels, true);
