@@ -21,7 +21,15 @@ import {
   type PhotoPoint,
   type PhotoView,
 } from '@/core/photoView';
-import { clampFloorFit, DEFAULT_FLOOR_FIT, type FloorFit } from '@/core/floorFit';
+import { CAMERA_HEIGHT, DEFAULT_FLOOR_FIT, clampFloorFit, type FloorFit } from '@/core/floorFit';
+import {
+  cameraHeightFor,
+  defaultCorners,
+  solveFloorFit,
+  type CornerEdge,
+  type FloorCorners,
+  type Lens,
+} from '@/core/floorCorners';
 
 /**
  * 背景写真の読み込み具合。
@@ -73,22 +81,23 @@ export interface PhotoState extends FurnitureSceneState {
   /** 写真から出した縦の画角（度）。無ければ既定の画角で描く */
   vfovDeg: number | null;
   calibration: CalibrationStatus;
-  /** 床を合わせている最中か。この間だけコーンを出し、指の動きを傾きに使う */
+  /**
+   * 写真の解析で出た傾き。「最初に戻す」の戻り先。解析できなかった写真では null
+   */
+  autoFit: FloorFit | null;
+  /**
+   * 床に合わせた四隅（core/floorCorners.ts）。まだ合わせていなければ null で、
+   * 合わせる姿に入ったときにいまの傾きから作る
+   */
+  floorCorners: FloorCorners | null;
+  /** 長さを入れる辺（0 手前・1 右・2 奥・3 左） */
+  scaleEdge: CornerEdge;
+  /** その辺の実際の長さ（m）。入れていなければ null（立って撮った高さのまま） */
+  scaleLength: number | null;
+  /** カメラの高さ（m）。長さを入れると決まる。写真の縮尺そのもの */
+  cameraHeight: number;
+  /** 床を合わせている最中か。この間だけ四隅のマス目を出し、指の動きを四隅に使う */
   isFittingFloor: boolean;
-  /**
-   * いま指が触れて傾きを変えている最中か。
-   * **触れていることを画面で返すため**に持つ（触っても何も変わらないと、
-   * 効いているのか分からない）。保存はしない
-   */
-  isDraggingFloor: boolean;
-  /**
-   * 床を合わせる板を、画面のどこに置いているか（-1〜+1 の座標。下が負）。
-   *
-   * **タップした場所に板が来る。** 触った画素から伸ばした視線が床に当たった場所に置くので、
-   * タップした点では板が必ず床に触れて見える。傾きのずれは、板の大きさと形のほうに出る。
-   * 散らかっていない床へ逃がしたり、何か所かで確かめたりするために動かせる
-   */
-  floorProbe: { x: number; y: number };
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -115,9 +124,12 @@ export const photoState = createStore<PhotoState>({
   floorFit: { ...DEFAULT_FLOOR_FIT },
   vfovDeg: null,
   calibration: 'idle',
+  autoFit: null,
+  floorCorners: null,
+  scaleEdge: 0,
+  scaleLength: null,
+  cameraHeight: CAMERA_HEIGHT,
   isFittingFloor: false,
-  isDraggingFloor: false,
-  floorProbe: { x: 0, y: -0.45 },
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -177,7 +189,7 @@ export async function setBackground(file: File): Promise<void> {
   // 前の写真の解析結果（画角と傾き）は、別の写真では意味がないので捨てる。
   // ここで捨てる（showBackground では捨てない）のは、起動時の読み戻しでも
   // showBackground を通るため。同じ写真の読み戻しで捨てると、開くたびに解析し直す
-  photoState.set({ vfovDeg: null, calibration: 'idle' });
+  photoState.set({ vfovDeg: null, calibration: 'idle', ...FRESH_FLOOR });
 
   // 次に開いたときも残っているように、縮めた1枚を端末に置く。
   // 置けなくても（容量・プライベートモード）いま見えているものは変わらない
@@ -217,9 +229,10 @@ export function clearBackground(): void {
     backgroundName: null,
     backgroundStatus: 'idle',
     backgroundAspect: null,
-    // 写真に付いていた解析結果も一緒に捨てる
+    // 写真に付いていた解析結果と床の合わせ方も一緒に捨てる
     vfovDeg: null,
     calibration: 'idle',
+    ...FRESH_FLOOR,
   });
   // 端末に残した1枚も捨てる。次に開いたときに戻ってこないように
   deleteBackground().catch(() => {});
@@ -237,32 +250,70 @@ export function setFittingFloor(isFittingFloor: boolean): void {
 }
 
 /**
- * 床の傾きを変える。渡した分だけ足す（指の移動量をそのまま渡す想定）。
- * 範囲外には行かないので、勢いよく滑らせても戻せなくならない
+ * 写真の画角を返す関数。main.ts が入れる（描いているカメラが持っている）。
+ * 四隅から傾きを解くのに要る
  */
-export function nudgeFloorFit(delta: Partial<FloorFit>): void {
-  const current = photoState.get().floorFit;
+let lensSource: (() => Lens) | null = null;
+
+export function setLensSource(source: () => Lens): void {
+  lensSource = source;
+}
+
+/** 床の合わせ方を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
+const FRESH_FLOOR = {
+  autoFit: null,
+  floorCorners: null,
+  scaleEdge: 0 as CornerEdge,
+  scaleLength: null,
+  cameraHeight: CAMERA_HEIGHT,
+};
+
+/**
+ * 四隅・長さを入れる辺・その長さのどれかを変え、傾きとカメラの高さを解き直す。
+ *
+ * 四隅から傾きが決まらない（ほぼ一直線など）ときは、四隅だけ入れて傾きは前のまま。
+ * 長さが無い、または辺が床に当たらないときは、立って撮った高さに戻す
+ */
+export function updateFloorCorners(patch: {
+  corners?: FloorCorners;
+  edge?: CornerEdge;
+  length?: number | null;
+}): void {
+  const state = photoState.get();
+  const corners = patch.corners ?? state.floorCorners;
+  const scaleEdge = patch.edge ?? state.scaleEdge;
+  const scaleLength = patch.length !== undefined ? patch.length : state.scaleLength;
+  if (!corners || !lensSource) {
+    photoState.set({ floorCorners: corners, scaleEdge, scaleLength });
+    return;
+  }
+  const lens = lensSource();
+  const floorFit = solveFloorFit(corners, lens) ?? state.floorFit;
+  const cameraHeight =
+    (scaleLength && cameraHeightFor(corners, scaleEdge, scaleLength, floorFit, lens)) || CAMERA_HEIGHT;
+  photoState.set({ floorCorners: corners, scaleEdge, scaleLength, floorFit, cameraHeight });
+}
+
+/** 合わせる姿に入ったとき、四隅がまだ無ければいまの傾きから作る */
+export function ensureFloorCorners(): void {
+  const { floorCorners, floorFit } = photoState.get();
+  if (floorCorners || !lensSource) return;
+  photoState.set({ floorCorners: defaultCorners(floorFit, lensSource()) });
+}
+
+/**
+ * 最初に戻す。傾きは写真の解析で出たもの（無ければ既定）、高さは立って撮った高さ、
+ * 四隅はその傾きから作り直す。長さを入れる辺と長さも消す
+ */
+export function resetFloorCorners(): void {
+  const floorFit = photoState.get().autoFit ?? { ...DEFAULT_FLOOR_FIT };
   photoState.set({
-    floorFit: clampFloorFit({
-      pitchDeg: current.pitchDeg + (delta.pitchDeg ?? 0),
-      rollDeg: current.rollDeg + (delta.rollDeg ?? 0),
-    }),
+    floorFit,
+    floorCorners: lensSource ? defaultCorners(floorFit, lensSource()) : null,
+    scaleEdge: 0,
+    scaleLength: null,
+    cameraHeight: CAMERA_HEIGHT,
   });
-}
-
-/** 指が触れている／離れた。画面の見せ方を変えるために使う */
-export function setDraggingFloor(isDraggingFloor: boolean): void {
-  if (photoState.get().isDraggingFloor !== isDraggingFloor) photoState.set({ isDraggingFloor });
-}
-
-/** 板を置く場所を変える。画面の座標（-1〜+1）で受ける */
-export function setFloorProbe(x: number, y: number): void {
-  photoState.set({ floorProbe: { x: clampProbe(x), y: clampProbe(y) } });
-}
-
-/** 画面の外に出すと板が見えなくなるので、少し内側に留める */
-function clampProbe(value: number): number {
-  return Math.min(0.9, Math.max(-0.9, value));
 }
 
 /** 写真の解析の進み具合を入れる */
@@ -277,12 +328,9 @@ export function retryCalibration(): void {
 
 /** 解析で出た画角と傾きを入れる */
 export function applyCalibration(vfovDeg: number, fit: FloorFit): void {
-  photoState.set({ vfovDeg, floorFit: clampFloorFit(fit), calibration: 'done' });
-}
-
-/** 床の傾きを直に入れる（読み戻しと、やり直し用） */
-export function setFloorFit(fit: FloorFit): void {
-  photoState.set({ floorFit: clampFloorFit(fit) });
+  const floorFit = clampFloorFit(fit);
+  // 四隅は前の傾き・画角で置いたものなので作り直させる（合わせる姿に入ったときに作る）
+  photoState.set({ vfovDeg, floorFit, autoFit: floorFit, floorCorners: null, calibration: 'done' });
 }
 
 export function setMaskTool(patch: Partial<MaskTool>): void {

@@ -1,25 +1,30 @@
 /**
- * 「床を合わせる」姿。写真モードの「背景」タブから入る。
+ * 「床に合わせる」姿。写真モードの「背景」タブから入る。
  *
- * 画面には見本の椅子が 1 脚置かれる（scene/floorMarkers.ts）。利用者はそれを見て、
- * **まっすぐ立って見えないなら指で直す**。椅子は誰でも正しい姿を知っているので、
- * 目測ではなく「見慣れた形かどうか」で判断できる。脚の下に落ちる影も手がかりになる。
- * 合わせるのは前後と左右の傾きだけで、床の上での向き（ヨー）は出てこない。
+ * 写真の上に四隅のマス目が出る（ui/floorGrid.ts）。利用者は四隅を動かして、
+ * マス目を写真の床に貼り付いて見えるようにする。四隅から傾きが決まる（core/floorCorners.ts）。
  *
- * 椅子は床をタップした場所へ移せる。**タップした点に椅子が立つ**ので、そこでは
- * 浮かない。散らかっていない床へ逃がしたり、何か所かで確かめたりできる
- * （傾きが違うと、手前で合っていても奥で破綻する）。
- *
- * 数字は出さない。「何度にすればよいか」は誰にも分からないので、
- * 見た目がしっくりくるかどうかで決めてもらう。
+ * 辺の 1 本の実際の長さを入れてもらえれば、写真の縮尺（カメラの高さ）も決まる。
+ * 入れなければ立って撮った写真として扱う。長さを入れる辺は写真の上でタップして選ぶ。
  */
 
-import { photoState, setFittingFloor, setFloorFit } from '@/core/photoState';
-import { DEFAULT_FLOOR_FIT, FLOOR_FIT_LIMITS, type FloorFit } from '@/core/floorFit';
-import { createSliderRow } from '@/ui/sliderRow';
+import {
+  photoState,
+  resetFloorCorners,
+  setFittingFloor,
+  updateFloorCorners,
+} from '@/core/photoState';
 
-const NOTE = '椅子がまっすぐ立って、脚が床に着いて見えるまで、下のバーで調整してください';
-const HOW = '床をタップ … その場所へ椅子を移す';
+const GUIDE = 'マス目が床に貼り付いて見えるように、四隅の ● を動かしてください。';
+const HINT =
+  '目安: 床板の継ぎ目・ラグの縁・壁と床の境目に、マス目の線が重なれば合っています。';
+const LENGTH_HINT =
+  'オレンジの辺が実際に何 cm あるかを入れると、家具の大きさが写真に合います。' +
+  '辺をタップすると、長さを入れる辺を選べます。分からなければ空のままで大丈夫です' +
+  '（立って撮った写真として大きさを決めます）。';
+
+/** 長さとして受け付ける範囲（cm） */
+const LENGTH_LIMITS = { min: 5, max: 2000 };
 
 export function createFloorPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -37,65 +42,67 @@ export function createFloorPanel(): HTMLElement {
   done.addEventListener('click', () => setFittingFloor(false));
   head.append(title, done);
 
-  const note = document.createElement('p');
-  note.className = 'hint';
-  note.textContent = NOTE;
+  const guide = document.createElement('p');
+  guide.className = 'floor-fit__guide';
+  guide.textContent = GUIDE;
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent = HINT;
 
-  const how = document.createElement('p');
-  how.className = 'hint';
-  how.textContent = HOW;
+  // 大きさの基準: オレンジの辺の長さ
+  const lengthField = document.createElement('div');
+  lengthField.className = 'field';
+  const lengthLabel = document.createElement('label');
+  lengthLabel.className = 'field__label';
+  lengthLabel.textContent = 'オレンジの辺の長さ（分かれば）';
+  lengthLabel.htmlFor = 'floor-fit-length';
+  const inline = document.createElement('div');
+  inline.className = 'field__inline';
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.inputMode = 'decimal';
+  input.id = 'floor-fit-length';
+  input.className = 'field__input field__input--short';
+  input.placeholder = '例: 120';
+  input.min = String(LENGTH_LIMITS.min);
+  input.max = String(LENGTH_LIMITS.max);
+  const unit = document.createElement('span');
+  unit.textContent = 'cm';
+  inline.append(input, unit);
+  const lengthHint = document.createElement('p');
+  lengthHint.className = 'hint';
+  lengthHint.textContent = LENGTH_HINT;
+  lengthField.append(lengthLabel, inline, lengthHint);
 
-  // 傾きはここで変える。**写真の上には置かない。**
-  // 写真の上に重ねると、指が椅子に取られて動かせない（椅子を掴む操作と同じ場所になるため）
-  const pitch = createTiltRow('前後の傾き', ['手前', '奥'], FLOOR_FIT_LIMITS.pitch, (value) =>
-    updateFit({ pitchDeg: value })
-  );
-  const roll = createTiltRow('左右の傾き', ['左', '右'], FLOOR_FIT_LIMITS.roll, (value) =>
-    updateFit({ rollDeg: value })
-  );
+  input.addEventListener('change', () => {
+    const centimetres = Number(input.value);
+    // 空にしたら長さを外す（立って撮った高さに戻る）
+    const valid =
+      input.value.trim() !== '' && Number.isFinite(centimetres) && centimetres >= LENGTH_LIMITS.min && centimetres <= LENGTH_LIMITS.max;
+    updateFloorCorners({ length: valid ? centimetres / 100 : null });
+  });
 
   // やり直し。触りすぎて分からなくなったときに戻れる場所を必ず残す
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'button is-quiet is-small';
-  reset.textContent = '最初の傾きに戻す';
-  reset.addEventListener('click', () => setFloorFit({ ...DEFAULT_FLOOR_FIT }));
-
+  reset.textContent = '最初に戻す';
+  reset.addEventListener('click', resetFloorCorners);
   const footer = document.createElement('div');
   footer.className = 'edit__actions';
   footer.append(reset);
 
-  panel.append(head, note, how, pitch.element, roll.element, footer);
+  panel.append(head, guide, hint, lengthField, footer);
 
   function render(): void {
-    const { isFittingFloor, floorFit } = photoState.get();
+    const { isFittingFloor, scaleLength } = photoState.get();
     panel.hidden = !isFittingFloor;
     if (!isFittingFloor) return;
-    pitch.setValue(Math.round(floorFit.pitchDeg));
-    roll.setValue(Math.round(floorFit.rollDeg));
+    // 打ち込んでいる最中は書き戻さない（入力が消える）
+    if (document.activeElement !== input) input.value = scaleLength ? String(Math.round(scaleLength * 100)) : '';
   }
   render();
   photoState.subscribe(render);
 
   return panel;
-}
-
-/**
- * 傾きの行を 1 つ作る。
- *
- * **両端は向きの言葉にする。** 何度が正しいかは誰にも分からないので、
- * 度数を出しても判断に使えない。「手前へ倒すのか奥へ倒すのか」だけ分かればよい
- */
-function createTiltRow(
-  label: string,
-  ends: [string, string],
-  limits: { min: number; max: number },
-  onInput: (value: number) => void
-): ReturnType<typeof createSliderRow> {
-  return createSliderRow({ label, min: limits.min, max: limits.max, ends, onInput });
-}
-
-/** 片方の傾きだけ差し替える */
-function updateFit(patch: Partial<FloorFit>): void {
-  setFloorFit({ ...photoState.get().floorFit, ...patch });
 }

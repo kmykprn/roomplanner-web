@@ -131,6 +131,14 @@ body {
  * 隠す場所の層。キャンバスの上に、写真を塗った形で切り抜いて重ねる。
  * 指の操作は下のキャンバスへ通す。塗った形（mask-image）が無い間は出さない
  */
+/* 床に合わせる四隅とマス目を描く層。指の操作は下のキャンバスに通す */
+.viewport__overlay {
+  pointer-events: none;
+}
+.floor-fit__guide {
+  margin: 0;
+  font-size: 14px;
+}
 .viewport__mask {
   display: none;
   pointer-events: none;

@@ -68,13 +68,13 @@ export function createPhotoPanel(): HTMLElement {
   chevron.textContent = '›';
   maskRow.element.append(chevron);
 
-  // --- 写真からの自動調整。結果は「床の傾き」に入る ---
+  // --- 写真からの自動調整。結果は「床に合わせる」に入る ---
   const calibRow = createSettingRow('写真から自動で合わせる');
   const retryButton = createSmallButton('やり直す', retryCalibration);
   calibRow.element.append(retryButton);
 
-  // --- 床の傾き。行ごと押せる ---
-  const floorRow = createSettingRow('床の傾き', () => setFittingFloor(true));
+  // --- 床に合わせる（傾きと大きさの基準）。行ごと押せる ---
+  const floorRow = createSettingRow('床に合わせる', () => setFittingFloor(true));
   const floorChevron = document.createElement('span');
   floorChevron.className = 'setting__chevron';
   floorChevron.textContent = '›';
@@ -90,6 +90,7 @@ export function createPhotoPanel(): HTMLElement {
   function render(): void {
     const {
       backgroundName, backgroundStatus, isMasking, isFittingFloor, maskUrl, floorFit, calibration,
+      floorCorners, scaleLength,
     } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -111,8 +112,11 @@ export function createPhotoPanel(): HTMLElement {
     floorRow.element.hidden = !ready;
     // 度数は出さない。「何度が正しいか」は誰にも分からないので、合わせたかどうかだけ伝える
     const fitted =
-      floorFit.pitchDeg !== DEFAULT_FLOOR_FIT.pitchDeg || floorFit.rollDeg !== DEFAULT_FLOOR_FIT.rollDeg;
-    floorRow.setValue(fitted ? '調整済み' : '未調整', fitted);
+      floorCorners !== null ||
+      floorFit.pitchDeg !== DEFAULT_FLOOR_FIT.pitchDeg ||
+      floorFit.rollDeg !== DEFAULT_FLOOR_FIT.rollDeg;
+    // 長さまで入れていれば大きさも合っている。そこまで分かるように言い分ける
+    floorRow.setValue(scaleLength ? '大きさも調整済み' : fitted ? '調整済み' : '未調整', fitted);
 
     maskRow.element.hidden = !ready;
     maskRow.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));

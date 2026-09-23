@@ -30,6 +30,12 @@ export interface Viewer {
    */
   maskLayer: HTMLElement;
   /**
+   * 写真の上に線や点を描く層。**いちばん上**に重ねる。床に合わせる四隅とマス目を描く。
+   * 3D ではなく写真の座標で描くものなので、キャンバスに描かず別の層にしている。
+   * 指の操作はキャンバスに通す（pointer-events: none）
+   */
+  overlayLayer: HTMLCanvasElement;
+  /**
    * 描画範囲を指定の縦横比に収める。null で画面いっぱいに戻す。
    *
    * 写真モードで要る。写真は画面いっぱいには収まらない（縦横比が違う）ので
@@ -97,7 +103,9 @@ export function createViewer(container: HTMLElement): Viewer {
   photoLayer.className = 'viewport__photo';
   const maskLayer = document.createElement('div');
   maskLayer.className = 'viewport__mask';
-  container.append(photoLayer, renderer.domElement, maskLayer);
+  const overlayLayer = document.createElement('canvas');
+  overlayLayer.className = 'viewport__overlay';
+  container.append(photoLayer, renderer.domElement, maskLayer, overlayLayer);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(THEME.background);
@@ -142,7 +150,7 @@ export function createViewer(container: HTMLElement): Viewer {
 
     // キャンバスと写真の層を、同じ大きさ・同じ場所に重ねる。
     // 入れ物の中央に寄せる（CSS の 100% 指定より、ここで入れる値が優先される）
-    for (const element of [renderer.domElement, photoLayer, maskLayer]) {
+    for (const element of [renderer.domElement, photoLayer, maskLayer, overlayLayer]) {
       const style = element.style;
       style.position = 'absolute';
       style.left = `${(width - drawWidth) / 2}px`;
@@ -150,6 +158,11 @@ export function createViewer(container: HTMLElement): Viewer {
       style.width = `${drawWidth}px`;
       style.height = `${drawHeight}px`;
     }
+
+    // 線の層は CSS の大きさとは別に、描く画素数も端末に合わせる（合わせないと線がぼやける）
+    const pixelRatio = Math.min(2, window.devicePixelRatio || 1);
+    overlayLayer.width = Math.round(drawWidth * pixelRatio);
+    overlayLayer.height = Math.round(drawHeight * pixelRatio);
 
     camera.aspect = drawWidth / drawHeight;
     camera.fov = photoFov ?? fovForDrawHeight(drawHeight, height);
@@ -219,6 +232,7 @@ export function createViewer(container: HTMLElement): Viewer {
     canvas: renderer.domElement,
     photoLayer,
     maskLayer,
+    overlayLayer,
     setContentAspect(aspect) {
       // 角をドラッグするたびに呼ばれる。変わっていないなら測り直さない
       if (contentAspect === aspect) return;
@@ -249,6 +263,7 @@ export function createViewer(container: HTMLElement): Viewer {
       renderer.domElement.remove();
       photoLayer.remove();
       maskLayer.remove();
+      overlayLayer.remove();
     },
   };
 }
