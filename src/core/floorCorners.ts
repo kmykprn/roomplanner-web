@@ -135,22 +135,41 @@ function photoPointOf(world: Vec, fit: FloorFit, lens: Lens): PhotoPoint {
   return { x: (x + 1) / 2, y: (1 - y) / 2 };
 }
 
+/** 写真のうち画面に見えている範囲（写真の中の割合）。四隅はこの中に出す */
+export interface VisibleRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
  * 最初に出す四隅。いまの傾きで、床の上の長方形を写真に写したもの。
  *
- * 手前の辺は写真の下から 1 割、奥の辺は下から 4 割あたりの床に置き、
- * 幅は手前の辺が写真の幅の 6〜7 割ほどになるようにする
+ * **見えている範囲の中に出す。** 写真は画面を覆うように敷くので、上下か左右が
+ * 切れている。写真全体の割合で置くと、角が画面の外に出て掴めない。
+ * 手前の辺は見えている範囲の下から 1 割、奥の辺は下から 4 割あたりの床に置き、
+ * 幅は手前の辺が見えている幅の 6〜7 割ほどになるようにする
  */
-export function defaultCorners(fit: FloorFit, lens: Lens): FloorCorners {
-  const near = floorPointOf({ x: 0.5, y: 0.88 }, fit, lens, 1);
-  const far = floorPointOf({ x: 0.5, y: 0.62 }, fit, lens, 1);
-  // 傾きが水平より上を向いているなど、床が見えないときは写真の下半分に台形を置くだけ
+export function defaultCorners(
+  fit: FloorFit,
+  lens: Lens,
+  region: VisibleRegion = { x: 0, y: 0, width: 1, height: 1 }
+): FloorCorners {
+  const inRegion = (u: number, v: number): PhotoPoint => ({
+    x: region.x + u * region.width,
+    y: region.y + v * region.height,
+  });
+  const near = floorPointOf(inRegion(0.5, 0.88), fit, lens, 1);
+  const far = floorPointOf(inRegion(0.5, 0.62), fit, lens, 1);
+  // 傾きが水平より上を向いているなど、床が見えないときは見えている範囲の下半分に台形を置くだけ
   if (!near) {
-    return [{ x: 0.2, y: 0.9 }, { x: 0.8, y: 0.9 }, { x: 0.65, y: 0.65 }, { x: 0.35, y: 0.65 }];
+    return [inRegion(0.2, 0.9), inRegion(0.8, 0.9), inRegion(0.65, 0.65), inRegion(0.35, 0.65)];
   }
   const nearZ = near[2];
   const farZ = far ? far[2] : nearZ * 2;
-  const halfWidth = 0.95 * Math.abs(nearZ) * Math.tan(toRad(lens.vfovDeg) / 2) * lens.aspect;
+  const halfWidth =
+    0.95 * Math.abs(nearZ) * Math.tan(toRad(lens.vfovDeg) / 2) * lens.aspect * region.width;
   const at = (x: number, z: number): PhotoPoint => photoPointOf([x + near[0], -1, z], fit, lens);
   return [at(-halfWidth, nearZ), at(halfWidth, nearZ), at(halfWidth, farZ), at(-halfWidth, farZ)];
 }

@@ -9,7 +9,14 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { THEME } from '@/config/theme';
-import { viewOrigin, type PhotoView } from '@/core/photoView';
+import {
+  clampPhotoView,
+  DEFAULT_PHOTO_VIEW,
+  setPhotoFrame,
+  viewOrigin,
+  visibleSize,
+  type PhotoView,
+} from '@/core/photoView';
 
 export interface Viewer {
   renderer: THREE.WebGLRenderer;
@@ -36,11 +43,11 @@ export interface Viewer {
    */
   overlayLayer: HTMLCanvasElement;
   /**
-   * 描画範囲を指定の縦横比に収める。null で画面いっぱいに戻す。
+   * 写真の縦横比を教える。null で写真なし（部屋モード）。
    *
-   * 写真モードで要る。写真は画面いっぱいには収まらない（縦横比が違う）ので
-   * 余白ができるが、3D をその余白にまで描くと、写真の中の床と 3D の床が
-   * 対応しなくなる。**写真が写っている矩形の中だけに描く。**
+   * 描くのはいつも画面いっぱい。写真は画面を覆うように敷き、縦横比が違ってはみ出た分は
+   * 切り落とす（引き伸ばさない）。3D も同じ範囲を切り取るので、写真の中の床と 3D の床は
+   * ずれない。どれだけはみ出たかは core/photoView.ts の setPhotoFrame に入れる
    */
   setContentAspect(aspect: number | null): void;
 
@@ -73,10 +80,8 @@ const BASE_FOV = 50;
  * 描画領域の高さに合わせた縦の画角。
  *
  * three.js は縦の画角を固定して描くので、1 m の物が画面に占める大きさは
- * **描画領域の高さに比例する。** 写真モードは描画領域を写真の縦横比に
- * 切り取るため、横長の写真を選ぶと高さが縮み、同じモデルが小さく見えていた
- * （写真を外すと元に戻る）。切り取った分だけ画角も狭めれば、
- * 画面いっぱいに描いたときと同じ大きさで描ける。
+ * **描く高さに比例する。** 写真の画角が分からないとき（解析前）は、写真の全体が
+ * 画面に占める高さに合わせて画角を決め、部屋モードと同じ大きさで描く。
  */
 function fovForDrawHeight(drawHeight: number, containerHeight: number): number {
   const halfBase = THREE.MathUtils.degToRad(BASE_FOV / 2);
@@ -142,9 +147,15 @@ export function createViewer(container: HTMLElement): Viewer {
     const height = container.clientHeight;
     if (width === 0 || height === 0) return;
 
-    // 指定された縦横比に収める（写真と同じ「はみ出さずに全体を入れる」置き方）
-    drawWidth = contentAspect ? Math.min(width, height * contentAspect) : width;
-    drawHeight = contentAspect ? drawWidth / contentAspect : height;
+    // いつも入れ物いっぱいに描く。写真は画面を覆うように敷き、はみ出た分は切り落とす
+    drawWidth = width;
+    drawHeight = height;
+    // 倍率 1 のとき、写真の幅と高さのどれだけが画面に入るか。
+    // 画面のほうが横長なら写真の上下が、縦長なら左右がはみ出る
+    const screenAspect = width / height;
+    const frameX = contentAspect && screenAspect < contentAspect ? screenAspect / contentAspect : 1;
+    const frameY = contentAspect && screenAspect > contentAspect ? contentAspect / screenAspect : 1;
+    setPhotoFrame(frameX, frameY);
 
     renderer.setSize(drawWidth, drawHeight, false);
 
@@ -164,8 +175,9 @@ export function createViewer(container: HTMLElement): Viewer {
     overlayLayer.width = Math.round(drawWidth * pixelRatio);
     overlayLayer.height = Math.round(drawHeight * pixelRatio);
 
-    camera.aspect = drawWidth / drawHeight;
-    camera.fov = photoFov ?? fovForDrawHeight(drawHeight, height);
+    // カメラは写真の全体に合わせる（縦横比も画角も写真のもの）。見える範囲は applyPhotoView で切り取る
+    camera.aspect = contentAspect ?? drawWidth / drawHeight;
+    camera.fov = photoFov ?? fovForDrawHeight(drawHeight / frameY, height);
     applyPhotoView();
   }
 
@@ -176,23 +188,26 @@ export function createViewer(container: HTMLElement): Viewer {
    * **どちらも同じ値から出す。**別々に持つと、寄ったときだけ家具が写真からずれる
    */
   function applyPhotoView(): void {
-    if (!photoView) {
+    // 写真があれば、寄っていなくても切り取る（画面を覆うためにはみ出た分を落とす）
+    const view = photoView ?? (contentAspect ? DEFAULT_PHOTO_VIEW : null);
+    if (!view) {
       camera.clearViewOffset(); // updateProjectionMatrix も中で呼ばれる
       setImageFit(photoLayer, '', '');
       setImageFit(maskLayer, '', '');
       return;
     }
 
-    const { x, y } = viewOrigin(photoView);
-    const visible = 1 / photoView.scale;
+    // 画面の大きさが変わると見える幅も変わるので、ここでも写真の中に収め直す
+    const clamped = clampPhotoView(view);
+    const { x, y } = viewOrigin(clamped);
+    const { width, height } = visibleSize(clamped);
 
     // 全体を 1 × 1 として渡す。割合で持つので、画面の大きさが変わっても効き方は同じ
-    camera.setViewOffset(1, 1, x, y, visible, visible);
+    camera.setViewOffset(1, 1, x, y, width, height);
 
-    // 縦横の両方を指定する。片方を auto にすると、丸めの分だけ枠に隙間が出る
-    const percent = `${photoView.scale * 100}%`;
-    const size = `${percent} ${percent}`;
-    const position = `${-x * photoView.scale * drawWidth}px ${-y * photoView.scale * drawHeight}px`;
+    // 写真は「見える割合」の逆数だけ拡大して敷き、左上を合わせる。縦横とも px で指定する
+    const size = `${drawWidth / width}px ${drawHeight / height}px`;
+    const position = `${(-x * drawWidth) / width}px ${(-y * drawHeight) / height}px`;
     setImageFit(photoLayer, size, position);
     setImageFit(maskLayer, size, position);
   }

@@ -7,7 +7,26 @@
  *
  * 座標は「写真の中の割合」。左上が (0, 0)、右下が (1, 1)。
  * 画面の大きさに依らないので、画面が回っても見ている場所は変わらない。
+ *
+ * **写真は画面いっぱいに敷く。** 縦横比が画面と違う分は、はみ出させて切り落とす
+ * （引き伸ばさないので比率は崩れない）。倍率 1 でも、写真の縦か横の一部だけが見えている。
+ * どれだけ見えているかは画面の大きさで決まるので、viewer が setPhotoFrame で入れる。
  */
+
+/**
+ * 倍率 1 のとき、写真の幅と高さのどれだけが画面に入っているか（0〜1）。
+ * 画面より横長の写真なら横が 1 未満、縦長なら縦が 1 未満。部屋モードや写真が無いときは 1
+ */
+let frame = { x: 1, y: 1 };
+
+export function setPhotoFrame(x: number, y: number): void {
+  frame = { x, y };
+}
+
+/** この見方で、写真の幅と高さのどれだけが見えているか */
+export function visibleSize(view: PhotoView): { width: number; height: number } {
+  return { width: frame.x / view.scale, height: frame.y / view.scale };
+}
 
 export interface PhotoView {
   /** 倍率。1 で写真の全体が見えている */
@@ -17,7 +36,11 @@ export interface PhotoView {
   centerY: number;
 }
 
-export const DEFAULT_PHOTO_VIEW: PhotoView = { scale: 1, centerX: 0.5, centerY: 0.5 };
+/**
+ * 最初の見え方。**下に寄せる。** 写真は画面を覆うように敷くので上下が切れることがあるが、
+ * 家具を置く床は写真の下のほうにある。切るなら天井の側にする（中心は写真の中に収め直される）
+ */
+export const DEFAULT_PHOTO_VIEW: PhotoView = { scale: 1, centerX: 0.5, centerY: 1 };
 
 /**
  * 倍率の範囲。
@@ -46,18 +69,19 @@ export function clampScale(scale: number): number {
  */
 export function clampPhotoView(view: PhotoView): PhotoView {
   const scale = clampScale(view.scale);
-  const half = 1 / (2 * scale);
+  const { width, height } = visibleSize({ ...view, scale });
   return {
     scale,
-    centerX: clamp(view.centerX, half, 1 - half),
-    centerY: clamp(view.centerY, half, 1 - half),
+    centerX: clamp(view.centerX, width / 2, 1 - width / 2),
+    centerY: clamp(view.centerY, height / 2, 1 - height / 2),
   };
 }
 
 /** 見えている矩形の左上（写真の中の割合） */
 export function viewOrigin(view: PhotoView): { x: number; y: number } {
-  const half = 1 / (2 * view.scale);
-  return { x: view.centerX - half, y: view.centerY - half };
+  const { centerX, centerY, scale } = clampPhotoView(view);
+  const { width, height } = visibleSize({ scale, centerX, centerY });
+  return { x: centerX - width / 2, y: centerY - height / 2 };
 }
 
 /** 写真の中の位置（割合）。左上が (0, 0)、右下が (1, 1) */
@@ -68,18 +92,18 @@ export interface PhotoPoint {
 
 /** 画面のこの位置に、写真のどこが写っているか */
 export function photoPointAt(view: PhotoView, point: ScreenPoint): PhotoPoint {
-  return {
-    x: view.centerX + (point.u - 0.5) / view.scale,
-    y: view.centerY + (point.v - 0.5) / view.scale,
-  };
+  // 保存されている見え方は、画面の大きさが変わると写真からはみ出していることがある。
+  // 描く側（viewer）と同じく、収め直してから使う
+  const { x, y } = viewOrigin(view);
+  const { width, height } = visibleSize(view);
+  return { x: x + point.u * width, y: y + point.v * height };
 }
 
 /** 写真のこの点が、画面のどこに写っているか。photoPointAt の逆 */
 export function screenPointOf(view: PhotoView, point: PhotoPoint): ScreenPoint {
-  return {
-    u: (point.x - view.centerX) * view.scale + 0.5,
-    v: (point.y - view.centerY) * view.scale + 0.5,
-  };
+  const { x, y } = viewOrigin(view);
+  const { width, height } = visibleSize(view);
+  return { u: (point.x - x) / width, v: (point.y - y) / height };
 }
 
 /**
@@ -93,10 +117,11 @@ export function viewAnchoredAt(
   photoPoint: PhotoPoint,
   point: ScreenPoint
 ): PhotoView {
+  const { width, height } = visibleSize({ scale, centerX: 0, centerY: 0 });
   return clampPhotoView({
     scale,
-    centerX: photoPoint.x - (point.u - 0.5) / scale,
-    centerY: photoPoint.y - (point.v - 0.5) / scale,
+    centerX: photoPoint.x - (point.u - 0.5) * width,
+    centerY: photoPoint.y - (point.v - 0.5) * height,
   });
 }
 

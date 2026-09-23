@@ -19,6 +19,8 @@ import { deleteBackground, deleteMask, saveBackground } from '@/platform/backgro
 import {
   clampPhotoView,
   DEFAULT_PHOTO_VIEW,
+  viewOrigin,
+  visibleSize,
   type PhotoPoint,
   type PhotoView,
 } from '@/core/photoView';
@@ -30,6 +32,7 @@ import {
   type CornerEdge,
   type FloorCorners,
   type Lens,
+  type VisibleRegion,
 } from '@/core/floorCorners';
 
 /**
@@ -318,11 +321,17 @@ export function updateFloorCorners(patch: {
   photoState.set({ floorCorners: corners, scaleEdge, scaleLength, floorFit, cameraHeight });
 }
 
+/** 写真のうち、いま画面に見えている範囲 */
+function visibleRegion(): VisibleRegion {
+  const view = clampPhotoView(photoState.get().view);
+  return { ...viewOrigin(view), ...visibleSize(view) };
+}
+
 /** 合わせる姿に入ったとき、四隅がまだ無ければいまの傾きから作る */
 export function ensureFloorCorners(): void {
   const { floorCorners, floorFit } = photoState.get();
   if (floorCorners || !lensSource) return;
-  photoState.set({ floorCorners: defaultCorners(floorFit, lensSource()) });
+  photoState.set({ floorCorners: defaultCorners(floorFit, lensSource(), visibleRegion()) });
 }
 
 /**
@@ -333,7 +342,7 @@ export function resetFloorCorners(): void {
   const floorFit = photoState.get().autoFit ?? { ...DEFAULT_FLOOR_FIT };
   photoState.set({
     floorFit,
-    floorCorners: lensSource ? defaultCorners(floorFit, lensSource()) : null,
+    floorCorners: lensSource ? defaultCorners(floorFit, lensSource(), visibleRegion()) : null,
     scaleEdge: 0,
     scaleLength: null,
     cameraHeight: CAMERA_HEIGHT,
