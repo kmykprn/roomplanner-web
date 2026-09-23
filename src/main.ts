@@ -26,14 +26,22 @@ import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera, floorPointOnScreen } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
-import { createFloorFitDrag } from '@/interaction/floorFitDrag';
-import { createFloorMarkers } from '@/scene/floorMarkers';
+import { createFloorCornerDrag } from '@/interaction/floorCornerDrag';
+import { drawFloorGrid } from '@/ui/floorGrid';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
-import { applyCalibration, photoState, photoScene, setCalibration, setPhotoPlacement } from '@/core/photoState';
+import {
+  applyCalibration,
+  ensureFloorCorners,
+  photoState,
+  photoScene,
+  setCalibration,
+  setLensSource,
+  setPhotoPlacement,
+} from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
 import {
   persistPhotoOnChange,
@@ -76,8 +84,6 @@ const roomObjects = createRoom(room);
 // 中身が読めたら、箱を中身の形に締める（実際の高さが決まっていればそれに合わせる）
 const roomFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(roomScene, id, bounds) });
 const photoFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(photoScene, id, bounds) });
-// 床を合わせるときの見本の椅子。合わせている間だけ出す
-const floorMarkers = createFloorMarkers();
 // 写真の上に落ちる影。写真モードのときだけ出す
 const photoShadow = createPhotoShadow();
 const lighting = createLighting(room);
@@ -86,7 +92,6 @@ viewer.scene.add(
   lighting.group,
   roomFurniture.group,
   photoFurniture.group,
-  floorMarkers.group,
   photoShadow.group
 );
 
@@ -105,11 +110,8 @@ createFurnitureDrag(
   () => !photoState.get().isMasking && !photoState.get().isFittingFloor
 );
 
-// 床を合わせる。合わせている姿のときだけ効く。椅子の上なら椅子が動き、外なら傾きが変わる
-createFloorFitDrag(viewer.canvas, {
-  isActive: () => isPhotoMode() && photoState.get().isFittingFloor,
-  hitsMarker: (point) => floorMarkers.hitsMarker(viewer.camera, point),
-});
+// 床を合わせる。合わせている姿のときだけ効く。四隅の丸を動かし、辺をタップで長さの辺を選ぶ
+createFloorCornerDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isFittingFloor);
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
 createMaskPaint(viewer.canvas);
@@ -249,14 +251,12 @@ function swapMaskImage(url: string | null): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, view, floorFit, vfovDeg } = photoState.get();
+  const { backgroundAspect, view, floorFit, vfovDeg, cameraHeight } = photoState.get();
 
   viewer.setContentAspect(backgroundAspect);
   viewer.setPhotoFov(vfovDeg);
-  applyPhotoCamera(viewer.camera, floorFit);
+  applyPhotoCamera(viewer.camera, floorFit, cameraHeight);
   viewer.setPhotoView(view);
-  // 見本の椅子は画面の指した場所に置く。カメラを動かしたあとに置き直す
-  floorMarkers.update(viewer.camera, photoState.get().floorProbe);
 }
 
 /**
@@ -288,9 +288,11 @@ function calibrateWhenReady(): void {
 
 /**
  * 新しい家具を置く場所（画面の NDC）。中央・下から 3 割の高さ。
- * 「床に合わせる」で見本の椅子を最初に出す場所（floorProbe の既定値）とほぼ同じ
  */
 const PLACEMENT_SCREEN_POINT = { x: 0, y: -0.4 };
+
+// 四隅から傾きを解くときの画角。いま写真を描いているカメラのものを使う
+setLensSource(() => ({ vfovDeg: viewer.camera.fov, aspect: viewer.camera.aspect }));
 setPhotoPlacement(() => {
   const hit = floorPointOnScreen(viewer.camera, PLACEMENT_SCREEN_POINT.x, PLACEMENT_SCREEN_POINT.y);
   return hit ? [hit.x, hit.y, hit.z] : null;
@@ -303,24 +305,30 @@ photoState.subscribe(calibrateWhenReady);
 /**
  * 床を合わせている間の見せ方。モードと、合わせているかどうかの両方で変わる。
  *
- * **合わせている間は家具を隠す。** 傾きを変えるとカメラが回るので、置いてある家具が
- * 画面の中を大きく動く。見本の椅子と床を見比べたいときに、それが目の邪魔になる
+ * **合わせている間は家具を隠す。** 四隅を動かすとカメラが回るので、置いてある家具が
+ * 画面の中を大きく動く。マス目と床を見比べたいときに、それが目の邪魔になる
  */
 function applyFloorFitting(): void {
-  const { isFittingFloor, isDraggingFloor } = photoState.get();
+  const { isFittingFloor, floorCorners, view, scaleEdge } = photoState.get();
   const fitting = isPhotoMode() && isFittingFloor;
 
-  floorMarkers.group.visible = fitting;
+  // 入ったときに四隅がまだ無ければ、いまの傾きから作る
+  if (fitting && !floorCorners) {
+    ensureFloorCorners();
+    return; // 状態が変わるので、もう一度ここに来る
+  }
   photoFurniture.group.visible = isPhotoMode() && !fitting;
   // 影を受ける面は、床を合わせている間は床のもの、ふだんは家具ごとのもの
   photoShadow.setGrounds(
     fitting,
     photoState.get().furniture.map((item) => ({ position: item.position, size: item.size }))
   );
-  // 触れている間は色を変え、床の面を出す（効いていることを返すため）
-  floorMarkers.setActive(isDraggingFloor);
+  drawFloorGrid(viewer.overlayLayer, fitting ? floorCorners : null, view, scaleEdge);
 }
 photoState.subscribe(applyFloorFitting);
+modeState.subscribe(applyFloorFitting);
+// 線の層は大きさが変わると中身が消える（画素数を合わせ直すため）。描き直す
+new ResizeObserver(applyFloorFitting).observe(viewer.overlayLayer);
 applyMode();
 applyBackground();
 

@@ -14,14 +14,19 @@ import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
 import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
 import { readBackground, readMask } from '@/platform/backgroundStore';
-import { normalizeFloorFit } from '@/core/floorFit';
+import { CAMERA_HEIGHT, normalizeFloorFit } from '@/core/floorFit';
+import { CAMERA_HEIGHT_LIMITS, normalizeCorners } from '@/core/floorCorners';
 import type { PlacedFurniture } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.room';
 const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 
 /** localStorage に残す写真モードの項目。写真そのものは大きいので IndexedDB（backgroundStore.ts） */
-type SavedPhoto = Pick<PhotoState, 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg'>;
+type SavedPhoto = Pick<
+  PhotoState,
+  | 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg'
+  | 'autoFit' | 'floorCorners' | 'scaleEdge' | 'scaleLength' | 'cameraHeight'
+>;
 
 /**
  * 保存した状態を読み戻す。**シーンを組み立てる前**に呼ぶ。
@@ -77,6 +82,14 @@ export function restorePhoto(): void {
     vfovDeg: Number.isFinite(saved.vfovDeg) ? (saved.vfovDeg as number) : null,
     // 読み戻した画角があれば解析は済んでいる。無ければ次に写真が出たときに解析する
     calibration: Number.isFinite(saved.vfovDeg) ? 'done' : 'idle',
+    // 床の合わせ方。壊れていれば「まだ合わせていない」に戻す
+    autoFit: saved.autoFit ? normalizeFloorFit(saved.autoFit) : null,
+    floorCorners: normalizeCorners(saved.floorCorners),
+    scaleEdge: ([0, 1, 2, 3] as const).find((edge) => edge === saved.scaleEdge) ?? 0,
+    scaleLength: Number.isFinite(saved.scaleLength) && (saved.scaleLength as number) > 0 ? (saved.scaleLength as number) : null,
+    cameraHeight: Number.isFinite(saved.cameraHeight)
+      ? Math.min(CAMERA_HEIGHT_LIMITS.max, Math.max(CAMERA_HEIGHT_LIMITS.min, saved.cameraHeight as number))
+      : CAMERA_HEIGHT,
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
   });
@@ -132,6 +145,11 @@ export function persistPhotoOnChange(): void {
       view: state.view,
       floorFit: state.floorFit,
       vfovDeg: state.vfovDeg,
+      autoFit: state.autoFit,
+      floorCorners: state.floorCorners,
+      scaleEdge: state.scaleEdge,
+      scaleLength: state.scaleLength,
+      cameraHeight: state.cameraHeight,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {

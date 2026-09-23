@@ -74,6 +74,14 @@ export function photoPointAt(view: PhotoView, point: ScreenPoint): PhotoPoint {
   };
 }
 
+/** 写真のこの点が、画面のどこに写っているか。photoPointAt の逆 */
+export function screenPointOf(view: PhotoView, point: PhotoPoint): ScreenPoint {
+  return {
+    u: (point.x - view.centerX) * view.scale + 0.5,
+    v: (point.y - view.centerY) * view.scale + 0.5,
+  };
+}
+
 /**
  * 写真のこの点が画面のこの位置に来るような、見ている場所を出す。
  *
