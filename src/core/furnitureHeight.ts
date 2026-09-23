@@ -8,8 +8,8 @@
  * 高さ 1 つで足りるのは、切り抜きも 3D モデルも縦横の比率をすでに持っているから。
  * その比率（形）は中身を読み込んだときに測って、保管庫の項目に覚えさせる（learnShape）。
  *
- * 置いてある家具の「大きさ」のバーは「置いたときの何倍か」で動くので、
- * 実際の高さは「置いたときの大きさ（baseSize）」の高さとして持つ。
+ * 実際の高さは、いまの大きさ（size）の高さそのもの。置いたときの大きさ（baseSize）は
+ * 「初期値に戻す」の戻り先で、高さを変えたときは一緒に書き替える。
  */
 
 import type { PlacedFurniture } from '@/config/furniture';
@@ -72,9 +72,9 @@ export function placementSize(model: GeneratedModel, facet: ModelFacet): Size {
   return height ? withHeight(base, height) : base;
 }
 
-/** 置いてある家具の実際の高さ（m）。バーで何倍にしていても変わらない */
-export function baseHeightOf(item: PlacedFurniture): number {
-  return (item.baseSize ?? item.size)[1];
+/** 置いてある家具の実際の高さ（m） */
+export function heightOf(item: PlacedFurniture): number {
+  return item.size[1];
 }
 
 /**
@@ -91,6 +91,15 @@ export function setPlacedHeight(scene: EditableScene, id: string, height: number
   else applyHeight(scene, item, clampHeight(height));
 }
 
+/**
+ * この家具だけ高さを変える。バーを動かしている最中はこちら（毎回保管庫に書くと重い）。
+ * 離したときに setPlacedHeight で書き戻す
+ */
+export function previewPlacedHeight(scene: EditableScene, id: string, height: number): void {
+  const item = scene.state().furniture.find((entry) => entry.id === id);
+  if (item) applyHeight(scene, item, clampHeight(height));
+}
+
 /** 保管庫の項目の実際の高さを変え、置いてある同じ家具もすべてその高さにする */
 export function setModelHeight(modelId: string, height: number): void {
   const model = modelLibrary.get().models.find((entry) => entry.id === modelId);
@@ -104,14 +113,11 @@ export function setModelHeight(modelId: string, height: number): void {
   }
 }
 
-/** 置いたときの大きさの高さを変え、いまの倍率はそのまま保つ */
+/** 3 辺の比率を保って高さを変える。「初期値に戻す」の戻り先も同じ大きさにする */
 function applyHeight(scene: EditableScene, item: PlacedFurniture, height: number): void {
-  const base = item.baseSize ?? item.size;
-  const ratio = longestOf(item.size) / longestOf(base);
-  const nextBase = withHeight(base, height);
-  const size = scaled(nextBase, ratio);
+  const size = withHeight(item.size, height);
   scene.update(item.id, {
-    baseSize: nextBase,
+    baseSize: size,
     size,
     position: scene.constrain(item.position, size, item.rotationY),
   });

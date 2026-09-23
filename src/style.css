@@ -693,6 +693,65 @@ body {
   white-space: nowrap;
 }
 
+/* 見出し: 家具の名前と「画面から削除」 */
+.manage__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.manage__head .manage__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+/* バーの右に置く数値（高さ）。バーの端の文字と同じ並びに入る */
+.slider-row__after {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.slider-row__number.field__input--short {
+  width: 64px;
+  padding: 5px 6px;
+  font-size: 13px;
+}
+.slider-row__unit {
+  font-size: 12px;
+  color: #7a8388;
+}
+/* めったに使わないものの畳み。summary は文字だけで、開くと行が下に足される */
+.manage__more {
+  margin-top: 2px;
+}
+.manage__more-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  color: var(--primary);
+  padding: 4px 0;
+}
+.manage__more-summary::-webkit-details-marker {
+  display: none;
+}
+.manage__more-summary::after {
+  content: '›';
+  display: inline-block;
+  margin-left: 6px;
+  transition: transform 0.15s;
+}
+.manage__more[open] .manage__more-summary::after {
+  transform: rotate(90deg);
+}
+.manage__more-body {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+.manage__removed {
+  font-size: 12px;
+}
 .manage__foot {
   display: flex;
   justify-content: flex-end;
@@ -713,11 +772,6 @@ body {
   height: 18px;
 }
 /* 消えるのが「置いた分」だけであることを、ボタンのすぐ下で言う */
-.manage__note {
-  margin: 4px 0 0;
-  text-align: right;
-  font-size: 12px;
-}
 
 /* 線のアイコン（ui/icons.ts）。アプリのアイコンと同じ「丸い端・丸い角」。色は置いた場所の文字色 */
 .ic {
@@ -1146,15 +1200,6 @@ body {
 }
 .height-step__name {
   font-size: 14px;
-}
-/* 操作タブの「実際の高さ」。バーの行と同じ格子に、数値と添え書きを置く */
-.height-row .field__input--short {
-  width: 84px;
-  padding: 6px 8px;
-}
-.height-row__note {
-  grid-column: 2;
-  font-size: 11px;
 }
 .edit__actions {
   display: flex;

@@ -19,6 +19,10 @@ export interface SliderRowOptions {
   ends: [from: string, to: string];
   /** つまみが動いたとき */
   onInput(value: number): void;
+  /** つまみを離したとき（動かし終わりに 1 度だけしたいことがあれば） */
+  onChange?(value: number): void;
+  /** バーの右端のさらに右に置くもの（数値の欄など） */
+  after?: HTMLElement;
 }
 
 export interface SliderRow {
@@ -63,8 +67,14 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
     });
   }
 
+  if (options.onChange) {
+    const onChange = options.onChange;
+    input.addEventListener('change', () => onChange(Number(input.value)));
+  }
+
   const [from, to] = options.ends;
   bar.append(createEndLabel(from), input, createEndLabel(to));
+  if (options.after) bar.append(options.after);
   element.append(heading, bar);
 
   return {
