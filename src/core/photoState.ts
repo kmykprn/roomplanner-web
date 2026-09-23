@@ -14,6 +14,7 @@ import {
   type FurnitureSceneState,
 } from '@/core/furnitureScene';
 import { shrinkForDisplay } from '@/core/imageResize';
+import { readFocal35, vfovFromFocal35 } from '@/core/exifFocal';
 import { deleteBackground, deleteMask, saveBackground } from '@/platform/backgroundStore';
 import {
   clampPhotoView,
@@ -80,6 +81,11 @@ export interface PhotoState extends FurnitureSceneState {
   floorFit: FloorFit;
   /** 写真から出した縦の画角（度）。無ければ既定の画角で描く */
   vfovDeg: number | null;
+  /**
+   * 写真の EXIF にあった 35mm 換算の焦点距離（mm）。無ければ null。
+   * あれば画角はこれで決まり、写真の解析は傾きだけを出す（core/exifFocal.ts）
+   */
+  lensFocal35: number | null;
   calibration: CalibrationStatus;
   /**
    * 写真の解析で出た傾き。「最初に戻す」の戻り先。解析できなかった写真では null
@@ -123,6 +129,7 @@ export const photoState = createStore<PhotoState>({
   view: { ...DEFAULT_PHOTO_VIEW },
   floorFit: { ...DEFAULT_FLOOR_FIT },
   vfovDeg: null,
+  lensFocal35: null,
   calibration: 'idle',
   autoFit: null,
   floorCorners: null,
@@ -175,6 +182,9 @@ export const photoScene = createFurnitureScene(photoState, {
 export async function setBackground(file: File): Promise<void> {
   photoState.set({ backgroundStatus: 'loading', backgroundName: file.name });
 
+  // 縮めると EXIF が消えるので、先に元のファイルからレンズの焦点距離を読んでおく
+  const lensFocal35 = await readFocal35(file);
+
   let shrunk: Blob;
   try {
     // 原寸のままだと Safari が描かないことがあるので、表示用に縮めてから渡す
@@ -184,12 +194,25 @@ export async function setBackground(file: File): Promise<void> {
     return;
   }
 
-  if (!(await showBackground(shrunk))) return;
+  // 焦点距離は写真が出る**前に**入れる。写真が出た瞬間に解析が始まる（main.ts）ので、
+  // あとから入れると解析が画角を知らないまま走る
+  // 解析の様子も「まだ」に戻しておく。写真が出た瞬間に、この写真の解析が始まる
+  const previous = { lensFocal35: photoState.get().lensFocal35, calibration: photoState.get().calibration };
+  photoState.set({ lensFocal35, calibration: 'idle' });
+  if (!(await showBackground(shrunk))) {
+    photoState.set(previous); // 出せなかったら前の写真のまま
+    return;
+  }
 
-  // 前の写真の解析結果（画角と傾き）は、別の写真では意味がないので捨てる。
+  // 前の写真の画角と床の合わせ方は、別の写真では意味がないので捨てる。
   // ここで捨てる（showBackground では捨てない）のは、起動時の読み戻しでも
-  // showBackground を通るため。同じ写真の読み戻しで捨てると、開くたびに解析し直す
-  photoState.set({ vfovDeg: null, calibration: 'idle', ...FRESH_FLOOR });
+  // showBackground を通るため。同じ写真の読み戻しで捨てると、開くたびに解析し直す。
+  // EXIF に焦点距離があれば、画角は解析を待たずにここで決まる
+  const aspect = photoState.get().backgroundAspect;
+  photoState.set({
+    vfovDeg: lensFocal35 && aspect ? vfovFromFocal35(lensFocal35, aspect) : null,
+    ...FRESH_FLOOR,
+  });
 
   // 次に開いたときも残っているように、縮めた1枚を端末に置く。
   // 置けなくても（容量・プライベートモード）いま見えているものは変わらない
@@ -231,6 +254,7 @@ export function clearBackground(): void {
     backgroundAspect: null,
     // 写真に付いていた解析結果と床の合わせ方も一緒に捨てる
     vfovDeg: null,
+    lensFocal35: null,
     calibration: 'idle',
     ...FRESH_FLOOR,
   });

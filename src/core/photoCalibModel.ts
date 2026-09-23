@@ -89,7 +89,7 @@ async function preprocess(url: string): Promise<{ data: Float32Array; width: num
 }
 
 /** 写真の URL を渡すと、画角と傾きを返す。数秒かかるので待たせる側は進み具合を出すこと */
-export async function calibratePhoto(url: string): Promise<PhotoCalibration> {
+export async function calibratePhoto(url: string, fixedVfovDeg?: number): Promise<PhotoCalibration> {
   const [model, input] = await Promise.all([loadSession(), preprocess(url)]);
   const feeds = { image: new ort.Tensor('float32', input.data, [1, 3, input.height, input.width]) };
   const output = await model.run(feeds);
@@ -102,7 +102,12 @@ export async function calibratePhoto(url: string): Promise<PhotoCalibration> {
     latitude: output.latitude_field.data as Float32Array,
     latitudeConfidence: output.latitude_confidence.data as Float32Array,
   };
-  const result = calibrateFromFields(fields);
+  // 画角が分かっていれば（写真の EXIF）、入力画像の画素での焦点距離に直して固定する
+  const fixedFocal =
+    fixedVfovDeg === undefined
+      ? undefined
+      : (input.fullHeight / 2 / Math.tan((fixedVfovDeg * Math.PI) / 360)) * input.scale;
+  const result = calibrateFromFields(fields, fixedFocal);
 
   // 焦点距離を元の写真の画素数に戻し、切り詰める前の全高で画角を出す
   const focalFull = result.focalPx / input.scale;
