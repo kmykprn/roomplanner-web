@@ -13,12 +13,15 @@
 import { pickImage } from '@/platform/picker';
 import { createMaskPanel } from '@/ui/maskPanel';
 import { createFloorPanel } from '@/ui/floorPanel';
+import { createFramePanel } from '@/ui/framePanel';
 import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
 import type { CalibrationStatus } from '@/core/photoState';
 import {
   clearBackground,
   photoState,
   retryCalibration,
+  setAutoCalibrate,
+  setFramingPhoto,
   setBackground,
   setFittingFloor,
   setMasking,
@@ -48,6 +51,8 @@ export function createPhotoPanel(): HTMLElement {
   const mask = createMaskPanel();
   /** 床に合わせる姿 */
   const floor = createFloorPanel();
+  /** 表示する範囲を決める姿 */
+  const frame = createFramePanel();
 
   // --- 背景の画像 ---
   const photoRow = createSettingRow('部屋の写真');
@@ -68,10 +73,21 @@ export function createPhotoPanel(): HTMLElement {
   chevron.textContent = '›';
   maskRow.element.append(chevron);
 
-  // --- 写真からの自動調整。結果は「床に合わせる」に入る ---
+  // --- 表示する範囲。行ごと押せる ---
+  const frameRow = createSettingRow('表示する範囲', () => setFramingPhoto(true));
+  const frameChevron = document.createElement('span');
+  frameChevron.className = 'setting__chevron';
+  frameChevron.textContent = '›';
+  frameRow.element.append(frameChevron);
+
+  // --- 写真からの自動調整（画角と傾き）。オン・オフを切り替えられる。結果は「床に合わせる」に入る ---
   const calibRow = createSettingRow('写真から自動で合わせる');
   const retryButton = createSmallButton('やり直す', retryCalibration);
-  calibRow.element.append(retryButton);
+  const toggleButton = createSmallButton('オンにする', () => setAutoCalibrate(!photoState.get().autoCalibrate));
+  const calibButtons = document.createElement('span');
+  calibButtons.className = 'setting__buttons';
+  calibButtons.append(retryButton, toggleButton);
+  calibRow.element.append(calibButtons);
 
   // --- 床に合わせる（傾きと大きさの基準）。行ごと押せる ---
   const floorRow = createSettingRow('床に合わせる', () => setFittingFloor(true));
@@ -84,13 +100,13 @@ export function createPhotoPanel(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
-  normal.append(photoRow.element, calibRow.element, floorRow.element, maskRow.element, note);
-  panel.append(normal, floor, mask);
+  normal.append(photoRow.element, frameRow.element, calibRow.element, floorRow.element, maskRow.element, note);
+  panel.append(normal, frame, floor, mask);
 
   function render(): void {
     const {
-      backgroundName, backgroundStatus, isMasking, isFittingFloor, maskUrl, floorFit, calibration,
-      floorCorners, scaleLength,
+      backgroundName, backgroundStatus, isMasking, isFittingFloor, isFramingPhoto, maskUrl, floorFit,
+      calibration, floorCorners, scaleLength, autoCalibrate, view,
     } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -104,10 +120,14 @@ export function createPhotoPanel(): HTMLElement {
     pickButton.disabled = loading;
     clearButton.hidden = !ready;
 
+    frameRow.element.hidden = !ready;
+    frameRow.setValue(view.scale < 1 ? '全体' : view.scale > 1 ? '拡大' : '画面いっぱい');
+
     calibRow.element.hidden = !ready;
-    calibRow.setValue(CALIBRATION_LABELS[calibration], calibration === 'done');
+    calibRow.setValue(autoCalibrate ? CALIBRATION_LABELS[calibration] : 'オフ', autoCalibrate && calibration === 'done');
+    toggleButton.textContent = autoCalibrate ? 'オフにする' : 'オンにする';
     // 解析中はもう一度押させない。済んだあとは、手で崩したときに戻す手段として残す
-    retryButton.hidden = calibration === 'running';
+    retryButton.hidden = !autoCalibrate || calibration === 'running';
 
     floorRow.element.hidden = !ready;
     // 度数は出さない。「何度が正しいか」は誰にも分からないので、合わせたかどうかだけ伝える
@@ -125,8 +145,8 @@ export function createPhotoPanel(): HTMLElement {
     note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : maskUrl ? '' : MASK_NOTE;
     note.hidden = note.textContent === '';
 
-    // どちらかの姿に入っている間は、通常の行を引っ込める
-    normal.hidden = isMasking || isFittingFloor;
+    // どれかの姿に入っている間は、通常の行を引っ込める
+    normal.hidden = isMasking || isFittingFloor || isFramingPhoto;
     mask.hidden = !isMasking;
   }
 

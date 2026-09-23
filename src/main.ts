@@ -28,6 +28,7 @@ import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera, floorPointOnScreen } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createFloorCornerDrag } from '@/interaction/floorCornerDrag';
+import { createPhotoPan } from '@/interaction/photoPan';
 import { drawFloorGrid } from '@/ui/floorGrid';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
@@ -108,11 +109,13 @@ createFurnitureDrag(
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
-  () => !photoState.get().isMasking && !photoState.get().isFittingFloor
+  () => !photoState.get().isMasking && !photoState.get().isFittingFloor && !photoState.get().isFramingPhoto
 );
 
 // 床を合わせる。合わせている姿のときだけ効く。四隅の丸を動かし、辺をタップで長さの辺を選ぶ
 createFloorCornerDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isFittingFloor);
+// 表示する範囲を調整している間は、1 本指で写真をずらす
+createPhotoPan(viewer.canvas, () => isPhotoMode() && photoState.get().isFramingPhoto);
 
 // 隠す場所を塗る。「隠す」タブを開いている間だけ効く
 createMaskPaint(viewer.canvas);
@@ -269,7 +272,10 @@ function applyPhotoView(): void {
  * 写真は端末の中だけで処理する
  */
 function calibrateWhenReady(): void {
-  const { backgroundStatus, backgroundUrl, calibration, lensFocal35, backgroundAspect } = photoState.get();
+  const { backgroundStatus, backgroundUrl, calibration, lensFocal35, backgroundAspect, autoCalibrate } =
+    photoState.get();
+  // 自動で合わせない設定なら、解析しない（画角も傾きも既定のまま、手で合わせる）
+  if (!autoCalibrate) return;
   if (backgroundStatus !== 'ready' || !backgroundUrl || calibration !== 'idle') return;
   // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
   const exifVfov = lensFocal35 && backgroundAspect ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;

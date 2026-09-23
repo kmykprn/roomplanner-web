@@ -20,7 +20,7 @@ import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
 import { heightOf, previewPlacedHeight, setPlacedHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
-import { photoState, setFittingFloor, setMasking } from '@/core/photoState';
+import { photoState, setFittingFloor, setFramingPhoto, setMasking } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
 
@@ -174,6 +174,7 @@ export function createBottomSheet(container: HTMLElement): void {
     if (activeTab !== 'background') {
       setMasking(false);
       setFittingFloor(false);
+      setFramingPhoto(false);
     }
 
     tabBar.replaceChildren(

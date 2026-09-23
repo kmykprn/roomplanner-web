@@ -43,12 +43,17 @@ export interface PhotoView {
 export const DEFAULT_PHOTO_VIEW: PhotoView = { scale: 1, centerX: 0.5, centerY: 1 };
 
 /**
- * 倍率の範囲。
+ * 倍率の上限。4 倍は、手元のスマホの写真だと画素が見え始めるあたり。
  *
- * 下限が 1 なのは、写真より引くと枠に隙間ができるため。
- * 上限の 4 倍は、手元のスマホの写真だと画素が見え始めるあたり
+ * 下限は画面の形で変わる（minScale）。倍率 1 が「画面いっぱい」（はみ出た分は切り落とす）で、
+ * そこから写真全体が入るところまで縮められる（その分は余白になる）
  */
-const SCALE_LIMITS = { min: 1, max: 4 };
+const MAX_SCALE = 4;
+
+/** 倍率の下限。写真全体が画面に入る倍率 */
+export function minScale(): number {
+  return Math.min(1, frame.x, frame.y);
+}
 
 /** 画面の中の位置。左上が (0, 0)、右下が (1, 1) */
 export interface ScreenPoint {
@@ -58,22 +63,28 @@ export interface ScreenPoint {
 
 /** 倍率を範囲に収める */
 export function clampScale(scale: number): number {
-  return Math.min(SCALE_LIMITS.max, Math.max(SCALE_LIMITS.min, scale));
+  return Math.min(MAX_SCALE, Math.max(minScale(), scale));
+}
+
+/** 倍率の上限（バーの右端に使う） */
+export function maxScale(): number {
+  return MAX_SCALE;
 }
 
 /**
  * 見ている場所を、写真からはみ出さないところまで戻す。
  *
  * **はみ出させると枠に隙間ができ、そこだけ 3D が写真の無い場所に描かれる。**
- * 見えている幅は 1/倍率 なので、中心が動ける範囲はその半分だけ内側になる
+ * 中心が動ける範囲は、見えている幅の半分だけ内側になる。
+ * 縮めて写真全体が入っている向きは、真ん中に置く（余白を両側に均等に出す）
  */
 export function clampPhotoView(view: PhotoView): PhotoView {
   const scale = clampScale(view.scale);
   const { width, height } = visibleSize({ ...view, scale });
   return {
     scale,
-    centerX: clamp(view.centerX, width / 2, 1 - width / 2),
-    centerY: clamp(view.centerY, height / 2, 1 - height / 2),
+    centerX: width >= 1 ? 0.5 : clamp(view.centerX, width / 2, 1 - width / 2),
+    centerY: height >= 1 ? 0.5 : clamp(view.centerY, height / 2, 1 - height / 2),
   };
 }
 
