@@ -1,0 +1,93 @@
+/**
+ * 室内の寸法の計算の、進み具合の 1 行（寸法の画面のボタンの下）。
+ *
+ *   ✻ 写真の奥行きを計算しています… 12秒
+ *
+ * 計算は長いと数十秒かかる。止まっていないことが分かるように、**経過秒数と、いまやっている
+ * ことを 1 行だけ**出す。行は段階が進むごとに入れ替わる（Claude Code の進み具合と同じ見せ方）。
+ * 先頭の記号は、動いていることを示すために少しずつ形を変える。
+ */
+
+import { photoState, type MeasureState } from '@/core/photoState';
+
+/** 先頭の記号。順に入れ替えて、回っているように見せる */
+const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+const SPINNER_INTERVAL_MS = 120;
+
+const BYTES_PER_MB = 1024 * 1024;
+
+/** いまやっていることの文 */
+function stepText(measure: Extract<MeasureState, { status: 'running' }>): string {
+  switch (measure.step) {
+    case 'download': {
+      const download = measure.download;
+      if (!download) return '計算に使うデータをダウンロードしています';
+      const loaded = Math.round(download.loaded / BYTES_PER_MB);
+      const amount = download.total ? `${loaded} / ${Math.round(download.total / BYTES_PER_MB)}MB` : `${loaded}MB`;
+      return `計算に使うデータをダウンロードしています（${amount}）`;
+    }
+    case 'calibrate':
+      return '写真の傾きと画角を計算しています';
+    case 'depth':
+      return '写真の奥行きを計算しています';
+  }
+}
+
+export function createMeasureStatus(): HTMLElement {
+  const line = document.createElement('p');
+  line.className = 'measure-status';
+  line.setAttribute('role', 'status');
+  const glyph = document.createElement('span');
+  glyph.className = 'measure-status__glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  const text = document.createElement('span');
+  const seconds = document.createElement('span');
+  seconds.className = 'measure-status__seconds';
+  line.append(glyph, text, seconds);
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let timer: number | null = null;
+  let frame = 0;
+
+  /** 経過秒数と記号だけを書き換える（文は状態が変わったときに render が書く） */
+  function tick(): void {
+    const { measure } = photoState.get();
+    if (measure.status !== 'running') return;
+    seconds.textContent = `${Math.floor((Date.now() - measure.startedAt) / 1000)}秒`;
+    if (!reduceMotion.matches) {
+      frame = (frame + 1) % SPINNER.length;
+      glyph.textContent = SPINNER[frame];
+    }
+  }
+
+  function render(): void {
+    const { measure } = photoState.get();
+    line.hidden = measure.status === 'idle';
+    line.classList.toggle('is-error', measure.status === 'failed');
+    line.classList.toggle('is-running', measure.status === 'running');
+
+    if (measure.status === 'running') {
+      glyph.textContent = SPINNER[frame];
+      text.textContent = `${stepText(measure)}…`;
+      tick();
+      if (timer === null) timer = window.setInterval(tick, SPINNER_INTERVAL_MS);
+      return;
+    }
+    if (timer !== null) {
+      window.clearInterval(timer);
+      timer = null;
+    }
+    glyph.textContent = measure.status === 'done' ? '✓' : measure.status === 'failed' ? '!' : '';
+    seconds.textContent = measure.status === 'done' && measure.seconds !== null ? `${Math.round(measure.seconds)}秒` : '';
+    text.textContent =
+      measure.status === 'done'
+        ? '室内の寸法を計算しました。'
+        : measure.status === 'failed'
+          ? '室内の寸法を計算できませんでした。'
+          : '';
+  }
+
+  render();
+  photoState.subscribe(render);
+  return line;
+}

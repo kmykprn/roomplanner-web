@@ -12,6 +12,7 @@
 
 import {
   currentScaleKind,
+  measureRoom,
   photoState,
   resetScale,
   scaleUnmeasurable,
@@ -20,6 +21,7 @@ import {
   updateScaleLine,
 } from '@/core/photoState';
 import type { ScaleLine } from '@/core/scaleLine';
+import { createMeasureStatus } from '@/ui/measureStatus';
 import { createQuietButton, createSentences, createSubScreen } from '@/ui/subScreen';
 
 /** 長さとして受け付ける範囲（cm） */
@@ -89,7 +91,22 @@ export function createScalePanel(): HTMLElement {
   error.className = 'hint is-error';
   error.textContent = 'この線では寸法を測ることができません。線の端を床の上に動かしてください。';
 
-  screen.body.append(createSentences([PURPOSE], 'sub__text is-sub'), createSentences(STEPS), controls, error);
+  // 室内の寸法の計算。長さを入れてから押してもらう（傾き・画角・奥行きをまとめて出す）
+  const measureButton = document.createElement('button');
+  measureButton.type = 'button';
+  measureButton.className = 'button scale__measure';
+  measureButton.textContent = '室内の寸法を計算';
+  measureButton.addEventListener('click', () => void measureRoom());
+  const measureStatus = createMeasureStatus();
+
+  screen.body.append(
+    createSentences([PURPOSE], 'sub__text is-sub'),
+    createSentences(STEPS),
+    controls,
+    error,
+    measureButton,
+    measureStatus
+  );
   // 線を元の位置に戻し、長さも消す
   screen.actions.append(createQuietButton('寸法を解除', resetScale));
 
@@ -108,6 +125,8 @@ export function createScalePanel(): HTMLElement {
     // 打ち込んでいる最中は書き戻さない（入力が消える）
     if (document.activeElement !== input) input.value = scaleLine.length ? String(Math.round(scaleLine.length * 100)) : '';
     error.hidden = !scaleUnmeasurable();
+    const { backgroundStatus, measure } = photoState.get();
+    measureButton.disabled = backgroundStatus !== 'ready' || !scaleLine.length || measure.status === 'running';
   }
   screen.element.hidden = true;
   render();

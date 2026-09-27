@@ -197,11 +197,16 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 
 ## 写真の解析について
 
-写真モードで写真を選ぶと、**画角と床の傾きを写真から自動で出す。** 使っているのは
-[GeoCalib](https://github.com/cvg/GeoCalib)（Veicht ほか, ECCV 2024）のネットワークで、
-ONNX（int8）にして `public/models/geocalib-int8.onnx` に置き、onnxruntime-web で端末の中だけで動かす。
-写真は端末の外に出ない。コードは Apache-2.0、学習済みの重みは CC BY 4.0
-（© ETH Zurich, Computer Vision and Geometry Group）。
+写真モードの「寸法」で「室内の寸法を計算」を押すと、**写真の画角・床の傾き・奥行きを写真から出す。**
+どちらのネットワークも ONNX にして `public/models/` に置き、onnxruntime-web でワーカーの中で動かす。
+写真は端末の外に出ない。モデルは押したときに初めて落とし、以後は端末に残る。
+
+- 画角と傾き: [GeoCalib](https://github.com/cvg/GeoCalib)（Veicht ほか, ECCV 2024）を int8 にしたもの
+  （`geocalib-int8.onnx`）。コードは Apache-2.0、学習済みの重みは CC BY 4.0
+  （© ETH Zurich, Computer Vision and Geometry Group）。
+- 奥行き: [MoGe-2](https://github.com/microsoft/MoGe)（Wang ほか, 2025）の ViT-S を、重みだけ int8 にしたもの
+  （`moge2-vits-int8w.onnx`）。コードと学習済みの重みは MIT（© Microsoft Corporation）。
+  骨格の [DINOv2](https://github.com/facebookresearch/dinov2) は Apache-2.0（© Meta Platforms, Inc.）。
 
 ## 商品リンクについて
 

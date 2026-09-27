@@ -7,8 +7,8 @@
  *       寸法                           … ui/scalePanel.ts
  *       家具より手前に表示する範囲       … ui/maskPanel.ts
  *
- * 背景の画像の解析（家具の傾きを出す）は利用者が触るものではないので、行を持たない。
- * 解析している間はカードの一言で知らせ、失敗したときだけ「やり直す」を出す。
+ * 室内の寸法の計算（傾き・画角・奥行き）は寸法の画面のボタンで行う。カードの一言は、
+ * その計算が済んでいるかどうかだけを伝える。
  *
  * 画像の取得は platform/picker.ts 越しに行う。
  * Capacitor で iOS アプリにするとき、差し替えるのはあちらの中身だけで済む。
@@ -19,11 +19,10 @@ import { createMaskPanel } from '@/ui/maskPanel';
 import { createScalePanel } from '@/ui/scalePanel';
 import { createFramePanel } from '@/ui/framePanel';
 import { createIcon, type IconName } from '@/ui/icons';
-import type { CalibrationStatus } from '@/core/photoState';
+import type { MeasureState } from '@/core/photoState';
 import {
   clearBackground,
   photoState,
-  retryCalibration,
   setBackground,
   setFramingPhoto,
   setMasking,
@@ -34,12 +33,12 @@ import {
 export const IDLE_MESSAGE = '選択した画像の上に家具を置くことができます';
 /** 形式と大きさのどちらでも起こる。利用者にできることを先に出す。キャンバスの案内も使う */
 export const FAILED_MESSAGE = '背景の画像を読み込めませんでした。別の画像をお試しください';
-/** 解析の様子（カードの一言）。度数は出さない */
-const CALIBRATION_NOTES: Record<CalibrationStatus, string> = {
-  idle: '背景に合わせて家具の傾きを計算しています',
-  running: '背景に合わせて家具の傾きを計算しています',
-  done: '背景に合わせて家具の傾きを計算しました',
-  failed: '家具の傾きを計算できませんでした',
+/** 室内の寸法の計算の様子（カードの一言） */
+const MEASURE_NOTES: Record<MeasureState['status'], string> = {
+  idle: '室内の寸法はまだ計算していません',
+  running: '室内の寸法を計算しています',
+  done: '室内の寸法を計算しました',
+  failed: '室内の寸法を計算できませんでした',
 };
 
 export function createPhotoPanel(): HTMLElement {
@@ -79,13 +78,6 @@ export function createPhotoPanel(): HTMLElement {
   cardButtons.append(pickButton, clearButton);
   card.append(thumb, text, cardButtons);
 
-  // 解析に失敗したときだけ出す帯。何が起きたかはカードの一言が言うので、ここはどうすればよいかだけ
-  const failure = document.createElement('div');
-  failure.className = 'bg-failure';
-  const failureText = document.createElement('span');
-  failureText.textContent = 'もう一度お試しいただくか、別の画像を選んでください';
-  failure.append(failureText, createSmallButton('やり直す', retryCalibration));
-
   // --- 背景の調整: 3 つのタイル ---
   const heading = document.createElement('p');
   heading.className = 'bg-heading';
@@ -101,11 +93,11 @@ export function createPhotoPanel(): HTMLElement {
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
-  normal.append(card, failure, heading, tiles, note);
+  normal.append(card, heading, tiles, note);
   panel.append(normal, frame, scale, mask);
 
   function render(): void {
-    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, calibration, scaleLine } =
+    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, measure, scaleLine } =
       photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -113,13 +105,12 @@ export function createPhotoPanel(): HTMLElement {
 
     thumb.style.backgroundImage = ready && backgroundUrl ? `url("${backgroundUrl}")` : '';
     thumb.classList.toggle('is-empty', !ready);
-    cardNote.textContent = loading ? '読み込み中…' : ready ? CALIBRATION_NOTES[calibration] : '未選択';
-    cardNote.classList.toggle('is-error', ready && calibration === 'failed');
+    cardNote.textContent = loading ? '読み込み中…' : ready ? MEASURE_NOTES[measure.status] : '未選択';
+    cardNote.classList.toggle('is-error', ready && measure.status === 'failed');
     pickButton.textContent = ready ? '変更' : '選ぶ';
     // 読み込み中に押させると、どちらが背景になるのか分からなくなる
     pickButton.disabled = loading;
     clearButton.hidden = !ready;
-    failure.hidden = !(ready && calibration === 'failed');
 
     heading.hidden = !ready;
     tiles.hidden = !ready;
