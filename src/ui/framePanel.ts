@@ -25,7 +25,7 @@ export function createFramePanel(): HTMLElement {
   head.className = 'edit__head';
   const title = document.createElement('span');
   title.className = 'edit__title';
-  title.textContent = '表示範囲';
+  title.textContent = '拡大・縮小';
   const done = document.createElement('button');
   done.type = 'button';
   done.className = 'button is-small';
@@ -38,7 +38,7 @@ export function createFramePanel(): HTMLElement {
   guide.textContent = GUIDE;
 
   const zoom = createSliderRow({
-    label: '大きさ',
+    label: '倍率',
     min: 0,
     max: STEPS,
     ends: ['全体', '拡大'],

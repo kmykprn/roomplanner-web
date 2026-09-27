@@ -49,7 +49,7 @@ export function createScalePanel(): HTMLElement {
   head.className = 'edit__head';
   const title = document.createElement('span');
   title.className = 'edit__title';
-  title.textContent = '大きさを合わせる';
+  title.textContent = '寸法を合わせる';
   const done = document.createElement('button');
   done.type = 'button';
   done.className = 'button is-small';

@@ -548,7 +548,7 @@ body {
   font-size: 12px;
   letter-spacing: 0.04em;
 }
-/* 背景の設定: 3 つのタイル。同じ幅・同じ高さにそろえる */
+/* 背景の調整: 3 つのタイル。同じ幅・同じ高さにそろえる */
 .bg-tiles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
