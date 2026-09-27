@@ -12,9 +12,8 @@
 import { modeState, isPhotoMode } from '@/core/mode';
 import { photoState, setBackground } from '@/core/photoState';
 import { pickImage } from '@/platform/picker';
-import { FAILED_MESSAGE } from '@/ui/photoPanel';
+import { FAILED_MESSAGE, IDLE_MESSAGE } from '@/ui/photoPanel';
 
-const IDLE_MESSAGE = '写真の上に家具を置けます';
 
 export function createPhotoEmpty(): HTMLElement {
   const element = document.createElement('div');
@@ -26,7 +25,7 @@ export function createPhotoEmpty(): HTMLElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'button';
-  button.textContent = '部屋の写真を選ぶ';
+  button.textContent = '背景の画像を選ぶ';
   button.addEventListener('click', async () => {
     const file = await pickImage();
     if (file) await setBackground(file);

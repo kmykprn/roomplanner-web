@@ -12,7 +12,7 @@ import { photoState, setFramingPhoto, setPhotoView } from '@/core/photoState';
 import { DEFAULT_PHOTO_VIEW, maxScale, minScale } from '@/core/photoView';
 import { createSliderRow } from '@/ui/sliderRow';
 
-const GUIDE = '写真を指でずらし、2 本指かバーで拡大・縮小して、表示する範囲を決めてください。';
+const GUIDE = '背景の画像を指でずらし、2 本指かバーで拡大・縮小して、表示範囲を決めてください。';
 
 /** バーの目盛りの数。倍率は掛け算で対応させる（同じ指の動きで同じ割合だけ変わる） */
 const STEPS = 1000;
@@ -25,7 +25,7 @@ export function createFramePanel(): HTMLElement {
   head.className = 'edit__head';
   const title = document.createElement('span');
   title.className = 'edit__title';
-  title.textContent = '表示する範囲';
+  title.textContent = '表示範囲';
   const done = document.createElement('button');
   done.type = 'button';
   done.className = 'button is-small';

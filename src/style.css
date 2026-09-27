@@ -488,6 +488,7 @@ body {
 .photo__normal {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
   width: 100%;
 }
 
@@ -497,6 +498,98 @@ body {
 }
 
 /* 設定画面のような「見出し・いまの値・右端」の 1 行。行ごとボタンにもなる */
+/* 背景タブ: 背景の画像のカード */
+.bg-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.bg-card__thumb {
+  flex: none;
+  width: 64px;
+  height: 52px;
+  border-radius: 8px;
+  background: #e6e2dc center / cover no-repeat;
+}
+.bg-card__text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.bg-card__title {
+  font-size: 14px;
+}
+.bg-card__note {
+  color: #7a8388;
+  font-size: 12px;
+}
+.bg-card__note.is-error {
+  color: #b03030;
+}
+/* 解析に失敗したときだけ出す帯 */
+.bg-failure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fdecea;
+  color: #b03030;
+  font-size: 12px;
+}
+.bg-heading {
+  margin: 4px 0 0;
+  color: #7a8388;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+/* 背景に合わせる: 3 つのタイル。同じ幅・同じ高さにそろえる */
+.bg-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.bg-tile {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 4px;
+  padding: 12px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f7f9fa;
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  touch-action: manipulation;
+}
+.bg-tile:active {
+  background: #eef3f6;
+}
+.bg-tile__icon {
+  color: var(--primary);
+}
+.bg-tile__icon .ic {
+  width: 26px;
+  height: 26px;
+}
+.bg-tile__label {
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+.bg-tile__value {
+  color: #7a8388;
+  font-size: 11px;
+}
+.bg-tile__value.is-set {
+  color: var(--primary);
+}
 .setting {
   display: flex;
   align-items: center;

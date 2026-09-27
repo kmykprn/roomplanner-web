@@ -11,7 +11,7 @@
  */
 
 export type IconName =
-  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube';
+  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -23,6 +23,12 @@ const PATHS: Record<IconName, string[]> = {
   camera: ['M4 8h3l2-3h6l2 3h3v11H4z', 'M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7'],
   link: ['M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1.5 1.5', 'M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5'],
   cube: ['M12 3l8 4.5v9L12 21l-8-4.5v-9z', 'M4 7.5l8 4.5 8-4.5', 'M12 12v9'],
+  // 表示範囲: 四隅の括弧（切り取る枠）
+  frame: ['M4 9V5h4', 'M16 5h4v4', 'M20 15v4h-4', 'M8 19H4v-4'],
+  // 大きさ: 定規
+  ruler: ['M3 9h18v6H3z', 'M7 9v3M11 9v2M15 9v3M19 9v2'],
+  // 手前に表示する範囲: 重なった 2 枚（手前の 1 枚）
+  layers: ['M4 5h10v10H4z', 'M10 9h10v10H10z'],
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
