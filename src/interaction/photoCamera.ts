@@ -4,16 +4,16 @@
  * **利用者がカメラを回すことはしない。** 写真は動かないので、カメラだけ自由に回ると嘘になる。
  * 動かすのは「写真を撮ったときの傾き」に合わせるときだけで、それが core/floorFit.ts の値。
  *
- * 高さは、「大きさを合わせる」で線の長さを入れてもらえばそこから決まる（core/scaleLine.ts）。
- * 入れていなければ立って撮った高さ（1.4 m）。画角はここでは決めず viewer が持つ（core/viewer.ts）。
+ * 高さは立って撮った高さ（1.4 m）。室内の寸法を計算したあとは、家具を写真の奥行きに合わせて置く
+ * （core/depthPlacement.ts）。画角はここでは決めず viewer が持つ（core/viewer.ts）。
  */
 
 import * as THREE from 'three';
 
 import type { FloorFit } from '@/core/floorFit';
 
-/** 床（y = 0）の上に立つ位置。前後の位置は、家具を置く場所が画面に入るように取る */
-const EYE_DISTANCE = 4;
+/** 床（y = 0）の上に立つ位置。前後の位置は、家具を置く場所が画面に入るように取る。奥行きで置くときも使う */
+export const EYE_DISTANCE = 4;
 
 /**
  * 写真モードのカメラを、床の傾きに合わせて置く。
@@ -41,7 +41,7 @@ const raycaster = new THREE.Raycaster();
  *
  * 見下ろし角と画角が写真に合っていれば、この点までの距離は
  * 「カメラの高さ ÷ tan(地平線からの角度)」で決まる実際の距離になる。
- * 長さを入れていなければ、カメラの高さ（1.4 m）だけが仮定
+ * カメラの高さ（1.4 m）だけが仮定。室内の寸法を計算したあとは、この床ではなく奥行きに置く
  */
 export function floorPointOnScreen(
   camera: THREE.Camera,

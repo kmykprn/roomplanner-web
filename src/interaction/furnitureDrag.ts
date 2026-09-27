@@ -31,6 +31,13 @@ export interface DragTarget {
    *            写真の床と 3D の床は合っていないので、奥へ動かして縮む意味がない
    */
   surface: 'floor' | 'screen';
+  /**
+   * 画面の点（NDC）に写っている物の 3D の位置。写真の奥行きが分かっているときだけ（写真モード）。
+   *
+   * これがあれば、家具の足元をその点に立たせて動かす。奥の床へ動かせば小さく、手前なら大きく写る。
+   * null を返す場所（写真の外・奥行きの分からない所）では、画面に沿って動かす
+   */
+  positionAt?(x: number, y: number): [number, number, number] | null;
 }
 
 export function createFurnitureDrag(
@@ -72,6 +79,9 @@ export function createFurnitureDrag(
   let cameraWasEnabled = true;
   /** 掴んだ点と家具の原点のズレ。これを保たないと家具が指の中心に飛ぶ */
   let grabOffset = new THREE.Vector3();
+  /** 奥行きに沿って動かすときの、指と足元の画面上のズレ（NDC） */
+  const footOffset = new THREE.Vector2();
+  const footNdc = new THREE.Vector3();
   let pressPosition = { x: 0, y: 0 };
 
   /** 画面座標を -1..1 の正規化デバイス座標へ変換する */
@@ -131,6 +141,9 @@ export function createFurnitureDrag(
     if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
       grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
     }
+    // 足元が画面のどこに写っているか。指と足元のズレを、画面の上で保って動かす
+    footNdc.set(...item.position).project(camera);
+    footOffset.set(footNdc.x - pointerNdc.x, footNdc.y - pointerNdc.y);
   }
 
   function onPointerMove(event: PointerEvent): void {
@@ -140,13 +153,22 @@ export function createFurnitureDrag(
     if (!draggingId || !draggingTarget) return;
 
     toNdc(event);
-    raycaster.setFromCamera(pointerNdc, camera);
-    if (!raycaster.ray.intersectPlane(dragPlane, hitPoint)) return;
-
-    const next = hitPoint.add(grabOffset);
     const { scene } = draggingTarget;
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
+
+    // 写真の奥行きが分かっていれば、足元をその点の奥行きに立たせる
+    const onDepth = draggingTarget.positionAt?.(pointerNdc.x + footOffset.x, pointerNdc.y + footOffset.y);
+    if (onDepth) {
+      scene.update(draggingId, { position: scene.constrain(onDepth, item.size, item.rotationY) });
+      return;
+    }
+
+    // 画面に沿って動かす面は、いまの家具を通す（奥行きに沿って動かしたあとでも指とずれないように）
+    if (draggingTarget.surface === 'screen') dragPlane.set(SCREEN_NORMAL, -item.position[2]);
+    raycaster.setFromCamera(pointerNdc, camera);
+    if (!raycaster.ray.intersectPlane(dragPlane, hitPoint)) return;
+    const next = hitPoint.add(grabOffset);
 
     // 床の上では、動かした先で何かの上に載るなら、その上面の高さにする（机の上のランプなど）。
     // 画面に沿う写真モードでは奥行きをそのまま保つ。

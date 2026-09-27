@@ -28,14 +28,16 @@ import { applyPhotoCamera, floorPointOnScreen } from '@/interaction/photoCamera'
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createScaleLineDrag } from '@/interaction/scaleLineDrag';
 import { createPhotoPan } from '@/interaction/photoPan';
-import { drawScaleLine } from '@/ui/scaleLineOverlay';
+import { drawScaleLines } from '@/ui/scaleLineOverlay';
+import { CAMERA_HEIGHT } from '@/core/floorFit';
+import { photoPointAt, type PhotoPoint } from '@/core/photoView';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
 import {
-  refreshCameraHeight,
+  depthPointAt,
   photoState,
   photoScene,
   setLensSource,
@@ -102,7 +104,7 @@ createFurnitureDrag(
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? { scene: photoScene, layer: photoFurniture, surface: 'screen' }
+      ? { scene: photoScene, layer: photoFurniture, surface: 'screen', positionAt: (x, y) => depthPointAt(photoPointOfNdc(x, y)) }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
@@ -252,11 +254,11 @@ function swapMaskImage(url: string | null): void {
  */
 function applyPhotoView(): void {
   if (!isPhotoMode()) return;
-  const { backgroundAspect, view, floorFit, vfovDeg, cameraHeight } = photoState.get();
+  const { backgroundAspect, view, floorFit, vfovDeg } = photoState.get();
 
   viewer.setContentAspect(backgroundAspect);
   viewer.setPhotoFov(vfovDeg);
-  applyPhotoCamera(viewer.camera, floorFit, cameraHeight);
+  applyPhotoCamera(viewer.camera, floorFit, CAMERA_HEIGHT);
   viewer.setPhotoView(view);
 }
 
@@ -265,37 +267,40 @@ function applyPhotoView(): void {
  */
 const PLACEMENT_SCREEN_POINT = { x: 0, y: -0.4 };
 
-// 線からカメラの高さを出すときの画角。いま写真を描いているカメラのものを使う
+/** 画面の点（3D を描いている範囲の NDC、-1〜1）に写っている、写真の点 */
+function photoPointOfNdc(x: number, y: number): PhotoPoint {
+  return photoPointAt(photoState.get().view, { u: (x + 1) / 2, v: (1 - y) / 2 });
+}
+
+// 奥行きから家具の位置を出すときの画角。いま写真を描いているカメラのものを使う
 setLensSource(() => ({ vfovDeg: viewer.camera.fov, aspect: viewer.camera.aspect }));
+// 室内の寸法を計算してあれば、その点の奥行きに置く。まだなら、立って撮った前提の床に置く
 setPhotoPlacement(() => {
-  const hit = floorPointOnScreen(viewer.camera, PLACEMENT_SCREEN_POINT.x, PLACEMENT_SCREEN_POINT.y);
+  const { x, y } = PLACEMENT_SCREEN_POINT;
+  const onDepth = depthPointAt(photoPointOfNdc(x, y));
+  if (onDepth) return onDepth;
+  const hit = floorPointOnScreen(viewer.camera, x, y);
   return hit ? [hit.x, hit.y, hit.z] : null;
 });
 
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
-// 傾き・画角・線が変わったら、カメラの高さを解き直す。カメラを置き直したあとに呼ぶ
-// （画角はカメラから読むので）。高さが変わるとカメラを置き直すため、もう一度ここに来る
-photoState.subscribe(refreshCameraHeight);
 /**
- * 大きさを合わせている間の見せ方。線を写真の上の層に描く。
+ * 寸法を合わせている間の見せ方。線を写真の上の層に描く。
  *
- * **家具は隠さない。** 長さを入れると家具の見た目の大きさがその場で変わるので、
+ * **家具は隠さない。** 「室内の寸法を計算」を押すと家具の見た目の大きさがその場で変わるので、
  * まわりの物と比べて自然かどうかを確かめながら合わせられる
  */
 function applyScaling(): void {
-  const { isScaling, scaleLine, view, floorFit } = photoState.get();
+  const { isScaling, scaleLines, selectedScaleLine, view } = photoState.get();
   const scaling = isPhotoMode() && isScaling;
   photoFurniture.group.visible = isPhotoMode();
   photoShadow.setGrounds(
     false,
     photoState.get().furniture.map((item) => ({ position: item.position, size: item.size }))
   );
-  drawScaleLine(viewer.overlayLayer, scaling ? scaleLine : null, view, floorFit, {
-    vfovDeg: viewer.camera.fov,
-    aspect: viewer.camera.aspect,
-  });
+  drawScaleLines(viewer.overlayLayer, scaling ? scaleLines : [], selectedScaleLine, view);
 }
 photoState.subscribe(applyScaling);
 modeState.subscribe(applyScaling);

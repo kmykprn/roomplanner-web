@@ -1,16 +1,17 @@
 /**
- * 「大きさを合わせる」線を、写真の上の線の層（viewer.overlayLayer）に描く。
+ * 寸法の線（最大 5 本）を、写真の上の線の層（viewer.overlayLayer）に描く。
  *
- * オレンジの線と両端の丸、真ん中に「幅 120 cm」のような札。長さを入れていなければ
- * 「長さを入力」と出す。写真の座標で持っている両端を、寄り具合（PhotoView）を通して
- * 画面の位置に直して描く。
+ * オレンジの線と両端の丸、真ん中に「線1 120 cm」のような札。長さを入れていなければ
+ * 「線1 長さを入力」と出す。選んでいる線は太く、ほかの線は少し薄く描く。
+ * 写真の座標で持っている両端を、寄り具合（PhotoView）を通して画面の位置に直して描く。
  */
 
-import type { FloorFit } from '@/core/floorFit';
-import { resolveKind, type Lens, type ScaleLine } from '@/core/scaleLine';
+import type { ScaleLine } from '@/core/scaleLine';
 import { screenPointOf, type PhotoView } from '@/core/photoView';
 
 const LINE_COLOR = 'rgb(255, 149, 0)';
+/** 選んでいない線の濃さ */
+const UNSELECTED_ALPHA = 0.7;
 /** 両端の丸の半径（CSS px）。指で掴む場所なので大きめ */
 export const HANDLE_RADIUS = 11;
 
@@ -22,35 +23,52 @@ export function endsOnScreen(line: ScaleLine, view: PhotoView, width: number, he
   });
 }
 
-/** 描く。line が null なら消すだけ */
-export function drawScaleLine(
-  canvas: HTMLCanvasElement,
-  line: ScaleLine | null,
-  view: PhotoView,
-  fit: FloorFit,
-  lens: Lens
-): void {
+/** 線の札の文字。何本目かと長さ */
+export function lineLabel(line: ScaleLine, index: number): string {
+  return line.length ? `線${index + 1} ${Math.round(line.length * 100)} cm` : `線${index + 1} 長さを入力`;
+}
+
+/** 描く。lines が空なら消すだけ */
+export function drawScaleLines(canvas: HTMLCanvasElement, lines: ScaleLine[], selected: number, view: PhotoView): void {
   const context = canvas.getContext('2d');
   if (!context) return;
   context.setTransform(1, 0, 0, 1, 0, 0);
   context.clearRect(0, 0, canvas.width, canvas.height);
-  if (!line) return;
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  if (width === 0 || height === 0) return;
+  if (lines.length === 0 || width === 0 || height === 0) return;
   context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
 
+  // 選んでいる線を最後に描いて、重なったときに上に来るようにする
+  const order = lines.map((_, index) => index).filter((index) => index !== selected);
+  if (lines[selected]) order.push(selected);
+  for (const index of order) {
+    context.globalAlpha = index === selected ? 1 : UNSELECTED_ALPHA;
+    drawLine(context, lines[index], index, index === selected, view, width, height);
+  }
+  context.globalAlpha = 1;
+}
+
+function drawLine(
+  context: CanvasRenderingContext2D,
+  line: ScaleLine,
+  index: number,
+  isSelected: boolean,
+  view: PhotoView,
+  width: number,
+  height: number
+): void {
   const [a, b] = endsOnScreen(line, view, width, height);
   // 下に薄い影を敷いて、明るい写真の上でも線が見えるようにする
   context.lineCap = 'round';
   context.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-  context.lineWidth = 8;
+  context.lineWidth = isSelected ? 8 : 6;
   context.beginPath();
   context.moveTo(a.x, a.y);
   context.lineTo(b.x, b.y);
   context.stroke();
   context.strokeStyle = LINE_COLOR;
-  context.lineWidth = 4;
+  context.lineWidth = isSelected ? 4 : 3;
   context.stroke();
 
   for (const point of [a, b]) {
@@ -64,8 +82,7 @@ export function drawScaleLine(
   }
 
   // 札。線の真ん中から、線に直交する向きへ少し離して置く（線に重ならないように）
-  const kind = resolveKind(line, fit, lens) === 'height' ? '高さ' : '幅';
-  const label = line.length ? `${kind} ${Math.round(line.length * 100)} cm` : `${kind}：長さを入力`;
+  const label = lineLabel(line, index);
   const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   const along = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   let normal = { x: -(b.y - a.y) / along, y: (b.x - a.x) / along };

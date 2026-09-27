@@ -30,6 +30,8 @@ function stepText(measure: Extract<MeasureState, { status: 'running' }>): string
       return '写真の傾きと画角を計算しています';
     case 'depth':
       return '写真の奥行きを計算しています';
+    case 'fit':
+      return '線の長さから縮尺を合わせています';
   }
 }
 
@@ -83,7 +85,9 @@ export function createMeasureStatus(): HTMLElement {
       measure.status === 'done'
         ? '室内の寸法を計算しました。'
         : measure.status === 'failed'
-          ? '室内の寸法を計算できませんでした。'
+          ? measure.reason === 'lines'
+            ? '線の端の奥行きが分からないため、室内の寸法を計算できませんでした。'
+            : '室内の寸法を計算できませんでした。'
           : '';
   }
 

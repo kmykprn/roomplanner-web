@@ -28,13 +28,21 @@ import {
 } from '@/core/photoView';
 import { CAMERA_HEIGHT, DEFAULT_FLOOR_FIT, clampFloorFit, type FloorFit } from '@/core/floorFit';
 import {
-  cameraHeightFor,
   defaultLine,
-  resolveKind,
-  type Lens,
+  MAX_SCALE_LINES,
+  measuredLines,
   type ScaleLine,
   type VisibleRegion,
 } from '@/core/scaleLine';
+import {
+  fitDepthScale,
+  photoPointOf,
+  worldPointAt,
+  type DepthScale,
+  type Lens,
+  type PhotoPose,
+} from '@/core/depthPlacement';
+import { EYE_DISTANCE } from '@/interaction/photoCamera';
 
 /**
  * 背景写真の読み込み具合。
@@ -65,8 +73,9 @@ export interface MaskTool {
  *   download  … 計算に使うデータ（モデル）を落としている。初回だけ
  *   calibrate … 写真の傾きと画角を出している（core/photoCalibModel.ts）
  *   depth     … 写真の奥行きを出している（core/depthModel.ts）
+ *   fit       … 奥行きの倍率を線の長さに合わせている（core/depthPlacement.ts）
  */
-export type MeasureStep = 'download' | 'calibrate' | 'depth';
+export type MeasureStep = 'download' | 'calibrate' | 'depth' | 'fit';
 
 /**
  * 室内の寸法の計算の様子。
@@ -74,13 +83,19 @@ export type MeasureStep = 'download' | 'calibrate' | 'depth';
  *   idle    … まだ計算していない
  *   running … 計算中。始めた時刻から経過秒数を出す
  *   done    … 計算した。seconds はかかった秒数（端末から読み戻したときは無い）
- *   failed  … 計算できなかった。もう一度ボタンを押してもらう
+ *   failed  … 計算できなかった。もう一度ボタンを押してもらう。
+ *             reason が lines なら、線の端が奥行きの分からない所にあった（線を動かしてもらう）
  */
 export type MeasureState =
   | { status: 'idle' }
   | { status: 'running'; step: MeasureStep; startedAt: number; download: DownloadProgress | null }
   | { status: 'done'; seconds: number | null }
-  | { status: 'failed' };
+  | { status: 'failed'; reason: 'compute' | 'lines' };
+
+/** 線の長さに合わせた奥行きの直し方と、そのとき使った線（線を変えたら計算し直してもらうため） */
+export interface FittedScale extends DepthScale {
+  lines: ScaleLine[];
+}
 
 export interface PhotoState extends FurnitureSceneState {
   /** 背景写真の表示用 URL（Blob URL）。未選択なら null */
@@ -108,12 +123,17 @@ export interface PhotoState extends FurnitureSceneState {
   /** 計算した写真の奥行き。まだ計算していなければ null */
   depthMap: DepthMap | null;
   /**
-   * 大きさを合わせる線（core/scaleLine.ts）。まだ出していなければ null で、
-   * 合わせる姿に入ったときに見えている範囲の中に作る
+   * 寸法を合わせる線（core/scaleLine.ts）。最大 5 本。まだ出していなければ空で、
+   * 寸法の画面に入ったときに見えている範囲の中に 1 本作る
    */
-  scaleLine: ScaleLine | null;
-  /** カメラの高さ（m）。線の長さを入れると決まる。写真の縮尺そのもの */
-  cameraHeight: number;
+  scaleLines: ScaleLine[];
+  /** 選んでいる線（寸法の画面で太く描き、欄を強調する） */
+  selectedScaleLine: number;
+  /**
+   * 線の長さに合わせた奥行きの直し方。「室内の寸法を計算」で決まる。
+   * これと奥行きの地図がそろっている間は、家具を足元の奥行きに合わせて置く（core/depthPlacement.ts）
+   */
+  depthScale: FittedScale | null;
   /** 大きさを合わせている最中か。この間だけ線を出し、指の動きを線の端に使う */
   isScaling: boolean;
   /** 表示する範囲を調整している最中か。この間は 1 本指で写真をずらす */
@@ -146,8 +166,9 @@ export const photoState = createStore<PhotoState>({
   lensFocal35: null,
   measure: { status: 'idle' },
   depthMap: null,
-  scaleLine: null,
-  cameraHeight: CAMERA_HEIGHT,
+  scaleLines: [],
+  selectedScaleLine: 0,
+  depthScale: null,
   isScaling: false,
   isFramingPhoto: false,
   maskUrl: null,
@@ -287,8 +308,8 @@ export function setFramingPhoto(isFramingPhoto: boolean): void {
 }
 
 /**
- * 写真の画角を返す関数。main.ts が入れる（描いているカメラが持っている）。
- * 線からカメラの高さを出すのに要る
+ * いま写真を描いているカメラの画角を返す関数。main.ts が入れる。
+ * 室内の寸法を計算する前の家具が、写真のどこに写っているかを出すのに要る
  */
 let lensSource: (() => Lens) | null = null;
 
@@ -296,70 +317,124 @@ export function setLensSource(source: () => Lens): void {
   lensSource = source;
 }
 
-/** 大きさの合わせ方を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
-const FRESH_SCALE = {
-  scaleLine: null,
-  cameraHeight: CAMERA_HEIGHT,
+/** 寸法の線を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
+const FRESH_SCALE: Pick<PhotoState, 'scaleLines' | 'selectedScaleLine'> = {
+  scaleLines: [],
+  selectedScaleLine: 0,
 };
 
 /** 室内の寸法の計算を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
-const FRESH_MEASURE: Pick<PhotoState, 'measure' | 'depthMap'> = {
+const FRESH_MEASURE: Pick<PhotoState, 'measure' | 'depthMap' | 'depthScale'> = {
   measure: { status: 'idle' },
   depthMap: null,
+  depthScale: null,
 };
 
-/** 寸法を合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に作る */
+/** 寸法を合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に 1 本作る */
 export function setScaling(isScaling: boolean): void {
-  const { scaleLine } = photoState.get();
+  const { scaleLines } = photoState.get();
   if (photoState.get().isScaling === isScaling) return;
-  photoState.set({ isScaling, ...(isScaling && !scaleLine ? { scaleLine: defaultLine(visibleRegion()) } : {}) });
+  const firstLine = isScaling && scaleLines.length === 0;
+  photoState.set({ isScaling, ...(firstLine ? { scaleLines: [defaultLine(visibleRegion())], selectedScaleLine: 0 } : {}) });
 }
 
-/** 線の端・読み方・長さのどれかを変える。カメラの高さは refreshCameraHeight が解き直す */
-export function updateScaleLine(patch: Partial<ScaleLine>): void {
-  const line = photoState.get().scaleLine;
-  if (!line) return;
-  photoState.set({ scaleLine: { ...line, ...patch } });
-  refreshCameraHeight();
+/** 線を 1 本足して、その線を選ぶ。上限（5 本）に達していれば何もしない */
+export function addScaleLine(): void {
+  const { scaleLines } = photoState.get();
+  if (scaleLines.length >= MAX_SCALE_LINES) return;
+  photoState.set({
+    scaleLines: [...scaleLines, defaultLine(visibleRegion(), scaleLines.length)],
+    selectedScaleLine: scaleLines.length,
+  });
+}
+
+/** 線を 1 本消す。最後の 1 本は消さない（線が無いと合わせられない） */
+export function removeScaleLine(index: number): void {
+  const { scaleLines, selectedScaleLine } = photoState.get();
+  if (scaleLines.length <= 1) return;
+  const next = scaleLines.filter((_, i) => i !== index);
+  photoState.set({ scaleLines: next, selectedScaleLine: Math.min(selectedScaleLine, next.length - 1) });
+}
+
+/** 線の端か長さを変える */
+export function updateScaleLine(index: number, patch: Partial<ScaleLine>): void {
+  const { scaleLines } = photoState.get();
+  if (!scaleLines[index]) return;
+  photoState.set({ scaleLines: scaleLines.map((line, i) => (i === index ? { ...line, ...patch } : line)) });
+}
+
+export function selectScaleLine(index: number): void {
+  if (photoState.get().selectedScaleLine !== index) photoState.set({ selectedScaleLine: index });
 }
 
 /** 線を丸ごと入れ替える（寸法の画面の「戻る」で、入ったときの線に戻すため） */
-export function setScaleLine(scaleLine: ScaleLine | null): void {
-  photoState.set({ scaleLine });
-  refreshCameraHeight();
-}
-
-/** 大きさの合わせ方を捨てて、立って撮った高さに戻す。線は元の位置に置き直す */
-export function resetScale(): void {
-  photoState.set({ scaleLine: defaultLine(visibleRegion()), cameraHeight: CAMERA_HEIGHT });
+export function setScaleLines(scaleLines: ScaleLine[]): void {
+  photoState.set({ scaleLines, selectedScaleLine: Math.min(photoState.get().selectedScaleLine, Math.max(0, scaleLines.length - 1)) });
 }
 
 /**
- * 線と、いまの傾き・画角から、カメラの高さを解き直す。
- *
- * 線の長さを入れたときだけでなく、写真の解析で傾きや画角が変わったときにも要る
- * （同じ線でも、傾きが変われば床の上での長さが変わる）。main.ts が状態の変化ごとに呼ぶ。
- * 変わっていなければ何もしない（呼び返しが止まるように）
+ * 寸法の合わせ方を捨てる。線は 1 本だけにして元の位置に置き直す。
+ * 家具はいまの位置のまま（計算し直せば、また足元の奥行きに合わせて置き直す）
  */
-export function refreshCameraHeight(): void {
-  if (!lensSource) return;
-  const { scaleLine, floorFit, cameraHeight } = photoState.get();
-  const next = cameraHeightFor(scaleLine, floorFit, lensSource()) ?? CAMERA_HEIGHT;
-  if (Math.abs(next - cameraHeight) > 1e-6) photoState.set({ cameraHeight: next });
+export function resetScale(): void {
+  photoState.set({ scaleLines: [defaultLine(visibleRegion())], selectedScaleLine: 0, depthScale: null });
 }
 
-/** いまの線を幅と高さのどちらで読んでいるか（auto のときは線の向きで決めた方） */
-export function currentScaleKind(): 'width' | 'height' {
-  const { scaleLine, floorFit } = photoState.get();
-  if (!scaleLine || !lensSource) return 'width';
-  return resolveKind(scaleLine, floorFit, lensSource());
+/** 計算したあとに線を変えたか（変えたなら、もう一度計算してもらう） */
+export function scaleOutdated(): boolean {
+  const { scaleLines, depthScale } = photoState.get();
+  return depthScale !== null && JSON.stringify(measuredLines(scaleLines)) !== JSON.stringify(depthScale.lines);
 }
 
-/** 長さを入れたのに測れない（端が床に届いていない など）か */
-export function scaleUnmeasurable(): boolean {
-  const { scaleLine, floorFit } = photoState.get();
-  if (!scaleLine?.length || !lensSource) return false;
-  return cameraHeightFor(scaleLine, floorFit, lensSource()) === null;
+/**
+ * 奥行きから 3D の位置を出すときの画角。計算で出した画角と写真の縦横比。
+ *
+ * 描いているカメラ（lensSource）からは取らない。状態を変えてからカメラに届くまでの間は
+ * カメラが前の画角のままで、計算の直後に線の長さを合わせると倍率が大きくずれた
+ */
+function depthLens(): Lens | null {
+  const { vfovDeg, backgroundAspect } = photoState.get();
+  return vfovDeg !== null && backgroundAspect !== null ? { vfovDeg, aspect: backgroundAspect } : null;
+}
+
+/** 写真を描いているカメラの向きと位置（interaction/photoCamera.ts と同じ置き方） */
+function currentPose(): PhotoPose {
+  return { fit: photoState.get().floorFit, position: [0, CAMERA_HEIGHT, EYE_DISTANCE] };
+}
+
+/**
+ * 写真の点に写っている物の 3D の位置。家具をそこに立たせると、足元の奥行きに合った大きさで写る。
+ * 室内の寸法を計算していない・写真の外・奥行きが分からない所なら null
+ */
+export function depthPointAt(point: PhotoPoint): [number, number, number] | null {
+  const { depthMap, depthScale } = photoState.get();
+  const lens = depthLens();
+  if (!depthMap || !depthScale || !lens) return null;
+  if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return null;
+  return worldPointAt(point, depthMap, depthScale, lens, currentPose());
+}
+
+/** 置いてある家具の足元が、いま写真のどこに写っているか。家具ごと */
+function furnitureOnPhoto(): Map<string, PhotoPoint> {
+  const points = new Map<string, PhotoPoint>();
+  if (!lensSource) return points;
+  const lens = lensSource();
+  const pose = currentPose();
+  for (const item of photoState.get().furniture) {
+    const point = photoPointOf(item.position, lens, pose);
+    if (point) points.set(item.id, point);
+  }
+  return points;
+}
+
+/** 家具を、写真の同じ場所に写ったまま、足元の奥行きの位置へ置き直す。奥行きが分からない家具はそのまま */
+function placeFurnitureOnDepth(points: Map<string, PhotoPoint>): void {
+  const furniture = photoState.get().furniture.map((item) => {
+    const point = points.get(item.id);
+    const position = point ? depthPointAt(point) : null;
+    return position ? { ...item, position } : item;
+  });
+  photoState.set({ furniture });
 }
 
 /** 写真のうち、いま画面に見えている範囲 */
@@ -385,9 +460,12 @@ const PROGRESS_INTERVAL_MS = 100;
  * 写真は端末の中だけで処理する
  */
 export async function measureRoom(): Promise<void> {
-  const { backgroundUrl, backgroundAspect, lensFocal35, measure } = photoState.get();
-  if (!backgroundUrl || !backgroundAspect || measure.status === 'running') return;
+  const { backgroundUrl, backgroundAspect, lensFocal35, measure, scaleLines } = photoState.get();
+  const lines = measuredLines(scaleLines);
+  if (!backgroundUrl || !backgroundAspect || measure.status === 'running' || lines.length === 0) return;
   const startedAt = Date.now();
+  // 家具がいま写真のどこに写っているかを先に控える。傾きと画角が変わっても、同じ場所に置き直すため
+  const furnitureAt = furnitureOnPhoto();
   // 待っている間に写真が替わっていたら、その写真の結果ではないので捨てる
   const isCurrent = (): boolean => photoState.get().backgroundUrl === backgroundUrl;
   const report = (step: MeasureStep, download: DownloadProgress | null = null): void => {
@@ -395,58 +473,91 @@ export async function measureRoom(): Promise<void> {
   };
 
   try {
-    report('download');
-    const [{ loadCalibModel, calibratePhoto }, { loadDepthModel, estimateDepth }] = await Promise.all([
-      import('@/core/photoCalibModel'),
-      import('@/core/depthModel'),
-    ]);
+    // 奥行きをこの写真で計算済みなら、線の長さに合わせ直すだけで済む（1 秒かからない）
+    if (!photoState.get().depthMap) await computeDepth(backgroundUrl, backgroundAspect, lensFocal35, report);
+    const { depthMap } = photoState.get();
+    const lens = depthLens();
+    if (!isCurrent() || !depthMap || !lens) return;
 
-    // 2 つのモデルを同時に落とし、落とした量は足して 1 つの進み具合にする
-    const downloads: Record<'calib' | 'depth', DownloadProgress> = {
-      calib: { loaded: 0, total: null },
-      depth: { loaded: 0, total: null },
-    };
-    let reportedAt = 0;
-    const onDownload = (which: 'calib' | 'depth') => (progress: DownloadProgress): void => {
-      downloads[which] = progress;
-      const now = Date.now();
-      if (now - reportedAt < PROGRESS_INTERVAL_MS) return;
-      reportedAt = now;
-      const { calib, depth } = downloads;
-      report('download', {
-        loaded: calib.loaded + depth.loaded,
-        total: calib.total !== null && depth.total !== null ? calib.total + depth.total : null,
-      });
-    };
-    await Promise.all([loadCalibModel(onDownload('calib')), loadDepthModel(onDownload('depth'))]);
-
-    // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
-    report('calibrate');
-    const exifVfov = lensFocal35 ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
-    const calibration = await calibratePhoto(backgroundUrl, exifVfov);
-    if (!isCurrent()) return;
-    // 見下ろし角はそのまま。ロールはカメラの回す向きが逆なので符号を返す。
-    // カメラの高さは、傾きと画角が変わったあとに main.ts が refreshCameraHeight で解き直す
+    report('fit');
+    const scale = fitDepthScale(lines, depthMap, lens);
+    if (!scale) {
+      photoState.set({ measure: { status: 'failed', reason: 'lines' } });
+      return;
+    }
     photoState.set({
-      vfovDeg: calibration.vfovDeg,
-      floorFit: clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg }),
+      depthScale: { ...scale, lines },
+      measure: { status: 'done', seconds: (Date.now() - startedAt) / 1000 },
     });
-
-    report('depth');
-    const depthMap = await estimateDepth(backgroundUrl, calibration.vfovDeg);
-    if (!isCurrent()) return;
-    photoState.set({ depthMap, measure: { status: 'done', seconds: (Date.now() - startedAt) / 1000 } });
-    // 次に開いたときに計算し直さなくて済むように残す。残せなくても、いまの結果は使える
-    saveDepth(depthMap).catch(() => {});
+    placeFurnitureOnDepth(furnitureAt);
   } catch (error) {
     console.error('室内の寸法を計算できませんでした', error);
-    if (isCurrent()) photoState.set({ measure: { status: 'failed' } });
+    if (isCurrent()) photoState.set({ measure: { status: 'failed', reason: 'compute' } });
   }
 }
 
-/** 端末に残しておいた奥行きを戻す（起動時の読み戻し）。計算は済んでいる扱いにする */
+/**
+ * 写真の傾き・画角と奥行きを出して、状態に入れる。
+ * 写真が途中で替わったら、入れずに終わる（呼んだ側が isCurrent で確かめる）
+ */
+async function computeDepth(
+  backgroundUrl: string,
+  backgroundAspect: number,
+  lensFocal35: number | null,
+  report: (step: MeasureStep, download?: DownloadProgress | null) => void
+): Promise<void> {
+  const isCurrent = (): boolean => photoState.get().backgroundUrl === backgroundUrl;
+  report('download');
+  const [{ loadCalibModel, calibratePhoto }, { loadDepthModel, estimateDepth }] = await Promise.all([
+    import('@/core/photoCalibModel'),
+    import('@/core/depthModel'),
+  ]);
+
+  // 2 つのモデルを同時に落とし、落とした量は足して 1 つの進み具合にする
+  const downloads: Record<'calib' | 'depth', DownloadProgress> = {
+    calib: { loaded: 0, total: null },
+    depth: { loaded: 0, total: null },
+  };
+  let reportedAt = 0;
+  const onDownload = (which: 'calib' | 'depth') => (progress: DownloadProgress): void => {
+    downloads[which] = progress;
+    const now = Date.now();
+    if (now - reportedAt < PROGRESS_INTERVAL_MS) return;
+    reportedAt = now;
+    const { calib, depth } = downloads;
+    report('download', {
+      loaded: calib.loaded + depth.loaded,
+      total: calib.total !== null && depth.total !== null ? calib.total + depth.total : null,
+    });
+  };
+  await Promise.all([loadCalibModel(onDownload('calib')), loadDepthModel(onDownload('depth'))]);
+
+  // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
+  report('calibrate');
+  const exifVfov = lensFocal35 ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
+  const calibration = await calibratePhoto(backgroundUrl, exifVfov);
+  if (!isCurrent()) return;
+  // 見下ろし角はそのまま。ロールはカメラの回す向きが逆なので符号を返す
+  photoState.set({
+    vfovDeg: calibration.vfovDeg,
+    floorFit: clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg }),
+  });
+
+  report('depth');
+  const depthMap = await estimateDepth(backgroundUrl, calibration.vfovDeg);
+  if (!isCurrent()) return;
+  photoState.set({ depthMap });
+  // 次に開いたときに計算し直さなくて済むように残す。残せなくても、いまの結果は使える
+  saveDepth(depthMap).catch(() => {});
+}
+
+/**
+ * 端末に残しておいた奥行きを戻す（起動時の読み戻し）。
+ * 線の長さに合わせ終えていれば（直し方も戻っていれば）、計算は済んでいる扱いにする
+ */
 export function restoreDepth(depthMap: DepthMap): void {
-  photoState.set({ depthMap, measure: { status: 'done', seconds: null } });
+  const measured = photoState.get().depthScale !== null;
+  photoState.set({ depthMap, measure: measured ? { status: 'done', seconds: null } : { status: 'idle' } });
 }
 
 export function setMaskTool(patch: Partial<MaskTool>): void {
