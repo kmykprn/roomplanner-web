@@ -2,9 +2,9 @@
  * 写真モードの「背景」タブ。
  *
  *   背景の画像のカード … 小さな画像、いまの状態の一言、「選ぶ／変更」「外す」
- *   背景の設定         … 3 つのタイル。押すとその場で調整する姿に切り替わり、「完了」で戻る
- *       表示範囲                       … ui/framePanel.ts
- *       大きさ                         … ui/scalePanel.ts
+ *   背景の調整         … 3 つのタイル。押すとその場で調整する姿に切り替わり、「完了」で戻る
+ *       拡大・縮小                     … ui/framePanel.ts
+ *       寸法                           … ui/scalePanel.ts
  *       家具より手前に表示する範囲       … ui/maskPanel.ts
  *
  * 背景の画像の解析（家具の傾きを出す）は利用者が触るものではないので、行を持たない。
@@ -41,7 +41,6 @@ const CALIBRATION_NOTES: Record<CalibrationStatus, string> = {
   done: '背景に合わせて家具の傾きを計算しました',
   failed: '家具の傾きを計算できませんでした',
 };
-const SCALE_NOTE = '大きさを合わせると、家具が背景の中の物と同じ縮尺で表示されます';
 
 export function createPhotoPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -52,9 +51,9 @@ export function createPhotoPanel(): HTMLElement {
   normal.className = 'photo__normal';
   /** 家具より手前に表示する範囲を指定する姿 */
   const mask = createMaskPanel();
-  /** 大きさを合わせる姿 */
+  /** 寸法を合わせる姿 */
   const scale = createScalePanel();
-  /** 表示範囲を決める姿 */
+  /** 拡大・縮小する姿 */
   const frame = createFramePanel();
 
   // --- 背景の画像のカード ---
@@ -87,18 +86,18 @@ export function createPhotoPanel(): HTMLElement {
   failureText.textContent = 'もう一度お試しいただくか、別の画像を選んでください';
   failure.append(failureText, createSmallButton('やり直す', retryCalibration));
 
-  // --- 背景の設定: 3 つのタイル ---
+  // --- 背景の調整: 3 つのタイル ---
   const heading = document.createElement('p');
   heading.className = 'bg-heading';
-  heading.textContent = '背景の設定';
+  heading.textContent = '背景の調整';
   const tiles = document.createElement('div');
   tiles.className = 'bg-tiles';
-  const frameTile = createTile('frame', '表示範囲', () => setFramingPhoto(true));
-  const scaleTile = createTile('ruler', '大きさ', () => setScaling(true));
+  const frameTile = createTile('frame', '拡大・縮小', () => setFramingPhoto(true));
+  const scaleTile = createTile('ruler', '寸法', () => setScaling(true));
   const maskTile = createTile('layers', '家具より手前に\n表示する範囲', () => setMasking(true));
   tiles.append(frameTile.element, scaleTile.element, maskTile.element);
 
-  /** 下の一言。案内・読み込みの失敗・大きさの意味を、状況に応じて 1 つだけ出す */
+  /** 下の一言。案内・読み込みの失敗を、状況に応じて 1 つだけ出す */
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
@@ -106,7 +105,7 @@ export function createPhotoPanel(): HTMLElement {
   panel.append(normal, frame, scale, mask);
 
   function render(): void {
-    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, calibration, scaleLine, view } =
+    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, calibration, scaleLine } =
       photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -124,13 +123,15 @@ export function createPhotoPanel(): HTMLElement {
 
     heading.hidden = !ready;
     tiles.hidden = !ready;
-    frameTile.setValue(view.scale < 1 ? '全体' : view.scale > 1 ? '拡大' : '画面いっぱい', false);
+    // 拡大・縮小はいまの状態を言葉にしにくい（倍率の数字も伝わらない）ので、何も出さない。
+    // 背景の画像そのものが答えになっている
+    frameTile.setValue('', false);
     const length = scaleLine?.length;
     scaleTile.setValue(length ? `${Math.round(length * 100)} cm で調整済み` : '未設定', Boolean(length));
     maskTile.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
     note.classList.toggle('is-error', failed);
-    note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : length ? '' : SCALE_NOTE;
+    note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : '';
     note.hidden = note.textContent === '';
 
     // どれかの姿に入っている間は、通常の姿を引っ込める
@@ -144,7 +145,7 @@ export function createPhotoPanel(): HTMLElement {
   return panel;
 }
 
-/** 「背景の設定」のタイル。アイコン・見出し・いまの設定。押すと調整する姿に入る */
+/** 「背景の調整」のタイル。アイコン・見出し・いまの設定。押すと調整する姿に入る */
 function createTile(
   icon: IconName,
   label: string,

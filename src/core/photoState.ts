@@ -285,7 +285,7 @@ const FRESH_SCALE = {
   cameraHeight: CAMERA_HEIGHT,
 };
 
-/** 大きさを合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に作る */
+/** 寸法を合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に作る */
 export function setScaling(isScaling: boolean): void {
   const { scaleLine } = photoState.get();
   if (photoState.get().isScaling === isScaling) return;
