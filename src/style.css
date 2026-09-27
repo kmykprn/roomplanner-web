@@ -521,6 +521,21 @@ body {
   color: var(--primary);
   text-align: center;
 }
+/* 計算中は ✻ をゆっくり回す（形は変えない）。動きを減らす設定なら止める */
+.measure-status.is-running .measure-status__glyph {
+  display: inline-block;
+  animation: measure-spin 2.4s linear infinite;
+}
+@keyframes measure-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .measure-status.is-running .measure-status__glyph {
+    animation: none;
+  }
+}
 .measure-status__seconds {
   flex: none;
   margin-left: auto;
