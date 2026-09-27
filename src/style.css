@@ -471,17 +471,39 @@ body {
 .slider-row.slider-row--bare {
   grid-template-columns: 1fr;
 }
-/* 寸法: 幅と高さの切り替えと、長さの欄を 1 行に */
-.scale__controls {
+/* 寸法: 線ごとの行（線の名前・長さの欄・削除）。選んでいる行は枠をメインカラーにする */
+.scale-lines {
+  display: grid;
+  gap: 6px;
+}
+.scale-line {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
-.scale__kind {
-  flex: 0 0 132px;
+.scale-line.is-selected {
+  border-color: var(--primary);
 }
-.scale__measure {
-  align-self: flex-start;
+.scale-line__name {
+  flex: none;
+  min-width: 44px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: rgb(255, 149, 0);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scale-line__remove {
+  margin-left: auto;
+}
+.scale__add {
+  justify-self: start;
 }
 /* 室内の寸法の計算の進み具合（1 行）。秒数の桁で横に揺れないよう、数字は等幅 */
 .measure-status {

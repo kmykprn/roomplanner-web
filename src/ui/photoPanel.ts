@@ -97,7 +97,7 @@ export function createPhotoPanel(): HTMLElement {
   panel.append(normal, frame, scale, mask);
 
   function render(): void {
-    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, measure, scaleLine } =
+    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, measure, depthScale } =
       photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -117,8 +117,8 @@ export function createPhotoPanel(): HTMLElement {
     // 拡大・縮小はいまの状態を言葉にしにくい（倍率の数字も伝わらない）ので、何も出さない。
     // 背景の画像そのものが答えになっている
     frameTile.setValue('', false);
-    const length = scaleLine?.length;
-    scaleTile.setValue(length ? `${Math.round(length * 100)} cm で調整済み` : '未設定', Boolean(length));
+    // 線の長さに合わせて計算してあれば、何本の線で合わせたかを出す
+    scaleTile.setValue(depthScale ? `${depthScale.lines.length} 本の線で調整済み` : '未設定', Boolean(depthScale));
     maskTile.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
     note.classList.toggle('is-error', failed);

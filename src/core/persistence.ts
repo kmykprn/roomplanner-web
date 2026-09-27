@@ -12,10 +12,10 @@
 
 import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
-import { photoState, restoreDepth, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
+import { photoState, restoreDepth, setMaskUrl, showBackground, type FittedScale, type PhotoState } from '@/core/photoState';
 import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
-import { CAMERA_HEIGHT, normalizeFloorFit } from '@/core/floorFit';
-import { CAMERA_HEIGHT_LIMITS, normalizeScaleLine } from '@/core/scaleLine';
+import { normalizeFloorFit } from '@/core/floorFit';
+import { normalizeScaleLine, normalizeScaleLines } from '@/core/scaleLine';
 import type { PlacedFurniture } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.room';
@@ -25,7 +25,7 @@ const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 type SavedPhoto = Pick<
   PhotoState,
   | 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg' | 'lensFocal35'
-  | 'scaleLine' | 'cameraHeight'
+  | 'scaleLines' | 'depthScale'
 >;
 
 /**
@@ -81,11 +81,9 @@ export function restorePhoto(): void {
     floorFit: normalizeFloorFit(saved.floorFit),
     vfovDeg: Number.isFinite(saved.vfovDeg) ? (saved.vfovDeg as number) : null,
     lensFocal35: Number.isFinite(saved.lensFocal35) && (saved.lensFocal35 as number) > 0 ? (saved.lensFocal35 as number) : null,
-    // 大きさを合わせる線。壊れていれば「まだ合わせていない」に戻す
-    scaleLine: normalizeScaleLine(saved.scaleLine),
-    cameraHeight: Number.isFinite(saved.cameraHeight)
-      ? Math.min(CAMERA_HEIGHT_LIMITS.max, Math.max(CAMERA_HEIGHT_LIMITS.min, saved.cameraHeight as number))
-      : CAMERA_HEIGHT,
+    // 寸法の線と、線に合わせた奥行きの直し方。壊れていれば「まだ合わせていない」に戻す
+    scaleLines: restoredScaleLines(saved),
+    depthScale: normalizeFittedScale(saved.depthScale),
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
   });
@@ -108,6 +106,22 @@ export function restorePhoto(): void {
     .catch(() => {
       // 読めなくても起動は続ける。写真を選び直せばよい
     });
+}
+
+/**
+ * 寸法の線を読み戻す。線が 1 本だけだったころの保存（scaleLine）も 1 本の一覧として読む
+ */
+function restoredScaleLines(saved: Partial<SavedPhoto> & { scaleLine?: unknown }): PhotoState['scaleLines'] {
+  if (saved.scaleLines) return normalizeScaleLines(saved.scaleLines);
+  const single = normalizeScaleLine(saved.scaleLine);
+  return single ? [single] : [];
+}
+
+/** 奥行きの直し方を読み戻す。数でなければ「まだ合わせていない」 */
+function normalizeFittedScale(value: unknown): FittedScale | null {
+  const scale = value as Partial<FittedScale> | null;
+  if (!scale || !Number.isFinite(scale.a) || !Number.isFinite(scale.b)) return null;
+  return { a: scale.a as number, b: scale.b as number, lines: normalizeScaleLines(scale.lines) };
 }
 
 /** 壊れた値が入っていても起動できなくならないよう、読めなければ null にする */
@@ -145,8 +159,8 @@ export function persistPhotoOnChange(): void {
       floorFit: state.floorFit,
       vfovDeg: state.vfovDeg,
       lensFocal35: state.lensFocal35,
-      scaleLine: state.scaleLine,
-      cameraHeight: state.cameraHeight,
+      scaleLines: state.scaleLines,
+      depthScale: state.depthScale,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {

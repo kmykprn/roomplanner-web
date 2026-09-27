@@ -202,8 +202,11 @@ export function createViewer(container: HTMLElement): Viewer {
     const { x, y } = viewOrigin(clamped);
     const { width, height } = visibleSize(clamped);
 
-    // 全体を 1 × 1 として渡す。割合で持つので、画面の大きさが変わっても効き方は同じ
-    camera.setViewOffset(1, 1, x, y, width, height);
+    // 全体を「写真の縦横比 × 1」として渡す。割合で持つので、画面の大きさが変わっても効き方は同じ。
+    // **全体を 1 × 1 にしてはいけない。** setViewOffset はカメラの縦横比を 全体の幅 ÷ 高さ に書き換えるので、
+    // 1 × 1 だと縦横比が 1 になり、家具が写真の縦横比の分だけ横に縮んで（横長の写真なら伸びて）描かれていた
+    const aspect = contentAspect ?? 1;
+    camera.setViewOffset(aspect, 1, x * aspect, y, width * aspect, height);
 
     // 写真は「見える割合」の逆数だけ拡大して敷き、左上を合わせる。縦横とも px で指定する
     const size = `${drawWidth / width}px ${drawHeight / height}px`;
