@@ -2,7 +2,7 @@
  * 写真モードの「背景」タブ。
  *
  *   背景の画像のカード … 小さな画像、いまの状態の一言、「選ぶ／変更」「外す」
- *   背景に合わせる     … 3 つのタイル。押すとその場で調整する姿に切り替わり、「完了」で戻る
+ *   背景の設定         … 3 つのタイル。押すとその場で調整する姿に切り替わり、「完了」で戻る
  *       表示範囲                       … ui/framePanel.ts
  *       大きさ                         … ui/scalePanel.ts
  *       家具より手前に表示する範囲       … ui/maskPanel.ts
@@ -87,10 +87,10 @@ export function createPhotoPanel(): HTMLElement {
   failureText.textContent = 'もう一度お試しいただくか、別の画像を選んでください';
   failure.append(failureText, createSmallButton('やり直す', retryCalibration));
 
-  // --- 背景に合わせる: 3 つのタイル ---
+  // --- 背景の設定: 3 つのタイル ---
   const heading = document.createElement('p');
   heading.className = 'bg-heading';
-  heading.textContent = '背景に合わせる';
+  heading.textContent = '背景の設定';
   const tiles = document.createElement('div');
   tiles.className = 'bg-tiles';
   const frameTile = createTile('frame', '表示範囲', () => setFramingPhoto(true));
@@ -144,7 +144,7 @@ export function createPhotoPanel(): HTMLElement {
   return panel;
 }
 
-/** 「背景に合わせる」のタイル。アイコン・見出し・いまの設定。押すと調整する姿に入る */
+/** 「背景の設定」のタイル。アイコン・見出し・いまの設定。押すと調整する姿に入る */
 function createTile(
   icon: IconName,
   label: string,
