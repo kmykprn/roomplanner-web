@@ -299,8 +299,7 @@ photoState.subscribe(applyPhotoView);
 /**
  * 寸法を合わせている間の見せ方。線を写真の上の層に描く。
  *
- * **家具は隠さない。** 「室内の寸法を計算」を押すと家具の見た目の大きさがその場で変わるので、
- * まわりの物と比べて自然かどうかを確かめながら合わせられる
+ * **家具は隠さない。** 線を合わせながら、置いた家具とまわりの物を見比べられるように
  */
 function applyScaling(): void {
   const { isScaling, scaleLines, selectedScaleLine, view } = photoState.get();

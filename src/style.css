@@ -467,6 +467,76 @@ body {
   flex: none;
   min-width: 96px;
 }
+/* まだ反映していない変更があるときの「保存」。光をゆっくり強めたり弱めたりし、右上にオレンジの点を付ける */
+.sub__done.is-pending {
+  position: relative;
+  animation: save-glow 1.8s ease-in-out infinite;
+}
+.sub__done.is-pending::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: rgb(255, 149, 0);
+}
+@keyframes save-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(10, 126, 164, 0.15), 0 0 6px 0 rgba(10, 126, 164, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(10, 126, 164, 0.25), 0 0 16px 3px rgba(10, 126, 164, 0.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sub__done.is-pending {
+    animation: none;
+    box-shadow: 0 0 0 4px rgba(10, 126, 164, 0.25), 0 0 14px 2px rgba(10, 126, 164, 0.55);
+  }
+}
+/* 見出しの右の ? と、押したときの吹き出し */
+.sub__head {
+  position: relative;
+}
+.sub__help {
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1.5px solid var(--primary);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.sub__help.is-open {
+  background: var(--primary);
+  color: #fff;
+}
+.sub__tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 5;
+  width: min(280px, 90%);
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--text);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.6;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
 /* 見出しを出さないバー（説明の文が何のバーかを言っているとき） */
 .slider-row.slider-row--bare {
   grid-template-columns: 1fr;
@@ -502,8 +572,36 @@ body {
 .scale-line__remove {
   margin-left: auto;
 }
-.scale__add {
-  justify-self: start;
+/* 寸法: 線の行と「＋ 線を追加」をまとめる枠 */
+.scale-group {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+}
+.scale-group .scale-line {
+  background: var(--surface);
+}
+.scale-add {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1.5px dashed rgba(10, 126, 164, 0.45);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+}
+.scale-add__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.scale-add__hint {
+  color: #687076;
+  font-size: 11.5px;
 }
 /* 室内の寸法の計算の進み具合（1 行）。秒数の桁で横に揺れないよう、数字は等幅 */
 .measure-status {
