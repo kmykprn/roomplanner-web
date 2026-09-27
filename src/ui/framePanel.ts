@@ -37,7 +37,7 @@ export function createFramePanel(): HTMLElement {
     hideLabel: true,
     min: 0,
     max: STEPS,
-    ends: ['全体', '拡大'],
+    ends: ['縮小', '拡大'],
     onInput: (value) => setPhotoView({ ...photoState.get().view, scale: sliderToScale(value) }),
   });
   screen.body.append(createSentences(SENTENCES), zoom.element);
