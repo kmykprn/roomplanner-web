@@ -59,7 +59,8 @@ export function createScalePanel(): HTMLElement {
 
   const guide = document.createElement('p');
   guide.className = 'floor-fit__guide';
-  guide.textContent = '長さが分かる物に、オレンジの線の両端を合わせてください。';
+  // 何のためにするのかを先に言う（背景タブの下に置いていた説明をここへ移した）
+  guide.textContent = '寸法を合わせると、家具が背景の中の物と同じ縮尺で表示されます。長さが分かる物に、オレンジの線の両端を合わせてください。';
 
   // 幅と高さの切り替え。いま読んでいる方を選んだ姿にする
   const kindBar = document.createElement('div');

@@ -45,11 +45,11 @@ export function createFramePanel(): HTMLElement {
     onInput: (value) => setPhotoView({ ...photoState.get().view, scale: sliderToScale(value) }),
   });
 
-  // 画面いっぱい（倍率 1、下寄せ）に戻す。最初の見え方と同じ
+  // 最初の見え方（倍率 1、下寄せ）に戻す
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'button is-quiet is-small';
-  reset.textContent = '画面いっぱいに戻す';
+  reset.textContent = '元に戻す';
   reset.addEventListener('click', () => setPhotoView({ ...DEFAULT_PHOTO_VIEW }));
   const footer = document.createElement('div');
   footer.className = 'edit__actions';

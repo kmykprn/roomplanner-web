@@ -41,7 +41,6 @@ const CALIBRATION_NOTES: Record<CalibrationStatus, string> = {
   done: '背景に合わせて家具の傾きを計算しました',
   failed: '家具の傾きを計算できませんでした',
 };
-const SCALE_NOTE = '寸法を合わせると、家具が背景の中の物と同じ縮尺で表示されます';
 
 export function createPhotoPanel(): HTMLElement {
   const panel = document.createElement('div');
@@ -98,7 +97,7 @@ export function createPhotoPanel(): HTMLElement {
   const maskTile = createTile('layers', '家具より手前に\n表示する範囲', () => setMasking(true));
   tiles.append(frameTile.element, scaleTile.element, maskTile.element);
 
-  /** 下の一言。案内・読み込みの失敗・寸法の意味を、状況に応じて 1 つだけ出す */
+  /** 下の一言。案内・読み込みの失敗を、状況に応じて 1 つだけ出す */
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
@@ -106,7 +105,7 @@ export function createPhotoPanel(): HTMLElement {
   panel.append(normal, frame, scale, mask);
 
   function render(): void {
-    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, calibration, scaleLine, view } =
+    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl, calibration, scaleLine } =
       photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -124,13 +123,15 @@ export function createPhotoPanel(): HTMLElement {
 
     heading.hidden = !ready;
     tiles.hidden = !ready;
-    frameTile.setValue(view.scale < 1 ? '全体' : view.scale > 1 ? '拡大' : '画面いっぱい', false);
+    // 拡大・縮小はいまの状態を言葉にしにくい（倍率の数字も伝わらない）ので、何も出さない。
+    // 背景の画像そのものが答えになっている
+    frameTile.setValue('', false);
     const length = scaleLine?.length;
     scaleTile.setValue(length ? `${Math.round(length * 100)} cm で調整済み` : '未設定', Boolean(length));
     maskTile.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
     note.classList.toggle('is-error', failed);
-    note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : length ? '' : SCALE_NOTE;
+    note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : '';
     note.hidden = note.textContent === '';
 
     // どれかの姿に入っている間は、通常の姿を引っ込める
