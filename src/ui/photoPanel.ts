@@ -12,18 +12,16 @@
 
 import { pickImage } from '@/platform/picker';
 import { createMaskPanel } from '@/ui/maskPanel';
-import { createFloorPanel } from '@/ui/floorPanel';
+import { createScalePanel } from '@/ui/scalePanel';
 import { createFramePanel } from '@/ui/framePanel';
-import { DEFAULT_FLOOR_FIT } from '@/core/floorFit';
 import type { CalibrationStatus } from '@/core/photoState';
 import {
   clearBackground,
   photoState,
   retryCalibration,
-  setAutoCalibrate,
   setFramingPhoto,
   setBackground,
-  setFittingFloor,
+  setScaling,
   setMasking,
 } from '@/core/photoState';
 
@@ -49,8 +47,8 @@ export function createPhotoPanel(): HTMLElement {
   normal.className = 'photo__normal';
   /** 手前の範囲を指定する姿 */
   const mask = createMaskPanel();
-  /** 床に合わせる姿 */
-  const floor = createFloorPanel();
+  /** 大きさを合わせる姿 */
+  const scale = createScalePanel();
   /** 表示する範囲を決める姿 */
   const frame = createFramePanel();
 
@@ -80,33 +78,29 @@ export function createPhotoPanel(): HTMLElement {
   frameChevron.textContent = '›';
   frameRow.element.append(frameChevron);
 
-  // --- 写真からの自動調整（画角と傾き）。オン・オフを切り替えられる。結果は「床に合わせる」に入る ---
-  const calibRow = createSettingRow('写真から自動で合わせる');
+  // --- 写真の解析（画角と傾きを自動で出す）。手で合わせる手段は置かないので、様子とやり直しだけ ---
+  const calibRow = createSettingRow('写真の解析');
   const retryButton = createSmallButton('やり直す', retryCalibration);
-  const toggleButton = createSmallButton('オンにする', () => setAutoCalibrate(!photoState.get().autoCalibrate));
-  const calibButtons = document.createElement('span');
-  calibButtons.className = 'setting__buttons';
-  calibButtons.append(retryButton, toggleButton);
-  calibRow.element.append(calibButtons);
+  calibRow.element.append(retryButton);
 
-  // --- 床に合わせる（傾きと大きさの基準）。行ごと押せる ---
-  const floorRow = createSettingRow('床に合わせる', () => setFittingFloor(true));
-  const floorChevron = document.createElement('span');
-  floorChevron.className = 'setting__chevron';
-  floorChevron.textContent = '›';
-  floorRow.element.append(floorChevron);
+  // --- 大きさを合わせる。行ごと押せる ---
+  const scaleRow = createSettingRow('大きさを合わせる', () => setScaling(true));
+  const scaleChevron = document.createElement('span');
+  scaleChevron.className = 'setting__chevron';
+  scaleChevron.textContent = '›';
+  scaleRow.element.append(scaleChevron);
 
   /** 行の下の一言。案内・読み込みの失敗・手前の範囲の説明を、状況に応じて 1 つだけ出す */
   const note = document.createElement('p');
   note.className = 'hint photo__note';
 
-  normal.append(photoRow.element, frameRow.element, calibRow.element, floorRow.element, maskRow.element, note);
-  panel.append(normal, frame, floor, mask);
+  normal.append(photoRow.element, frameRow.element, calibRow.element, scaleRow.element, maskRow.element, note);
+  panel.append(normal, frame, scale, mask);
 
   function render(): void {
     const {
-      backgroundName, backgroundStatus, isMasking, isFittingFloor, isFramingPhoto, maskUrl, floorFit,
-      calibration, floorCorners, scaleLength, autoCalibrate, view,
+      backgroundName, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl,
+      calibration, scaleLine, view,
     } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -124,19 +118,14 @@ export function createPhotoPanel(): HTMLElement {
     frameRow.setValue(view.scale < 1 ? '全体' : view.scale > 1 ? '拡大' : '画面いっぱい');
 
     calibRow.element.hidden = !ready;
-    calibRow.setValue(autoCalibrate ? CALIBRATION_LABELS[calibration] : 'オフ', autoCalibrate && calibration === 'done');
-    toggleButton.textContent = autoCalibrate ? 'オフにする' : 'オンにする';
-    // 解析中はもう一度押させない。済んだあとは、手で崩したときに戻す手段として残す
-    retryButton.hidden = !autoCalibrate || calibration === 'running';
+    calibRow.setValue(CALIBRATION_LABELS[calibration], calibration === 'done');
+    // 解析中はもう一度押させない
+    retryButton.hidden = calibration === 'running';
 
-    floorRow.element.hidden = !ready;
-    // 度数は出さない。「何度が正しいか」は誰にも分からないので、合わせたかどうかだけ伝える
-    const fitted =
-      floorCorners !== null ||
-      floorFit.pitchDeg !== DEFAULT_FLOOR_FIT.pitchDeg ||
-      floorFit.rollDeg !== DEFAULT_FLOOR_FIT.rollDeg;
-    // 長さまで入れていれば大きさも合っている。そこまで分かるように言い分ける
-    floorRow.setValue(scaleLength ? '大きさも調整済み' : fitted ? '調整済み' : '未調整', fitted);
+    scaleRow.element.hidden = !ready;
+    // 長さを入れていれば、何で合わせたかが分かるように長さを出す
+    const length = scaleLine?.length;
+    scaleRow.setValue(length ? `${Math.round(length * 100)} cm で調整済み` : '未設定', Boolean(length));
 
     maskRow.element.hidden = !ready;
     maskRow.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
@@ -146,7 +135,7 @@ export function createPhotoPanel(): HTMLElement {
     note.hidden = note.textContent === '';
 
     // どれかの姿に入っている間は、通常の行を引っ込める
-    normal.hidden = isMasking || isFittingFloor || isFramingPhoto;
+    normal.hidden = isMasking || isScaling || isFramingPhoto;
     mask.hidden = !isMasking;
   }
 

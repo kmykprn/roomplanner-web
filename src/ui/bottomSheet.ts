@@ -20,7 +20,7 @@ import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
 import { heightOf, previewPlacedHeight, setPlacedHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
-import { photoState, setFittingFloor, setFramingPhoto, setMasking } from '@/core/photoState';
+import { photoState, setFramingPhoto, setMasking, setScaling } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
 
@@ -168,12 +168,12 @@ export function createBottomSheet(container: HTMLElement): void {
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
 
-    // 手前の範囲の指定も床合わせも「背景」タブの中で行う。タブを離れたら終える。
+    // 手前の範囲の指定も大きさ合わせも「背景」タブの中で行う。タブを離れたら終える。
     // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる。**
     // 家具をタップすると「操作」タブへ移るので、それもここで終わる
     if (activeTab !== 'background') {
       setMasking(false);
-      setFittingFloor(false);
+      setScaling(false);
       setFramingPhoto(false);
     }
 
