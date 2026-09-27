@@ -12,8 +12,8 @@
 
 import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
-import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
-import { readBackground, readMask } from '@/platform/backgroundStore';
+import { photoState, restoreDepth, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
+import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
 import { CAMERA_HEIGHT, normalizeFloorFit } from '@/core/floorFit';
 import { CAMERA_HEIGHT_LIMITS, normalizeScaleLine } from '@/core/scaleLine';
 import type { PlacedFurniture } from '@/config/furniture';
@@ -81,8 +81,6 @@ export function restorePhoto(): void {
     floorFit: normalizeFloorFit(saved.floorFit),
     vfovDeg: Number.isFinite(saved.vfovDeg) ? (saved.vfovDeg as number) : null,
     lensFocal35: Number.isFinite(saved.lensFocal35) && (saved.lensFocal35 as number) > 0 ? (saved.lensFocal35 as number) : null,
-    // 読み戻した画角があれば解析は済んでいる。無ければ次に写真が出たときに解析する
-    calibration: Number.isFinite(saved.vfovDeg) ? 'done' : 'idle',
     // 大きさを合わせる線。壊れていれば「まだ合わせていない」に戻す
     scaleLine: normalizeScaleLine(saved.scaleLine),
     cameraHeight: Number.isFinite(saved.cameraHeight)
@@ -103,6 +101,9 @@ export function restorePhoto(): void {
       // 隠す場所は写真に付いているものなので、写真が出せたときだけ戻す
       const mask = await readMask();
       if (mask) setMaskUrl(URL.createObjectURL(mask));
+      // 室内の寸法を計算した奥行きも、写真に付いているものなので同じく戻す
+      const depthMap = await readDepth();
+      if (depthMap) restoreDepth(depthMap);
     })
     .catch(() => {
       // 読めなくても起動は続ける。写真を選び直せばよい

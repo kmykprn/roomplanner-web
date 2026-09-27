@@ -20,7 +20,6 @@ import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createPhotoShadow } from '@/scene/photoShadow';
 import { createFurnitureLayer } from '@/scene/furniture';
-import { vfovFromFocal35 } from '@/core/exifFocal';
 import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
@@ -36,11 +35,9 @@ import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
 import {
-  applyCalibration,
   refreshCameraHeight,
   photoState,
   photoScene,
-  setCalibration,
   setLensSource,
   setPhotoPlacement,
 } from '@/core/photoState';
@@ -264,36 +261,6 @@ function applyPhotoView(): void {
 }
 
 /**
- * 写真が出たら、画角と傾きを写真から解析して入れる（core/photoCalibModel.ts）。
- *
- * 一枚につき一度だけ。写真の EXIF に焦点距離があれば画角はそれを使い、解析は傾きだけ出す。
- * 結果は floorFit と vfovDeg に入り、床の傾きは
- * そのまま手で直せる。出せなかったときは既定のまま（手で合わせてもらう）。
- * 写真は端末の中だけで処理する
- */
-function calibrateWhenReady(): void {
-  const { backgroundStatus, backgroundUrl, calibration, lensFocal35, backgroundAspect } = photoState.get();
-  if (backgroundStatus !== 'ready' || !backgroundUrl || calibration !== 'idle') return;
-  // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
-  const exifVfov = lensFocal35 && backgroundAspect ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
-
-  setCalibration('running');
-  // 解析の道具（onnxruntime）は大きいので、写真が出てから読む。起動時の読み込みに混ぜない
-  import('@/core/photoCalibModel')
-    .then(({ calibratePhoto }) => calibratePhoto(backgroundUrl, exifVfov))
-    .then((result) => {
-      // 待っている間に写真が替わっていたら、その写真の結果ではないので捨てる
-      if (photoState.get().backgroundUrl !== backgroundUrl) return;
-      // 見下ろし角はそのまま。ロールはカメラの回す向きが逆なので符号を返す
-      applyCalibration(result.vfovDeg, { pitchDeg: result.pitchDeg, rollDeg: -result.rollDeg });
-    })
-    .catch((error) => {
-      console.error('写真の解析に失敗しました', error);
-      if (photoState.get().backgroundUrl === backgroundUrl) setCalibration('failed');
-    });
-}
-
-/**
  * 新しい家具を置く場所（画面の NDC）。中央・下から 3 割の高さ。
  */
 const PLACEMENT_SCREEN_POINT = { x: 0, y: -0.4 };
@@ -311,7 +278,6 @@ photoState.subscribe(applyPhotoView);
 // 傾き・画角・線が変わったら、カメラの高さを解き直す。カメラを置き直したあとに呼ぶ
 // （画角はカメラから読むので）。高さが変わるとカメラを置き直すため、もう一度ここに来る
 photoState.subscribe(refreshCameraHeight);
-photoState.subscribe(calibrateWhenReady);
 /**
  * 大きさを合わせている間の見せ方。線を写真の上の層に描く。
  *

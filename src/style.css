@@ -480,6 +480,33 @@ body {
 .scale__kind {
   flex: 0 0 132px;
 }
+.scale__measure {
+  align-self: flex-start;
+}
+/* 室内の寸法の計算の進み具合（1 行）。秒数の桁で横に揺れないよう、数字は等幅 */
+.measure-status {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.measure-status__glyph {
+  flex: none;
+  width: 1em;
+  color: var(--primary);
+  text-align: center;
+}
+.measure-status__seconds {
+  flex: none;
+  margin-left: auto;
+}
+.measure-status.is-error,
+.measure-status.is-error .measure-status__glyph {
+  color: var(--danger);
+}
 .mask__tools {
   flex: 1;
 }
@@ -525,16 +552,6 @@ body {
   color: #b03030;
 }
 /* 解析に失敗したときだけ出す帯 */
-.bg-failure {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: #fdecea;
-  color: #b03030;
-  font-size: 12px;
-}
 .bg-heading {
   margin: 4px 0 0;
   color: #7a8388;

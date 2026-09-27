@@ -53,7 +53,7 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         runtimeCaching: [
           {
-            // 写真の解析に使うモデル（約 31MB）と、それを動かす wasm（約 14MB）。
+            // 室内の寸法の計算に使うモデル（傾き・画角 約 31MB、奥行き 約 44MB）と、それを動かす wasm（約 14MB）。
             // 事前キャッシュに含めると初回表示が遅くなるので、一度使ったものだけ残す
             urlPattern: /\.(onnx|wasm|mjs)$/,
             handler: 'CacheFirst',

@@ -6,17 +6,11 @@
  *   2. ONNX にしたネットワークで「上向きの場」「緯度の場」を出す（端末の中で数秒）
  *   3. その場からカメラを解く（core/photoCalib.ts）
  *
- * **写真は端末の外に出ない。** モデル（約 31MB）は初回だけ落として、以後はキャッシュから読む。
+ * **写真は端末の外に出ない。** モデル（約 31MB）は初回だけ落として、以後はキャッシュから読む（core/onnxModel.ts）。
  * ネットワークの入力は RGB を 0〜1 にしただけで、平均や標準偏差の正規化は無い。
  */
 
-// wasm 専用の入口。既定の入口は WebGPU 込みの別の wasm を探しに行く
-import * as ort from 'onnxruntime-web/wasm';
-// wasm 本体と、それを読む小さなモジュール。public に置くと Vite が module として読ませて
-// くれないので、バンドルの資産として持たせる（ビルドでは assets/ に入り、Service Worker が残す）
-import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
-import wasmLoaderUrl from 'onnxruntime-web/ort-wasm-simd-threaded.mjs?url';
-
+import { decodePhoto, loadModel, runModel, toInputPlanes, type DownloadProgress } from '@/core/onnxModel';
 import { calibrateFromFields, type CalibFields } from '@/core/photoCalib';
 
 /** 縮小後の短辺（GeoCalib の既定値） */
@@ -24,7 +18,7 @@ const SHORT_EDGE = 320;
 /** 縦横をこの倍数に切り詰める（ネットワークの都合） */
 const EDGE_MULTIPLE = 32;
 
-const MODEL_URL = `${import.meta.env.BASE_URL}models/geocalib-int8.onnx`;
+const MODEL_FILE = 'geocalib-int8.onnx';
 
 export interface PhotoCalibration {
   /** 縦の画角（度）。元の写真の全高に対する値 */
@@ -37,25 +31,14 @@ export interface PhotoCalibration {
   cost: number;
 }
 
-let session: Promise<ort.InferenceSession> | null = null;
-
-/** モデルを読む。2 回目からは同じものを使い回す */
-function loadSession(): Promise<ort.InferenceSession> {
-  if (!session) {
-    ort.env.wasm.wasmPaths = { wasm: wasmUrl, mjs: wasmLoaderUrl };
-    session = ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] }).catch((error) => {
-      session = null; // 落とせなかったら次回また試す
-      throw error;
-    });
-  }
-  return session;
+/** モデルを先に落としておく（落とす進み具合を出すため、解析とは分けて呼べるようにしている） */
+export function loadCalibModel(onProgress?: (progress: DownloadProgress) => void): Promise<void> {
+  return loadModel(MODEL_FILE, onProgress);
 }
 
 /** 写真を読み込んで、ネットワークの入力（NCHW, 0〜1）にする */
 async function preprocess(url: string): Promise<{ data: Float32Array; width: number; height: number; scale: number; fullHeight: number }> {
-  const image = new Image();
-  image.src = url;
-  await image.decode();
+  const image = await decodePhoto(url);
   const fullWidth = image.naturalWidth;
   const fullHeight = image.naturalHeight;
 
@@ -76,31 +59,22 @@ async function preprocess(url: string): Promise<{ data: Float32Array; width: num
     0, 0, fullWidth, fullHeight,
     -(resizedWidth - width) / 2, -(resizedHeight - height) / 2, resizedWidth, resizedHeight
   );
-  const pixels = context.getImageData(0, 0, width, height).data;
-
-  const plane = width * height;
-  const data = new Float32Array(3 * plane);
-  for (let i = 0; i < plane; i += 1) {
-    data[i] = pixels[i * 4] / 255;
-    data[plane + i] = pixels[i * 4 + 1] / 255;
-    data[2 * plane + i] = pixels[i * 4 + 2] / 255;
-  }
+  const data = toInputPlanes(context.getImageData(0, 0, width, height).data, width, height);
   return { data, width, height, scale, fullHeight };
 }
 
 /** 写真の URL を渡すと、画角と傾きを返す。数秒かかるので待たせる側は進み具合を出すこと */
 export async function calibratePhoto(url: string, fixedVfovDeg?: number): Promise<PhotoCalibration> {
-  const [model, input] = await Promise.all([loadSession(), preprocess(url)]);
-  const feeds = { image: new ort.Tensor('float32', input.data, [1, 3, input.height, input.width]) };
-  const output = await model.run(feeds);
+  const input = await preprocess(url);
+  const output = await runModel(MODEL_FILE, { image: { data: input.data, dims: [1, 3, input.height, input.width] } });
 
   const fields: CalibFields = {
     width: input.width,
     height: input.height,
-    up: output.up_field.data as Float32Array,
-    upConfidence: output.up_confidence.data as Float32Array,
-    latitude: output.latitude_field.data as Float32Array,
-    latitudeConfidence: output.latitude_confidence.data as Float32Array,
+    up: output.up_field.data,
+    upConfidence: output.up_confidence.data,
+    latitude: output.latitude_field.data,
+    latitudeConfidence: output.latitude_confidence.data,
   };
   // 画角が分かっていれば（写真の EXIF）、入力画像の画素での焦点距離に直して固定する
   const fixedFocal =
