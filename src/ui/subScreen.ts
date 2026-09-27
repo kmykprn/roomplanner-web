@@ -3,9 +3,9 @@
  *
  *   上の段 … 左に「‹ 戻る」、真ん中に見出し
  *   中身   … 画面ごとの説明と部品（body に入れる）
- *   下の段 … 左にその画面でだけ使うボタン（actions に入れる）、右に「完了」
+ *   下の段 … 左にその画面でだけ使うボタン（actions に入れる）、右に「保存」
  *
- * 「戻る」は、この画面で変えたことを取り消して戻る。「完了」は変えたことを残して戻る。
+ * 「戻る」は、この画面で変えたことを取り消して戻る。「保存」は変えたことを残して戻る。
  * 取り消し方は画面ごとに違うので、呼ぶ側が onBack で行う。
  */
 
@@ -45,7 +45,7 @@ export function createSubScreen(options: { title: string; onBack(): void; onDone
   const done = document.createElement('button');
   done.type = 'button';
   done.className = 'button sub__done';
-  done.textContent = '完了';
+  done.textContent = '保存';
   done.addEventListener('click', options.onDone);
   foot.append(actions, done);
 
