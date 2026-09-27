@@ -5,14 +5,15 @@
  *
  * 計算は長いと数十秒かかる。止まっていないことが分かるように、**経過秒数と、いまやっている
  * ことを 1 行だけ**出す。行は段階が進むごとに入れ替わる（Claude Code の進み具合と同じ見せ方）。
- * 先頭の記号は、動いていることを示すために少しずつ形を変える。
+ * 先頭の記号は ✻ 1 つだけで、動いていることはゆっくり回して示す（CSS）。形を入れ替えると目がちらついた。
  */
 
 import { photoState, type MeasureState } from '@/core/photoState';
 
-/** 先頭の記号。順に入れ替えて、回っているように見せる */
-const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
-const SPINNER_INTERVAL_MS = 120;
+/** 計算中の先頭の記号 */
+const SPARK = '✻';
+/** 経過秒数を書き換える間隔（ms）。秒の変わり目から遅れすぎないよう、1 秒より短くする */
+const TICK_INTERVAL_MS = 250;
 
 const BYTES_PER_MB = 1024 * 1024;
 
@@ -47,19 +48,13 @@ export function createMeasureStatus(): HTMLElement {
   seconds.className = 'measure-status__seconds';
   line.append(glyph, text, seconds);
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let timer: number | null = null;
-  let frame = 0;
 
-  /** 経過秒数と記号だけを書き換える（文は状態が変わったときに render が書く） */
+  /** 経過秒数だけを書き換える（文は状態が変わったときに render が書く） */
   function tick(): void {
     const { measure } = photoState.get();
     if (measure.status !== 'running') return;
     seconds.textContent = `${Math.floor((Date.now() - measure.startedAt) / 1000)}秒`;
-    if (!reduceMotion.matches) {
-      frame = (frame + 1) % SPINNER.length;
-      glyph.textContent = SPINNER[frame];
-    }
   }
 
   function render(): void {
@@ -69,10 +64,10 @@ export function createMeasureStatus(): HTMLElement {
     line.classList.toggle('is-running', measure.status === 'running');
 
     if (measure.status === 'running') {
-      glyph.textContent = SPINNER[frame];
+      glyph.textContent = SPARK;
       text.textContent = `${stepText(measure)}…`;
       tick();
-      if (timer === null) timer = window.setInterval(tick, SPINNER_INTERVAL_MS);
+      if (timer === null) timer = window.setInterval(tick, TICK_INTERVAL_MS);
       return;
     }
     if (timer !== null) {

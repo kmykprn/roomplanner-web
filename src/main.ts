@@ -98,13 +98,22 @@ viewer.scene.add(
 
 // --- 操作を繋ぐ ---
 const cameraControls = createCameraControls(viewer.canvas, viewer.camera);
+/**
+ * 写真モードで家具を動かす面。室内の寸法を計算したあとは、足元の高さの水平な面を滑らせる
+ * （写真の傾きが分かり、足元も写真の奥行きで決まっているので、奥へ動かすと写真どおりに小さくなる）
+ */
+function photoDragSurface(): 'level' | 'screen' {
+  const { depthMap, depthScale } = photoState.get();
+  return depthMap && depthScale ? 'level' : 'screen';
+}
+
 createFurnitureDrag(
   viewer.canvas,
   viewer.camera,
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? { scene: photoScene, layer: photoFurniture, surface: 'screen', positionAt: (x, y) => depthPointAt(photoPointOfNdc(x, y)) }
+      ? { scene: photoScene, layer: photoFurniture, surface: photoDragSurface() }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
@@ -121,9 +130,10 @@ createMaskPaint(viewer.canvas);
 
 // 写真に寄る操作。2本指のときだけ動くので、家具のドラッグとは取り合わない。
 // 写真がまだ無いうちは効かせない（寄る相手が無いのに3Dだけ拡大されると訳が分からない）
+// 寸法の画面では効かせない（線を合わせている最中に背景が拡大・縮小されると戸惑う）
 createPhotoZoom(
   viewer.canvas,
-  () => isPhotoMode() && photoState.get().backgroundStatus === 'ready'
+  () => isPhotoMode() && photoState.get().backgroundStatus === 'ready' && !photoState.get().isScaling
 );
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 
