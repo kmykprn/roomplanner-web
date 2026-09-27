@@ -27,9 +27,9 @@ import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
 import { applyPhotoCamera, floorPointOnScreen } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
-import { createFloorCornerDrag } from '@/interaction/floorCornerDrag';
+import { createScaleLineDrag } from '@/interaction/scaleLineDrag';
 import { createPhotoPan } from '@/interaction/photoPan';
-import { drawFloorGrid } from '@/ui/floorGrid';
+import { drawScaleLine } from '@/ui/scaleLineOverlay';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
@@ -37,7 +37,7 @@ import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
 import {
   applyCalibration,
-  ensureFloorCorners,
+  refreshCameraHeight,
   photoState,
   photoScene,
   setCalibration,
@@ -109,11 +109,11 @@ createFurnitureDrag(
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
-  () => !photoState.get().isMasking && !photoState.get().isFittingFloor && !photoState.get().isFramingPhoto
+  () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto
 );
 
-// 床を合わせる。合わせている姿のときだけ効く。四隅の丸を動かし、辺をタップで長さの辺を選ぶ
-createFloorCornerDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isFittingFloor);
+// 大きさを合わせる。合わせている姿のときだけ効く。線の両端を動かす
+createScaleLineDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isScaling);
 // 表示する範囲を調整している間は、1 本指で写真をずらす
 createPhotoPan(viewer.canvas, () => isPhotoMode() && photoState.get().isFramingPhoto);
 
@@ -163,7 +163,7 @@ function applyMode(): void {
   // 部屋の主光源は写真モードでは影を落とさない（向きの違う影が 2 つ重なるため）
   photoShadow.group.visible = photo;
   lighting.setCastShadow(!photo);
-  applyFloorFitting();
+  applyScaling();
 
   // 写真モードは背景を塗らない。塗ると CSS の写真が隠れる
   viewer.scene.background = photo ? null : roomBackground;
@@ -272,10 +272,7 @@ function applyPhotoView(): void {
  * 写真は端末の中だけで処理する
  */
 function calibrateWhenReady(): void {
-  const { backgroundStatus, backgroundUrl, calibration, lensFocal35, backgroundAspect, autoCalibrate } =
-    photoState.get();
-  // 自動で合わせない設定なら、解析しない（画角も傾きも既定のまま、手で合わせる）
-  if (!autoCalibrate) return;
+  const { backgroundStatus, backgroundUrl, calibration, lensFocal35, backgroundAspect } = photoState.get();
   if (backgroundStatus !== 'ready' || !backgroundUrl || calibration !== 'idle') return;
   // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
   const exifVfov = lensFocal35 && backgroundAspect ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
@@ -301,7 +298,7 @@ function calibrateWhenReady(): void {
  */
 const PLACEMENT_SCREEN_POINT = { x: 0, y: -0.4 };
 
-// 四隅から傾きを解くときの画角。いま写真を描いているカメラのものを使う
+// 線からカメラの高さを出すときの画角。いま写真を描いているカメラのものを使う
 setLensSource(() => ({ vfovDeg: viewer.camera.fov, aspect: viewer.camera.aspect }));
 setPhotoPlacement(() => {
   const hit = floorPointOnScreen(viewer.camera, PLACEMENT_SCREEN_POINT.x, PLACEMENT_SCREEN_POINT.y);
@@ -311,34 +308,33 @@ setPhotoPlacement(() => {
 modeState.subscribe(applyMode);
 photoState.subscribe(applyBackground);
 photoState.subscribe(applyPhotoView);
+// 傾き・画角・線が変わったら、カメラの高さを解き直す。カメラを置き直したあとに呼ぶ
+// （画角はカメラから読むので）。高さが変わるとカメラを置き直すため、もう一度ここに来る
+photoState.subscribe(refreshCameraHeight);
 photoState.subscribe(calibrateWhenReady);
 /**
- * 床を合わせている間の見せ方。モードと、合わせているかどうかの両方で変わる。
+ * 大きさを合わせている間の見せ方。線を写真の上の層に描く。
  *
- * **合わせている間は家具を隠す。** 四隅を動かすとカメラが回るので、置いてある家具が
- * 画面の中を大きく動く。マス目と床を見比べたいときに、それが目の邪魔になる
+ * **家具は隠さない。** 長さを入れると家具の見た目の大きさがその場で変わるので、
+ * まわりの物と比べて自然かどうかを確かめながら合わせられる
  */
-function applyFloorFitting(): void {
-  const { isFittingFloor, floorCorners, view, scaleEdge } = photoState.get();
-  const fitting = isPhotoMode() && isFittingFloor;
-
-  // 入ったときに四隅がまだ無ければ、いまの傾きから作る
-  if (fitting && !floorCorners) {
-    ensureFloorCorners();
-    return; // 状態が変わるので、もう一度ここに来る
-  }
-  photoFurniture.group.visible = isPhotoMode() && !fitting;
-  // 影を受ける面は、床を合わせている間は床のもの、ふだんは家具ごとのもの
+function applyScaling(): void {
+  const { isScaling, scaleLine, view, floorFit } = photoState.get();
+  const scaling = isPhotoMode() && isScaling;
+  photoFurniture.group.visible = isPhotoMode();
   photoShadow.setGrounds(
-    fitting,
+    false,
     photoState.get().furniture.map((item) => ({ position: item.position, size: item.size }))
   );
-  drawFloorGrid(viewer.overlayLayer, fitting ? floorCorners : null, view, scaleEdge);
+  drawScaleLine(viewer.overlayLayer, scaling ? scaleLine : null, view, floorFit, {
+    vfovDeg: viewer.camera.fov,
+    aspect: viewer.camera.aspect,
+  });
 }
-photoState.subscribe(applyFloorFitting);
-modeState.subscribe(applyFloorFitting);
+photoState.subscribe(applyScaling);
+modeState.subscribe(applyScaling);
 // 線の層は大きさが変わると中身が消える（画素数を合わせ直すため）。描き直す
-new ResizeObserver(applyFloorFitting).observe(viewer.overlayLayer);
+new ResizeObserver(applyScaling).observe(viewer.overlayLayer);
 applyMode();
 applyBackground();
 

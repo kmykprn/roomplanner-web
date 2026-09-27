@@ -135,6 +135,37 @@ body {
 .viewport__overlay {
   pointer-events: none;
 }
+/* 大きさを合わせる: 読み方の添え書きと「自動に戻す」を 1 行に */
+.scale__kind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+.scale__kind-note {
+  margin: 0;
+  font-size: 12px;
+}
+/* 測る物の例。押すとその長さが入る（長さの決まっていない物は押せない、ただの例） */
+.scale__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.scale__example {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f0f4f6;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.scale__example:disabled {
+  color: var(--text);
+  opacity: 0.75;
+}
 .floor-fit__guide {
   margin: 0;
   font-size: 14px;

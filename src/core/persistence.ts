@@ -12,10 +12,10 @@
 
 import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
-import { photoState, setAutoCalibrate, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
+import { photoState, setMaskUrl, showBackground, type PhotoState } from '@/core/photoState';
 import { readBackground, readMask } from '@/platform/backgroundStore';
 import { CAMERA_HEIGHT, normalizeFloorFit } from '@/core/floorFit';
-import { CAMERA_HEIGHT_LIMITS, normalizeCorners } from '@/core/floorCorners';
+import { CAMERA_HEIGHT_LIMITS, normalizeScaleLine } from '@/core/scaleLine';
 import type { PlacedFurniture } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.room';
@@ -25,7 +25,7 @@ const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 type SavedPhoto = Pick<
   PhotoState,
   | 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg' | 'lensFocal35'
-  | 'autoFit' | 'floorCorners' | 'scaleEdge' | 'scaleLength' | 'cameraHeight' | 'autoCalibrate'
+  | 'scaleLine' | 'cameraHeight'
 >;
 
 /**
@@ -74,9 +74,6 @@ export function restorePhoto(): void {
   const saved = readSaved<Partial<SavedPhoto>>(PHOTO_STORAGE_KEY);
   if (!saved) return;
 
-  // 自動で合わせるのは、明示してオンにしたときだけ。それ以前の記録（自動で出した画角と傾きが
-  // 入っている）は、オフの状態に揃える
-  const autoCalibrate = saved.autoCalibrate === true;
   photoState.set({
     furniture: withBaseSize(saved.furniture),
     view: saved.view ?? photoState.get().view,
@@ -86,19 +83,14 @@ export function restorePhoto(): void {
     lensFocal35: Number.isFinite(saved.lensFocal35) && (saved.lensFocal35 as number) > 0 ? (saved.lensFocal35 as number) : null,
     // 読み戻した画角があれば解析は済んでいる。無ければ次に写真が出たときに解析する
     calibration: Number.isFinite(saved.vfovDeg) ? 'done' : 'idle',
-    // 床の合わせ方。壊れていれば「まだ合わせていない」に戻す
-    autoFit: saved.autoFit ? normalizeFloorFit(saved.autoFit) : null,
-    floorCorners: normalizeCorners(saved.floorCorners),
-    scaleEdge: ([0, 1, 2, 3] as const).find((edge) => edge === saved.scaleEdge) ?? 0,
-    scaleLength: Number.isFinite(saved.scaleLength) && (saved.scaleLength as number) > 0 ? (saved.scaleLength as number) : null,
+    // 大きさを合わせる線。壊れていれば「まだ合わせていない」に戻す
+    scaleLine: normalizeScaleLine(saved.scaleLine),
     cameraHeight: Number.isFinite(saved.cameraHeight)
       ? Math.min(CAMERA_HEIGHT_LIMITS.max, Math.max(CAMERA_HEIGHT_LIMITS.min, saved.cameraHeight as number))
       : CAMERA_HEIGHT,
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
-    autoCalibrate,
   });
-  if (!autoCalibrate && Number.isFinite(saved.vfovDeg)) setAutoCalibrate(false);
 
   readBackground()
     .then(async (blob) => {
@@ -152,12 +144,8 @@ export function persistPhotoOnChange(): void {
       floorFit: state.floorFit,
       vfovDeg: state.vfovDeg,
       lensFocal35: state.lensFocal35,
-      autoFit: state.autoFit,
-      floorCorners: state.floorCorners,
-      scaleEdge: state.scaleEdge,
-      scaleLength: state.scaleLength,
+      scaleLine: state.scaleLine,
       cameraHeight: state.cameraHeight,
-      autoCalibrate: state.autoCalibrate,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {

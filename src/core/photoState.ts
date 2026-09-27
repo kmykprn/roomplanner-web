@@ -27,13 +27,12 @@ import {
 import { CAMERA_HEIGHT, DEFAULT_FLOOR_FIT, clampFloorFit, type FloorFit } from '@/core/floorFit';
 import {
   cameraHeightFor,
-  defaultCorners,
-  solveFloorFit,
-  type CornerEdge,
-  type FloorCorners,
+  defaultLine,
+  resolveKind,
   type Lens,
+  type ScaleLine,
   type VisibleRegion,
-} from '@/core/floorCorners';
+} from '@/core/scaleLine';
 
 /**
  * 背景写真の読み込み具合。
@@ -91,29 +90,16 @@ export interface PhotoState extends FurnitureSceneState {
   lensFocal35: number | null;
   calibration: CalibrationStatus;
   /**
-   * 写真の解析で出た傾き。「最初に戻す」の戻り先。解析できなかった写真では null
+   * 大きさを合わせる線（core/scaleLine.ts）。まだ出していなければ null で、
+   * 合わせる姿に入ったときに見えている範囲の中に作る
    */
-  autoFit: FloorFit | null;
-  /**
-   * 床に合わせた四隅（core/floorCorners.ts）。まだ合わせていなければ null で、
-   * 合わせる姿に入ったときにいまの傾きから作る
-   */
-  floorCorners: FloorCorners | null;
-  /** 長さを入れる辺（0 手前・1 右・2 奥・3 左） */
-  scaleEdge: CornerEdge;
-  /** その辺の実際の長さ（m）。入れていなければ null（立って撮った高さのまま） */
-  scaleLength: number | null;
-  /** カメラの高さ（m）。長さを入れると決まる。写真の縮尺そのもの */
+  scaleLine: ScaleLine | null;
+  /** カメラの高さ（m）。線の長さを入れると決まる。写真の縮尺そのもの */
   cameraHeight: number;
-  /** 床を合わせている最中か。この間だけ四隅のマス目を出し、指の動きを四隅に使う */
-  isFittingFloor: boolean;
+  /** 大きさを合わせている最中か。この間だけ線を出し、指の動きを線の端に使う */
+  isScaling: boolean;
   /** 表示する範囲を調整している最中か。この間は 1 本指で写真をずらす */
   isFramingPhoto: boolean;
-  /**
-   * 写真から画角と傾きを自動で合わせるか（EXIF の焦点距離と、写真の解析）。
-   * オフなら既定の画角・既定の傾きで描き、傾きは「床に合わせる」で手で合わせる
-   */
-  autoCalibrate: boolean;
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -141,14 +127,10 @@ export const photoState = createStore<PhotoState>({
   vfovDeg: null,
   lensFocal35: null,
   calibration: 'idle',
-  autoFit: null,
-  floorCorners: null,
-  scaleEdge: 0,
-  scaleLength: null,
+  scaleLine: null,
   cameraHeight: CAMERA_HEIGHT,
-  isFittingFloor: false,
+  isScaling: false,
   isFramingPhoto: false,
-  autoCalibrate: false,
   maskUrl: null,
   isMasking: false,
   maskTool: { kind: 'brush', thick: false },
@@ -216,16 +198,14 @@ export async function setBackground(file: File): Promise<void> {
     return;
   }
 
-  // 前の写真の画角と床の合わせ方は、別の写真では意味がないので捨てる。
+  // 前の写真の画角と大きさの合わせ方は、別の写真では意味がないので捨てる。
   // ここで捨てる（showBackground では捨てない）のは、起動時の読み戻しでも
   // showBackground を通るため。同じ写真の読み戻しで捨てると、開くたびに解析し直す。
   // EXIF に焦点距離があれば、画角は解析を待たずにここで決まる
   const aspect = photoState.get().backgroundAspect;
   photoState.set({
-    vfovDeg: photoState.get().autoCalibrate && lensFocal35 && aspect ? vfovFromFocal35(lensFocal35, aspect) : null,
-    // 自動で合わせないときは、前の写真の傾きも引き継がない
-    ...(photoState.get().autoCalibrate ? {} : { floorFit: { ...DEFAULT_FLOOR_FIT } }),
-    ...FRESH_FLOOR,
+    vfovDeg: lensFocal35 && aspect ? vfovFromFocal35(lensFocal35, aspect) : null,
+    ...FRESH_SCALE,
   });
 
   // 次に開いたときも残っているように、縮めた1枚を端末に置く。
@@ -268,11 +248,11 @@ export function clearBackground(): void {
     backgroundName: null,
     backgroundStatus: 'idle',
     backgroundAspect: null,
-    // 写真に付いていた解析結果と床の合わせ方も一緒に捨てる
+    // 写真に付いていた解析結果と大きさの合わせ方も一緒に捨てる
     vfovDeg: null,
     lensFocal35: null,
     calibration: 'idle',
-    ...FRESH_FLOOR,
+    ...FRESH_SCALE,
   });
   // 端末に残した1枚も捨てる。次に開いたときに戻ってこないように
   deleteBackground().catch(() => {});
@@ -290,31 +270,8 @@ export function setFramingPhoto(isFramingPhoto: boolean): void {
 }
 
 /**
- * 自動で合わせるのを切り替える。
- *
- * どちらに切り替えても、床の合わせ方は初めからにする。四隅から出した傾きは、
- * そのときの画角で解いたものなので、画角が変わると合わなくなる。
- * オンにしたら解析をやり直させる（main.ts が拾う）。EXIF があれば画角はすぐ決まる
- */
-export function setAutoCalibrate(autoCalibrate: boolean): void {
-  const { lensFocal35, backgroundAspect } = photoState.get();
-  photoState.set({
-    autoCalibrate,
-    vfovDeg: autoCalibrate && lensFocal35 && backgroundAspect ? vfovFromFocal35(lensFocal35, backgroundAspect) : null,
-    calibration: 'idle',
-    floorFit: { ...DEFAULT_FLOOR_FIT },
-    ...FRESH_FLOOR,
-  });
-}
-
-/** 床を合わせる姿に入る・出る */
-export function setFittingFloor(isFittingFloor: boolean): void {
-  if (photoState.get().isFittingFloor !== isFittingFloor) photoState.set({ isFittingFloor });
-}
-
-/**
  * 写真の画角を返す関数。main.ts が入れる（描いているカメラが持っている）。
- * 四隅から傾きを解くのに要る
+ * 線からカメラの高さを出すのに要る
  */
 let lensSource: (() => Lens) | null = null;
 
@@ -322,39 +279,58 @@ export function setLensSource(source: () => Lens): void {
   lensSource = source;
 }
 
-/** 床の合わせ方を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
-const FRESH_FLOOR = {
-  autoFit: null,
-  floorCorners: null,
-  scaleEdge: 0 as CornerEdge,
-  scaleLength: null,
+/** 大きさの合わせ方を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
+const FRESH_SCALE = {
+  scaleLine: null,
   cameraHeight: CAMERA_HEIGHT,
 };
 
+/** 大きさを合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に作る */
+export function setScaling(isScaling: boolean): void {
+  const { scaleLine } = photoState.get();
+  if (photoState.get().isScaling === isScaling) return;
+  photoState.set({ isScaling, ...(isScaling && !scaleLine ? { scaleLine: defaultLine(visibleRegion()) } : {}) });
+}
+
+/** 線の端・読み方・長さのどれかを変える。カメラの高さは refreshCameraHeight が解き直す */
+export function updateScaleLine(patch: Partial<ScaleLine>): void {
+  const line = photoState.get().scaleLine;
+  if (!line) return;
+  photoState.set({ scaleLine: { ...line, ...patch } });
+  refreshCameraHeight();
+}
+
+/** 大きさの合わせ方を捨てて、立って撮った高さに戻す。線は元の位置に置き直す */
+export function resetScale(): void {
+  photoState.set({ scaleLine: defaultLine(visibleRegion()), cameraHeight: CAMERA_HEIGHT });
+}
+
 /**
- * 四隅・長さを入れる辺・その長さのどれかを変え、傾きとカメラの高さを解き直す。
+ * 線と、いまの傾き・画角から、カメラの高さを解き直す。
  *
- * 四隅から傾きが決まらない（ほぼ一直線など）ときは、四隅だけ入れて傾きは前のまま。
- * 長さが無い、または辺が床に当たらないときは、立って撮った高さに戻す
+ * 線の長さを入れたときだけでなく、写真の解析で傾きや画角が変わったときにも要る
+ * （同じ線でも、傾きが変われば床の上での長さが変わる）。main.ts が状態の変化ごとに呼ぶ。
+ * 変わっていなければ何もしない（呼び返しが止まるように）
  */
-export function updateFloorCorners(patch: {
-  corners?: FloorCorners;
-  edge?: CornerEdge;
-  length?: number | null;
-}): void {
-  const state = photoState.get();
-  const corners = patch.corners ?? state.floorCorners;
-  const scaleEdge = patch.edge ?? state.scaleEdge;
-  const scaleLength = patch.length !== undefined ? patch.length : state.scaleLength;
-  if (!corners || !lensSource) {
-    photoState.set({ floorCorners: corners, scaleEdge, scaleLength });
-    return;
-  }
-  const lens = lensSource();
-  const floorFit = solveFloorFit(corners, lens) ?? state.floorFit;
-  const cameraHeight =
-    (scaleLength && cameraHeightFor(corners, scaleEdge, scaleLength, floorFit, lens)) || CAMERA_HEIGHT;
-  photoState.set({ floorCorners: corners, scaleEdge, scaleLength, floorFit, cameraHeight });
+export function refreshCameraHeight(): void {
+  if (!lensSource) return;
+  const { scaleLine, floorFit, cameraHeight } = photoState.get();
+  const next = cameraHeightFor(scaleLine, floorFit, lensSource()) ?? CAMERA_HEIGHT;
+  if (Math.abs(next - cameraHeight) > 1e-6) photoState.set({ cameraHeight: next });
+}
+
+/** いまの線を幅と高さのどちらで読んでいるか（auto のときは線の向きで決めた方） */
+export function currentScaleKind(): 'width' | 'height' {
+  const { scaleLine, floorFit } = photoState.get();
+  if (!scaleLine || !lensSource) return 'width';
+  return resolveKind(scaleLine, floorFit, lensSource());
+}
+
+/** 長さを入れたのに測れない（端が床に届いていない など）か */
+export function scaleUnmeasurable(): boolean {
+  const { scaleLine, floorFit } = photoState.get();
+  if (!scaleLine?.length || !lensSource) return false;
+  return cameraHeightFor(scaleLine, floorFit, lensSource()) === null;
 }
 
 /** 写真のうち、いま画面に見えている範囲 */
@@ -368,43 +344,20 @@ function visibleRegion(): VisibleRegion {
   return { x, y, width: Math.min(1, origin.x + size.width) - x, height: Math.min(1, origin.y + size.height) - y };
 }
 
-/** 合わせる姿に入ったとき、四隅がまだ無ければいまの傾きから作る */
-export function ensureFloorCorners(): void {
-  const { floorCorners, floorFit } = photoState.get();
-  if (floorCorners || !lensSource) return;
-  photoState.set({ floorCorners: defaultCorners(floorFit, lensSource(), visibleRegion()) });
-}
-
-/**
- * 最初に戻す。傾きは写真の解析で出たもの（無ければ既定）、高さは立って撮った高さ、
- * 四隅はその傾きから作り直す。長さを入れる辺と長さも消す
- */
-export function resetFloorCorners(): void {
-  const floorFit = photoState.get().autoFit ?? { ...DEFAULT_FLOOR_FIT };
-  photoState.set({
-    floorFit,
-    floorCorners: lensSource ? defaultCorners(floorFit, lensSource(), visibleRegion()) : null,
-    scaleEdge: 0,
-    scaleLength: null,
-    cameraHeight: CAMERA_HEIGHT,
-  });
-}
-
 /** 写真の解析の進み具合を入れる */
 export function setCalibration(calibration: CalibrationStatus): void {
   if (photoState.get().calibration !== calibration) photoState.set({ calibration });
 }
 
-/** 解析をもう一度やらせる（できなかったとき、または手で崩したあと） */
+/** 解析をもう一度やらせる（できなかったとき） */
 export function retryCalibration(): void {
   photoState.set({ calibration: 'idle' });
 }
 
 /** 解析で出た画角と傾きを入れる */
 export function applyCalibration(vfovDeg: number, fit: FloorFit): void {
-  const floorFit = clampFloorFit(fit);
-  // 四隅は前の傾き・画角で置いたものなので作り直させる（合わせる姿に入ったときに作る）
-  photoState.set({ vfovDeg, floorFit, autoFit: floorFit, floorCorners: null, calibration: 'done' });
+  // カメラの高さは、傾きと画角が変わったあとに main.ts が refreshCameraHeight で解き直す
+  photoState.set({ vfovDeg, floorFit: clampFloorFit(fit), calibration: 'done' });
 }
 
 export function setMaskTool(patch: Partial<MaskTool>): void {
