@@ -12,7 +12,7 @@
 import { THEME } from '@/config/theme';
 import { photoState, setMaskPolygon, setMaskUndoDepth, setMaskUrl } from '@/core/photoState';
 import type { PhotoPoint } from '@/core/photoView';
-import { saveMask } from '@/platform/backgroundStore';
+import { deleteMask, saveMask } from '@/platform/backgroundStore';
 
 /** マスクの解像度（長辺、ピクセル）。写真より粗くてよい。塗りの縁が見える程度で十分 */
 const MASK_LONG_EDGE = 1024;
@@ -42,6 +42,10 @@ export interface MaskEditor {
   /** 囲む。角を打ち、閉じると中が塗られる。最初の角をもう一度タップしても閉じる */
   addCorner(point: PhotoPoint): void;
   closePolygon(): void;
+  /** 画面に入ったときの形を控える。「戻る」で cancelSession がここへ戻す */
+  beginSession(): void;
+  /** 入ったときの形に戻す。そのあいだに描いたものは「ひとつ戻す」の控えごと捨てる */
+  cancelSession(): void;
   /**
    * 1つ戻す。どの道具でも使える。
    * 囲む途中の角があればそれを 1 つ、無ければ最後に描いた形（一筆・囲み・全部消す）を戻す
@@ -68,6 +72,8 @@ function createMaskEditor(): MaskEditor {
    * （マスクは白か透明かしか無いので、不透明度だけで元に戻せる）
    */
   const history: Uint8ClampedArray[] = [];
+  /** 画面に入ったときの形（不透明度）。「戻る」で戻す先。入っていなければ null */
+  let session: { alpha: Uint8ClampedArray; painted: boolean } | null = null;
 
   function toPixel(point: PhotoPoint): { x: number; y: number } {
     return { x: point.x * mask.width, y: point.y * mask.height };
@@ -285,6 +291,35 @@ function createMaskEditor(): MaskEditor {
     commit();
   }
 
+  // --- 入ったときに戻す ---
+
+  function beginSession(): void {
+    session = ensureMaskSize() ? captureAlpha() : null;
+  }
+
+  function cancelSession(): void {
+    const start = session;
+    session = null;
+    setMaskPolygon([]);
+    history.length = 0;
+    setMaskUndoDepth(0);
+    if (!start) return;
+    if (!start.painted) {
+      // 入ったときに何も無かった。白紙にして、端末に残した分も捨てる。
+      // 自分で出した URL として扱い、followState に「よそから消された」と思わせない
+      context.globalCompositeOperation = 'source-over';
+      context.clearRect(0, 0, mask.width, mask.height);
+      producedUrl = null;
+      // 見た目の更新（schedulePreview）は呼ばない。呼ぶと空の絵が URL になって、
+      // 「設定済み」に戻ってしまう
+      setMaskUrl(null);
+      deleteMask().catch(() => {});
+      return;
+    }
+    restore(start.alpha);
+    commit();
+  }
+
   // --- 戻す ---
 
   function undo(): void {
@@ -339,7 +374,7 @@ function createMaskEditor(): MaskEditor {
   photoState.subscribe(followState);
   followState();
 
-  return { beginStroke, extendStroke, endStroke, addCorner, closePolygon, undo };
+  return { beginStroke, extendStroke, endStroke, addCorner, closePolygon, beginSession, cancelSession, undo };
 }
 
 export const maskEditor = createMaskEditor();

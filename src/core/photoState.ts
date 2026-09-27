@@ -300,6 +300,12 @@ export function updateScaleLine(patch: Partial<ScaleLine>): void {
   refreshCameraHeight();
 }
 
+/** 線を丸ごと入れ替える（寸法の画面の「戻る」で、入ったときの線に戻すため） */
+export function setScaleLine(scaleLine: ScaleLine | null): void {
+  photoState.set({ scaleLine });
+  refreshCameraHeight();
+}
+
 /** 大きさの合わせ方を捨てて、立って撮った高さに戻す。線は元の位置に置き直す */
 export function resetScale(): void {
   photoState.set({ scaleLine: defaultLine(visibleRegion()), cameraHeight: CAMERA_HEIGHT });

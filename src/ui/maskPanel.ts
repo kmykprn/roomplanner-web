@@ -1,25 +1,20 @@
 /**
- * 「背景」タブの中の、手前の範囲を指定する姿。
+ * 「家具より手前に表示する範囲」の画面。写真モードの「背景」タブの「背景の調整」から入る。
  *
- * 写真の中で家具より手前にある物（机など）を指定してもらう。指定した部分は
- * 写真がモデルの上にかぶさるので、後ろへ動かしたモデルが隠れる。
- * 「完了」で背景タブの通常の姿に戻る。
+ * 背景の画像の中で家具より手前にある物（机など）を指定してもらう。指定した部分は
+ * 背景の画像が家具の上にかぶさるので、後ろへ動かした家具が隠れる。
  *
- *   1 行目 … 題「手前の範囲」と「完了」。完了は「この画面を出る」操作なので、道具や設定と
- *            同じ段に混ぜず、iOS の画面右上と同じ位置に置く。文字だけだとタブ名の青と
- *            見分けにくかったので、塗りつぶしの青にチェックを添える
- *   2 行目 … 案内。**今なにをすればいいか**を、道具と進み具合に合わせて 1 文で出す。
- *            「なぜ」は背景タブの行の下（ui/photoPanel.ts）に任せ、ここは「どうするか」だけ
- *   3 行目 … 道具の切り替えだけ。名前は動作で書く（「点をつないで囲む」）。「角」は伝わらなかった
- *   4 行目 … 道具ごとの設定（細い/太い、囲みを閉じる）と、どの道具でも使う「戻す」「全部消す」。
- *            戻す・全部消すは 1 つの組にして、どの道具でも同じ場所に出す。
- *            高さは固定（入れ替わっても写真が伸び縮みしない）
+ *   上の段 … 「‹ 戻る」と見出し（ui/subScreen.ts）
+ *   案内   … いまなにをすればいいかを、道具と進み具合に合わせて 1 文で出す
+ *   部品   … 道具（なぞる・囲む・消す）と、道具ごとの設定（細い・太い、囲みを閉じる）を 1 行に
+ *   下の段 … 「ひとつ戻す」「すべて消す」と「完了」
  *
+ * 「戻る」は入ったときの形に戻す（core/maskEditor.ts の cancelSession）。
  * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
 
 import { MIN_CORNERS, maskEditor } from '@/core/maskEditor';
-import { createIcon } from '@/ui/icons';
+import { createQuietButton, createSubScreen } from '@/ui/subScreen';
 import {
   clearMask,
   photoState,
@@ -31,9 +26,9 @@ import {
 const NO_PHOTO = '先に「背景」タブで背景の画像を選んでください';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
-  ['brush', '指でなぞる'],
-  ['polygon', '点で囲む'],
-  ['eraser', '消しゴム'],
+  ['brush', 'なぞる'],
+  ['polygon', '囲む'],
+  ['eraser', '消す'],
 ];
 
 /**
@@ -48,77 +43,59 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } {
   switch (kind) {
     case 'brush':
-      return { text: '指でなぞった部分は、家具よりも手前に表示されます', done: false };
+      return { text: '指でなぞった部分は、家具よりも手前に表示されます。', done: false };
     case 'eraser':
-      return { text: '消したい部分を指でなぞってください', done: false };
+      return { text: '指でなぞった部分は、家具よりも手前に表示されなくなります。', done: false };
     case 'polygon':
       if (corners === 0) {
-        return {
-          text: '囲んだ範囲は、家具よりも手前に表示されます',
-          done: false,
-        };
+        return { text: '物のふちに沿って点をタップすると、囲んだ範囲が家具よりも手前に表示されます。', done: false };
       }
       if (corners < MIN_CORNERS) {
-        return { text: `あと ${MIN_CORNERS - corners} 点。物のふちに沿ってタップしてください`, done: false };
+        return { text: `点をあと ${MIN_CORNERS - corners} 個タップすると、範囲を囲むことができます。`, done: false };
       }
-      return {
-        text: '最初の点をもう一度タップするか「囲みを閉じる」を押すと、囲んだ中が手前になります',
-        done: true,
-      };
+      return { text: '最初の点をもう一度タップすると、囲んだ範囲が家具よりも手前に表示されます。', done: true };
   }
 }
 
 export function createMaskPanel(): HTMLElement {
-  const panel = document.createElement('div');
-  panel.className = 'mask';
+  const screen = createSubScreen({
+    title: '家具より手前に表示する範囲',
+    onBack: () => {
+      maskEditor.cancelSession();
+      setMasking(false);
+    },
+    onDone: () => setMasking(false),
+  });
+  const panel = screen.element;
+  panel.classList.add('mask');
 
-  // 1 行目。「完了」は指定を終えて背景タブの通常の姿に戻る
-  const head = document.createElement('div');
-  head.className = 'mask__head';
-  const title = document.createElement('span');
-  title.className = 'mask__title';
-  title.textContent = '家具より手前に表示する範囲';
-  const doneButton = createButton('完了', () => setMasking(false), 'button is-small mask__done');
-  doneButton.prepend(createIcon('check'));
-  head.append(title, doneButton);
-
-  // 2 行目
   const guide = document.createElement('p');
 
-  // 3 行目
-  const toolbar = document.createElement('div');
-  toolbar.className = 'mask__toolbar';
-  const toolSwitch = createSegment(
-    TOOLS.map(([kind, label]) => [label, () => setMaskTool({ kind })])
-  );
-  toolbar.append(toolSwitch.element);
-
-  // 4 行目
+  // 道具と、道具ごとの設定を 1 行に。入れ替わっても高さは変えない（写真が伸び縮みしないように）
   const row = document.createElement('div');
   row.className = 'mask__row';
+  const toolSwitch = createSegment(TOOLS.map(([kind, label]) => [label, () => setMaskTool({ kind })]));
+  toolSwitch.element.classList.add('mask__tools');
   const widthSwitch = createSegment([
     ['細い', () => setMaskTool({ thick: false })],
     ['太い', () => setMaskTool({ thick: true })],
   ]);
-  const closeButton = createButton(
-    '囲みを閉じる',
-    () => maskEditor.closePolygon(),
-    'button is-small'
-  );
-  const spacer = document.createElement('span');
-  spacer.className = 'mask__spacer';
-  // 戻す・全部消すは同じ高さ・同じ枠の 1 つの組にする。ばらばらに置くと道具の段を圧迫していた
-  const editPair = document.createElement('div');
-  editPair.className = 'pair';
-  const undoButton = createButton('ひとつ戻す', () => maskEditor.undo(), 'button');
-  const clearButton = createButton('すべて消す', clearMask, 'button');
-  editPair.append(undoButton, clearButton);
-  row.append(widthSwitch.element, closeButton, spacer, editPair);
+  const closeButton = createButton('囲みを閉じる', () => maskEditor.closePolygon(), 'button is-small');
+  row.append(toolSwitch.element, widthSwitch.element, closeButton);
+  screen.body.append(guide, row);
 
-  panel.append(head, guide, toolbar, row);
+  const undoButton = createQuietButton('ひとつ戻す', () => maskEditor.undo());
+  const clearButton = createQuietButton('すべて消す', clearMask);
+  screen.actions.append(undoButton, clearButton);
+
+  /** 画面に入った瞬間を見つけて、そのときの形を控える */
+  let wasMasking = false;
 
   function render(): void {
-    const { backgroundStatus, maskTool, maskUrl, maskPolygon, maskUndoDepth } = photoState.get();
+    const { backgroundStatus, maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking } = photoState.get();
+    if (isMasking && !wasMasking) maskEditor.beginSession();
+    wasMasking = isMasking;
+    panel.hidden = !isMasking;
     const hasPhoto = backgroundStatus === 'ready';
     const { kind } = maskTool;
 

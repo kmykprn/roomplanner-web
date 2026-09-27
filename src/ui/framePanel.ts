@@ -1,71 +1,65 @@
 /**
- * 「表示する範囲」の姿。写真を選んだ直後と、「背景」タブの行から入る。
+ * 「拡大・縮小」の画面。写真モードの「背景」タブの「背景の調整」から入る。
  *
- * 写真は画面いっぱいに敷き、はみ出た分は切り落として見せている（core/photoView.ts）。
+ * 背景の画像は画面いっぱいに敷き、はみ出た分は切り落として見せている（core/photoView.ts）。
  * どこを見せるかを利用者に決めてもらう。1 本指でずらし、2 本指かバーで拡大・縮小する。
- * 縮めると写真全体が入り、その分は余白になる。
+ * 縮めると背景の画像の全体が入り、その分は余白になる。
  *
- * **切るのは表示だけ。** 写真そのものは切らないので、画角や床合わせの計算は変わらない。
+ * **切るのは表示だけ。** 画像そのものは切らないので、画角や寸法の計算は変わらない。
+ * 「戻る」は入ったときの見え方に戻す。
  */
 
 import { photoState, setFramingPhoto, setPhotoView } from '@/core/photoState';
-import { DEFAULT_PHOTO_VIEW, maxScale, minScale } from '@/core/photoView';
+import { DEFAULT_PHOTO_VIEW, maxScale, minScale, type PhotoView } from '@/core/photoView';
 import { createSliderRow } from '@/ui/sliderRow';
+import { createQuietButton, createSentences, createSubScreen } from '@/ui/subScreen';
 
-const GUIDE = '背景の画像を指でずらし、2 本指かバーで拡大・縮小して、表示範囲を決めてください。';
+const SENTENCES = [
+  '画面の上で 1 本指を動かすと、背景の表示位置をずらすことができます。',
+  '画面の上で 2 本指で操作するか、バーを操作すると、背景の拡大・縮小ができます。',
+];
 
 /** バーの目盛りの数。倍率は掛け算で対応させる（同じ指の動きで同じ割合だけ変わる） */
 const STEPS = 1000;
 
 export function createFramePanel(): HTMLElement {
-  const panel = document.createElement('div');
-  panel.className = 'floor-fit';
+  /** 入ったときの見え方。「戻る」でここに戻す */
+  let entered: PhotoView | null = null;
 
-  const head = document.createElement('div');
-  head.className = 'edit__head';
-  const title = document.createElement('span');
-  title.className = 'edit__title';
-  title.textContent = '拡大・縮小';
-  const done = document.createElement('button');
-  done.type = 'button';
-  done.className = 'button is-small';
-  done.textContent = '完了';
-  done.addEventListener('click', () => setFramingPhoto(false));
-  head.append(title, done);
-
-  const guide = document.createElement('p');
-  guide.className = 'floor-fit__guide';
-  guide.textContent = GUIDE;
+  const screen = createSubScreen({
+    title: '拡大・縮小',
+    onBack: () => {
+      if (entered) setPhotoView(entered);
+      setFramingPhoto(false);
+    },
+    onDone: () => setFramingPhoto(false),
+  });
 
   const zoom = createSliderRow({
     label: '倍率',
+    hideLabel: true,
     min: 0,
     max: STEPS,
     ends: ['全体', '拡大'],
     onInput: (value) => setPhotoView({ ...photoState.get().view, scale: sliderToScale(value) }),
   });
-
+  screen.body.append(createSentences(SENTENCES), zoom.element);
   // 最初の見え方（倍率 1、下寄せ）に戻す
-  const reset = document.createElement('button');
-  reset.type = 'button';
-  reset.className = 'button is-quiet is-small';
-  reset.textContent = '元に戻す';
-  reset.addEventListener('click', () => setPhotoView({ ...DEFAULT_PHOTO_VIEW }));
-  const footer = document.createElement('div');
-  footer.className = 'edit__actions';
-  footer.append(reset);
-
-  panel.append(head, guide, zoom.element, footer);
+  screen.actions.append(createQuietButton('最初の表示に戻す', () => setPhotoView({ ...DEFAULT_PHOTO_VIEW })));
 
   function render(): void {
     const { isFramingPhoto, view } = photoState.get();
-    panel.hidden = !isFramingPhoto;
+    // 入った瞬間の見え方を控える
+    if (isFramingPhoto && screen.element.hidden !== false) entered = { ...view };
+    if (!isFramingPhoto) entered = null;
+    screen.element.hidden = !isFramingPhoto;
     if (isFramingPhoto) zoom.setValue(scaleToSlider(view.scale));
   }
+  screen.element.hidden = true;
   render();
   photoState.subscribe(render);
 
-  return panel;
+  return screen.element;
 }
 
 function sliderToScale(value: number): number {
