@@ -14,10 +14,7 @@ import { DEFAULT_PHOTO_VIEW, maxScale, minScale, type PhotoView } from '@/core/p
 import { createSliderRow } from '@/ui/sliderRow';
 import { createQuietButton, createSentences, createSubScreen } from '@/ui/subScreen';
 
-const SENTENCES = [
-  '画面の上で 1 本指を動かすと、背景の表示位置をずらすことができます。',
-  '画面の上で 2 本指で操作するか、バーを操作すると、背景の拡大・縮小ができます。',
-];
+const SENTENCES = ['背景を拡大・縮小するには、下のバーを操作するか、画面上を 2 本指で操作してください。'];
 
 /** バーの目盛りの数。倍率は掛け算で対応させる（同じ指の動きで同じ割合だけ変わる） */
 const STEPS = 1000;
@@ -40,12 +37,12 @@ export function createFramePanel(): HTMLElement {
     hideLabel: true,
     min: 0,
     max: STEPS,
-    ends: ['全体', '拡大'],
+    ends: ['縮小', '拡大'],
     onInput: (value) => setPhotoView({ ...photoState.get().view, scale: sliderToScale(value) }),
   });
   screen.body.append(createSentences(SENTENCES), zoom.element);
   // 最初の見え方（倍率 1、下寄せ）に戻す
-  screen.actions.append(createQuietButton('最初の表示に戻す', () => setPhotoView({ ...DEFAULT_PHOTO_VIEW })));
+  screen.actions.append(createQuietButton('初期値に戻す', () => setPhotoView({ ...DEFAULT_PHOTO_VIEW })));
 
   function render(): void {
     const { isFramingPhoto, view } = photoState.get();
