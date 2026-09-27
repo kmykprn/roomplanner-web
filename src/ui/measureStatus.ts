@@ -1,5 +1,5 @@
 /**
- * 室内の寸法の計算の、進み具合の 1 行（寸法の画面のボタンの下）。
+ * 室内の寸法の計算の、進み具合の 1 行（寸法の画面の線の枠の下）。計算中と失敗したときだけ出す。
  *
  *   ✻ 写真の奥行きを計算しています… 12秒
  *
@@ -59,7 +59,8 @@ export function createMeasureStatus(): HTMLElement {
 
   function render(): void {
     const { measure } = photoState.get();
-    line.hidden = measure.status === 'idle';
+    // 出すのは計算中と失敗だけ。計算できたら画面を閉じるので、「計算しました」は出さない
+    line.hidden = measure.status !== 'running' && measure.status !== 'failed';
     line.classList.toggle('is-error', measure.status === 'failed');
     line.classList.toggle('is-running', measure.status === 'running');
 
@@ -74,16 +75,13 @@ export function createMeasureStatus(): HTMLElement {
       window.clearInterval(timer);
       timer = null;
     }
-    glyph.textContent = measure.status === 'done' ? '✓' : measure.status === 'failed' ? '!' : '';
-    seconds.textContent = measure.status === 'done' && measure.seconds !== null ? `${Math.round(measure.seconds)}秒` : '';
+    if (measure.status !== 'failed') return;
+    glyph.textContent = '!';
+    seconds.textContent = '';
     text.textContent =
-      measure.status === 'done'
-        ? '室内の寸法を計算しました。'
-        : measure.status === 'failed'
-          ? measure.reason === 'lines'
-            ? '線の端の奥行きが分からないため、室内の寸法を計算できませんでした。'
-            : '室内の寸法を計算できませんでした。'
-          : '';
+      measure.reason === 'lines'
+        ? '線の端の奥行きが分からないため、室内の寸法を計算できませんでした。'
+        : '室内の寸法を計算できませんでした。';
   }
 
   render();

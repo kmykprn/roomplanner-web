@@ -68,7 +68,7 @@ export interface MaskTool {
 }
 
 /**
- * 室内の寸法の計算（寸法の画面の「室内の寸法を計算」）で、いまやっていること。
+ * 室内の寸法の計算（寸法の画面の「保存」）で、いまやっていること。
  *
  *   download  … 計算に使うデータ（モデル）を落としている。初回だけ
  *   calibrate … 写真の傾きと画角を出している（core/photoCalibModel.ts）
@@ -82,14 +82,14 @@ export type MeasureStep = 'download' | 'calibrate' | 'depth' | 'fit';
  *
  *   idle    … まだ計算していない
  *   running … 計算中。始めた時刻から経過秒数を出す
- *   done    … 計算した。seconds はかかった秒数（端末から読み戻したときは無い）
+ *   done    … 計算した
  *   failed  … 計算できなかった。もう一度ボタンを押してもらう。
  *             reason が lines なら、線の端が奥行きの分からない所にあった（線を動かしてもらう）
  */
 export type MeasureState =
   | { status: 'idle' }
   | { status: 'running'; step: MeasureStep; startedAt: number; download: DownloadProgress | null }
-  | { status: 'done'; seconds: number | null }
+  | { status: 'done' }
   | { status: 'failed'; reason: 'compute' | 'lines' };
 
 /** 線の長さに合わせた奥行きの直し方と、そのとき使った線（線を変えたら計算し直してもらうため） */
@@ -130,7 +130,7 @@ export interface PhotoState extends FurnitureSceneState {
   /** 選んでいる線（寸法の画面で太く描き、欄を強調する） */
   selectedScaleLine: number;
   /**
-   * 線の長さに合わせた奥行きの直し方。「室内の寸法を計算」で決まる。
+   * 線の長さに合わせた奥行きの直し方。寸法の画面の「保存」で計算して決まる。
    * これと奥行きの地図がそろっている間は、家具を足元の奥行きに合わせて置く（core/depthPlacement.ts）
    */
   depthScale: FittedScale | null;
@@ -373,17 +373,14 @@ export function setScaleLines(scaleLines: ScaleLine[]): void {
 }
 
 /**
- * 寸法の合わせ方を捨てる。線は 1 本だけにして元の位置に置き直す。
- * 家具はいまの位置のまま（計算し直せば、また足元の奥行きに合わせて置き直す）
+ * まだ家具に反映していない線があるか。長さの入った線が 1 本以上あり、
+ * まだ計算していないか、計算に使った線から変わっていれば true（寸法の画面の「保存」で計算する）
  */
-export function resetScale(): void {
-  photoState.set({ scaleLines: [defaultLine(visibleRegion())], selectedScaleLine: 0, depthScale: null });
-}
-
-/** 計算したあとに線を変えたか（変えたなら、もう一度計算してもらう） */
-export function scaleOutdated(): boolean {
+export function hasUnsavedScale(): boolean {
   const { scaleLines, depthScale } = photoState.get();
-  return depthScale !== null && JSON.stringify(measuredLines(scaleLines)) !== JSON.stringify(depthScale.lines);
+  const lines = measuredLines(scaleLines);
+  if (lines.length === 0) return false;
+  return depthScale === null || JSON.stringify(lines) !== JSON.stringify(depthScale.lines);
 }
 
 /**
@@ -452,17 +449,17 @@ function visibleRegion(): VisibleRegion {
 const PROGRESS_INTERVAL_MS = 100;
 
 /**
- * 室内の寸法を計算する（寸法の画面の「室内の寸法を計算」）。
+ * 室内の寸法を計算する（寸法の画面の「保存」）。計算できたら true。
  *
  * 写真の傾きと画角（GeoCalib）と、写真の奥行き（MoGe-2）をまとめて出す。
  * 奥行きは画角が分かっている前提で出すので、傾きと画角が先。
  * 計算の道具（onnxruntime とモデル）は大きいので、ボタンが押されてから読む。
  * 写真は端末の中だけで処理する
  */
-export async function measureRoom(): Promise<void> {
+export async function measureRoom(): Promise<boolean> {
   const { backgroundUrl, backgroundAspect, lensFocal35, measure, scaleLines } = photoState.get();
   const lines = measuredLines(scaleLines);
-  if (!backgroundUrl || !backgroundAspect || measure.status === 'running' || lines.length === 0) return;
+  if (!backgroundUrl || !backgroundAspect || measure.status === 'running' || lines.length === 0) return false;
   const startedAt = Date.now();
   // 家具がいま写真のどこに写っているかを先に控える。傾きと画角が変わっても、同じ場所に置き直すため
   const furnitureAt = furnitureOnPhoto();
@@ -477,22 +474,24 @@ export async function measureRoom(): Promise<void> {
     if (!photoState.get().depthMap) await computeDepth(backgroundUrl, backgroundAspect, lensFocal35, report);
     const { depthMap } = photoState.get();
     const lens = depthLens();
-    if (!isCurrent() || !depthMap || !lens) return;
+    if (!isCurrent() || !depthMap || !lens) return false;
 
     report('fit');
     const scale = fitDepthScale(lines, depthMap, lens);
     if (!scale) {
       photoState.set({ measure: { status: 'failed', reason: 'lines' } });
-      return;
+      return false;
     }
     photoState.set({
       depthScale: { ...scale, lines },
-      measure: { status: 'done', seconds: (Date.now() - startedAt) / 1000 },
+      measure: { status: 'done' },
     });
     placeFurnitureOnDepth(furnitureAt);
+    return true;
   } catch (error) {
     console.error('室内の寸法を計算できませんでした', error);
     if (isCurrent()) photoState.set({ measure: { status: 'failed', reason: 'compute' } });
+    return false;
   }
 }
 
@@ -557,7 +556,7 @@ async function computeDepth(
  */
 export function restoreDepth(depthMap: DepthMap): void {
   const measured = photoState.get().depthScale !== null;
-  photoState.set({ depthMap, measure: measured ? { status: 'done', seconds: null } : { status: 'idle' } });
+  photoState.set({ depthMap, measure: measured ? { status: 'done' } : { status: 'idle' } });
 }
 
 export function setMaskTool(patch: Partial<MaskTool>): void {
