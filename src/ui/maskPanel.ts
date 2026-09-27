@@ -28,7 +28,7 @@ import {
   type MaskToolKind,
 } from '@/core/photoState';
 
-const NO_PHOTO = '先に「背景」タブで写真を選んでください';
+const NO_PHOTO = '先に「背景」タブで背景の画像を選んでください';
 
 const TOOLS: Array<[MaskToolKind, string]> = [
   ['brush', '指でなぞる'],
@@ -77,7 +77,7 @@ export function createMaskPanel(): HTMLElement {
   head.className = 'mask__head';
   const title = document.createElement('span');
   title.className = 'mask__title';
-  title.textContent = '手前にする部分';
+  title.textContent = '家具より手前に表示する範囲';
   const doneButton = createButton('完了', () => setMasking(false), 'button is-small mask__done');
   doneButton.prepend(createIcon('check'));
   head.append(title, doneButton);

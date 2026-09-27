@@ -9,7 +9,7 @@ import { modeState, setMode, type Mode } from '@/core/mode';
 
 const MODES: Array<{ id: Mode; label: string }> = [
   { id: 'room', label: '部屋' },
-  { id: 'photo', label: '写真' },
+  { id: 'photo', label: '背景' },
 ];
 
 export function createModeSwitch(): HTMLElement {
