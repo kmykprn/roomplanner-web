@@ -135,41 +135,6 @@ body {
 .viewport__overlay {
   pointer-events: none;
 }
-/* 大きさを合わせる: 読み方の添え書きと「自動に戻す」を 1 行に */
-.scale__kind-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 28px;
-}
-.scale__kind-note {
-  margin: 0;
-  font-size: 12px;
-}
-/* 測る物の例。押すとその長さが入る（長さの決まっていない物は押せない、ただの例） */
-.scale__examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.scale__example {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: #f0f4f6;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
-}
-.scale__example:disabled {
-  color: var(--text);
-  opacity: 0.75;
-}
-.floor-fit__guide {
-  margin: 0;
-  font-size: 14px;
-}
 .viewport__mask {
   display: none;
   pointer-events: none;
@@ -386,17 +351,6 @@ body {
   align-content: start;
 }
 
-/* 2 行目: 道具の切り替えと、どの道具でも使う「戻す」「全部消す」 */
-.mask__toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mask__toolbar .seg {
-  flex: 1;
-}
-
 /* 3 行目: 道具ごとの設定。中身が入れ替わっても高さを変えない（写真が伸び縮みしないように） */
 .mask__row {
   display: flex;
@@ -405,11 +359,10 @@ body {
   min-height: 36px;
 }
 
-.mask__row .seg {
-  flex: 0 0 160px;
+.mask__row .seg:not(.mask__tools) {
+  flex: 0 0 120px;
 }
 
-/* 「完了」を右端へ押しやる */
 /* 「今なにをすればいいか」の 1 文。薄い主色の地で、パネルの中でここだけ目に入るようにする。
    is-done は「もう次に進める」状態（塗った後・囲みを閉じられる）。
    color-mix が無いブラウザ向けに、先に固定色を置いておく */
@@ -427,33 +380,11 @@ body {
   background: #e6f2ea;
   background: color-mix(in srgb, #2e8b57 12%, var(--surface));
 }
-/* 1 行目: 題と「完了」。完了は文字だけの青（iOS の画面右上の「完了」と同じ扱い） */
-.mask__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.mask__title {
-  font-size: 15px;
-  font-weight: 600;
-}
 .button.is-text {
   padding: 6px 4px;
   background: none;
   color: var(--primary);
   font-weight: 600;
-}
-
-/* 「完了」。塗りつぶしの青にチェックのアイコン */
-.mask__done {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.mask__done .ic {
-  width: 18px;
-  height: 18px;
 }
 
 /* 「戻す」「全部消す」の組。同じ高さ・同じ枠で角を共有し、1 つの物として見せる */
@@ -479,10 +410,6 @@ body {
   opacity: 0.45;
 }
 
-.mask__spacer {
-  flex: 1;
-}
-
 /* 背景タブ。通常の姿と、手前の範囲を指定する姿を切り替える */
 .photo,
 .photo__normal {
@@ -499,6 +426,72 @@ body {
 
 /* 設定画面のような「見出し・いまの値・右端」の 1 行。行ごとボタンにもなる */
 /* 背景タブ: 背景の画像のカード */
+/* 背景の調整の各画面（ui/subScreen.ts）: 上に「戻る」と見出し、下に「完了」 */
+.sub {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  align-content: start;
+}
+.sub__body {
+  display: grid;
+  gap: 12px;
+}
+.sub__sentences {
+  display: grid;
+  gap: 4px;
+}
+.sub__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sub__text.is-sub {
+  color: #7a8388;
+  font-size: 12px;
+}
+.sub__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.sub__actions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sub__done {
+  flex: none;
+  min-width: 96px;
+}
+/* 見出しを出さないバー（説明の文が何のバーかを言っているとき） */
+.slider-row.slider-row--bare {
+  grid-template-columns: 1fr;
+}
+/* 寸法: 幅と高さの切り替えと、長さの欄を 1 行に */
+.scale__controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.scale__kind {
+  flex: 0 0 132px;
+}
+.mask__tools {
+  flex: 1;
+}
+/* 背景の調整の画面の切り替えは、項目を同じ幅に並べる（ほかの画面の丸い切り替えより後で効かせる） */
+.sub .seg {
+  display: flex;
+}
+.sub .seg__item {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 13px;
+}
 .bg-card {
   display: flex;
   align-items: center;

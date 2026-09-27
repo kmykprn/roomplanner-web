@@ -23,6 +23,8 @@ export interface SliderRowOptions {
   onChange?(value: number): void;
   /** バーの右端のさらに右に置くもの（数値の欄など） */
   after?: HTMLElement;
+  /** 見出しを画面に出さない（説明の文が何のバーかを言っているとき）。読み上げには使う */
+  hideLabel?: boolean;
 }
 
 export interface SliderRow {
@@ -75,7 +77,8 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   const [from, to] = options.ends;
   bar.append(createEndLabel(from), input, createEndLabel(to));
   if (options.after) bar.append(options.after);
-  element.append(heading, bar);
+  if (options.hideLabel) element.classList.add('slider-row--bare');
+  element.append(...(options.hideLabel ? [bar] : [heading, bar]));
 
   return {
     element,
