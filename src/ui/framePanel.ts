@@ -9,7 +9,7 @@
  * 「戻る」は入ったときの見え方に戻す。
  */
 
-import { photoState, setFramingPhoto, setPhotoView } from '@/core/photoState';
+import { finishFraming, photoState, setFramingPhoto, setPhotoView } from '@/core/photoState';
 import { DEFAULT_PHOTO_VIEW, maxScale, minScale, type PhotoView } from '@/core/photoView';
 import { createSliderRow } from '@/ui/sliderRow';
 import { createQuietButton, createSentences, createSubScreen } from '@/ui/subScreen';
@@ -29,7 +29,8 @@ export function createFramePanel(): HTMLElement {
       if (entered) setPhotoView(entered);
       setFramingPhoto(false);
     },
-    onDone: () => setFramingPhoto(false),
+    // 写真を選んだ直後なら、続けて寸法の画面を開く（core/photoState.ts の finishFraming）
+    onDone: finishFraming,
   });
 
   const zoom = createSliderRow({
