@@ -72,34 +72,6 @@ export function placementSize(model: GeneratedModel, facet: ModelFacet): Size {
   return height ? withHeight(base, height) : base;
 }
 
-/** 置いてある家具の実際の高さ（m） */
-export function heightOf(item: PlacedFurniture): number {
-  return item.size[1];
-}
-
-/**
- * 置いてある家具の実際の高さを変える。
- *
- * 保管庫の項目から置いたものなら、項目にも書き戻し、同じ家具の他の置き分もそろえる
- * （次に置くときからこの高さになる）。項目が無ければ、この家具だけ変える
- */
-export function setPlacedHeight(scene: EditableScene, id: string, height: number): void {
-  const item = scene.state().furniture.find((entry) => entry.id === id);
-  if (!item) return;
-  const model = modelFor(item);
-  if (model) setModelHeight(model.id, height);
-  else applyHeight(scene, item, clampHeight(height));
-}
-
-/**
- * この家具だけ高さを変える。バーを動かしている最中はこちら（毎回保管庫に書くと重い）。
- * 離したときに setPlacedHeight で書き戻す
- */
-export function previewPlacedHeight(scene: EditableScene, id: string, height: number): void {
-  const item = scene.state().furniture.find((entry) => entry.id === id);
-  if (item) applyHeight(scene, item, clampHeight(height));
-}
-
 /** 保管庫の項目の実際の高さを変え、置いてある同じ家具もすべてその高さにする */
 export function setModelHeight(modelId: string, height: number): void {
   const model = modelLibrary.get().models.find((entry) => entry.id === modelId);
