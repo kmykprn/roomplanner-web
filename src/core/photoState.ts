@@ -173,7 +173,8 @@ export const photoState = createStore<PhotoState>({
   isFramingPhoto: false,
   maskUrl: null,
   isMasking: false,
-  maskTool: { kind: 'brush', thick: false },
+  // 太い筆を既定にする（広い面を手早く塗る用途が多い）
+  maskTool: { kind: 'brush', thick: true },
   maskPolygon: [],
   maskUndoDepth: 0,
   furniture: [],
