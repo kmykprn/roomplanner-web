@@ -331,12 +331,36 @@ const FRESH_MEASURE: Pick<PhotoState, 'measure' | 'depthMap' | 'depthScale'> = {
   depthScale: null,
 };
 
-/** 寸法を合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に 1 本作る */
+/**
+ * 寸法の画面に入る前の見え方。寸法の画面では線を細かく合わせるために拡大・縮小できるが、
+ * 背景の表示範囲（拡大・縮小の画面で決めたもの）は変えたくないので、出るときにこれへ戻す
+ */
+let viewBeforeScaling: PhotoView | null = null;
+
+/**
+ * 寸法を合わせる姿に入る・出る。入ったとき、線がまだ無ければ見えている範囲の中に 1 本作る。
+ * 出たとき（保存・戻る・ほかのタブへ移る、のどれでも）は、入る前の見え方に戻す
+ */
 export function setScaling(isScaling: boolean): void {
-  const { scaleLines } = photoState.get();
+  const { scaleLines, view } = photoState.get();
   if (photoState.get().isScaling === isScaling) return;
-  const firstLine = isScaling && scaleLines.length === 0;
-  photoState.set({ isScaling, ...(firstLine ? { scaleLines: [defaultLine(visibleRegion())], selectedScaleLine: 0 } : {}) });
+  if (isScaling) {
+    viewBeforeScaling = { ...view };
+    const firstLine = scaleLines.length === 0;
+    photoState.set({ isScaling, ...(firstLine ? { scaleLines: [defaultLine(visibleRegion())], selectedScaleLine: 0 } : {}) });
+    return;
+  }
+  const restored = viewBeforeScaling;
+  viewBeforeScaling = null;
+  photoState.set({ isScaling, ...(restored ? { view: restored } : {}) });
+}
+
+/**
+ * 端末に残す見え方。寸法の画面で一時的に寄っている間は、入る前の見え方を残す
+ * （その最中に閉じても、次に開いたときに背景の表示範囲が変わっていないように）
+ */
+export function settledView(): PhotoView {
+  return viewBeforeScaling ?? photoState.get().view;
 }
 
 /** 線を 1 本足して、その線を選ぶ。上限（5 本）に達していれば何もしない */
