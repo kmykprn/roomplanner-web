@@ -11,6 +11,7 @@
  */
 
 import { appState, type AppState } from '@/core/appState';
+import { editSession } from '@/core/editHistory';
 import { roomSizeFor } from '@/config/interior';
 import { photoState, restoreDepth, setMaskUrl, settledView, showBackground, startAnalysis, type FittedScale, type PhotoState } from '@/core/photoState';
 import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
@@ -135,9 +136,33 @@ function readSaved<T>(key: string): T | null {
   }
 }
 
+/**
+ * 保存を頼まれたら保存する。**ただし指で触っている間は保存せず、離したときにまとめて 1 回保存する。**
+ * 家具をドラッグしたりバーを動かしたりすると、1 秒に何十回も状態が変わる。そのたびに端末へ書くのは無駄
+ * （書き込みは同期的で、動かしている最中の指の動きを重くする）。
+ * 離す合図が来ないままページを閉じたときのために、閉じる前にも保存する
+ */
+function saveAfterEdit(save: () => void): () => void {
+  let waiting = false;
+  const flush = (): void => {
+    if (!waiting) return;
+    waiting = false;
+    save();
+  };
+  editSession.subscribe(({ editing }) => {
+    if (!editing) flush();
+  });
+  window.addEventListener('pagehide', flush);
+  return () => {
+    waiting = true;
+    if (!editSession.get().editing) flush();
+  };
+}
+
 /** 変化したら保存する。起動時に一度だけ呼ぶ */
 export function persistRoomOnChange(): void {
-  appState.subscribe((state) => {
+  const request = saveAfterEdit(() => {
+    const state = appState.get();
     try {
       // 選択状態は保存しない（上と同じ理由）
       localStorage.setItem(
@@ -148,11 +173,13 @@ export function persistRoomOnChange(): void {
       // 容量超過やプライベートモード。保存できなくても操作は続けられる
     }
   });
+  appState.subscribe(request);
 }
 
 /** 変化したら保存する。起動時に一度だけ呼ぶ */
 export function persistPhotoOnChange(): void {
-  photoState.subscribe((state) => {
+  const request = saveAfterEdit(() => {
+    const state = photoState.get();
     // 読み込みの途中は残さない。名前だけ先に入って写真が無い、という中途半端を防ぐ
     if (state.backgroundStatus === 'loading') return;
     const saved: SavedPhoto = {
@@ -172,4 +199,5 @@ export function persistPhotoOnChange(): void {
       // 容量超過やプライベートモード。保存できなくても操作は続けられる
     }
   });
+  photoState.subscribe(request);
 }
