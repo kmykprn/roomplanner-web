@@ -683,10 +683,7 @@ body {
   color: #7a8388;
   font-size: 12px;
 }
-.bg-card__note.is-error {
-  color: #b03030;
-}
-/* 解析に失敗したときだけ出す帯 */
+/* 背景の調整の見出し */
 .bg-heading {
   margin: 4px 0 0;
   color: #7a8388;
@@ -699,12 +696,14 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
+/* タイルはアイコンと名前だけ。3 つの高さはそろうので、中身を縦にも真ん中へ寄せる */
 .bg-tile {
   display: grid;
   justify-items: center;
-  align-content: start;
-  gap: 4px;
-  padding: 12px 6px 10px;
+  align-content: center;
+  gap: 6px;
+  min-height: 96px;
+  padding: 12px 6px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: #f7f9fa;
@@ -720,20 +719,18 @@ body {
   color: var(--primary);
 }
 .bg-tile__icon .ic {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
 }
+/* 名前の欄は 2 行分の高さにそろえ、その中で縦に真ん中へ置く（1 行の名前でもアイコンの高さがそろう） */
 .bg-tile__label {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  min-height: calc(14px * 1.35 * 2);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.35;
   white-space: pre-line;
-}
-.bg-tile__value {
-  color: #7a8388;
-  font-size: 11px;
-}
-.bg-tile__value.is-set {
-  color: var(--primary);
 }
 .setting {
   display: flex;
