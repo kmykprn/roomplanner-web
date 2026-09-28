@@ -210,7 +210,8 @@ export function createBottomSheet(container: HTMLElement): void {
    */
   let manageView: { itemId: string; refresh(item: PlacedFurniture): void } | null = null;
   /**
-   * 操作タブの下の段。左に「ひとつ戻す」、その隣に「初期値に戻す」（家具を選んでいるときだけ）。
+   * 操作タブの下の段。左に「ひとつ戻す」、その隣に「初期値に戻す」、右端に「画面から削除」
+   * （初期値に戻すと画面から削除は、家具を選んでいるときだけ）。
    * スクロールしても下に残す（背景の調整の画面の下の段と同じ並び）。
    * タブを描き直しても作り直さず使い回し、戻せるかどうかは履歴が変わるたびに書き替える
    */
@@ -222,11 +223,24 @@ export function createBottomSheet(container: HTMLElement): void {
       const { selectedId } = activeScene().state();
       if (selectedId) resetItem(selectedId);
     }, 'is-quiet is-small');
-    element.append(undoButton, resetButton);
+    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
+    // 同じ見た目にすると同じ重さに見えるので、グレーにして、消したあと一覧にその旨を出す
+    const removeButton = createButton('画面から削除', () => {
+      const scene = activeScene();
+      const { selectedId, furniture } = scene.state();
+      const item = furniture.find((entry) => entry.id === selectedId);
+      if (!item) return;
+      // 消すと同時に一覧が描かれるので、一言は消す前に用意する
+      removedNote = `「${item.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
+      removeFromScreen(scene, item);
+    }, 'is-small manage__delete manage__bar-end');
+    element.append(undoButton, resetButton, removeButton);
     const refresh = (): void => {
       const scene = activeScene();
+      const hasSelection = scene.state().furniture.some((item) => item.id === scene.state().selectedId);
       undoButton.disabled = !canUndo(scene);
-      resetButton.hidden = !scene.state().furniture.some((item) => item.id === scene.state().selectedId);
+      resetButton.hidden = !hasSelection;
+      removeButton.hidden = !hasSelection;
     };
     editHistory.subscribe(refresh);
     return { element, refresh };
@@ -264,20 +278,13 @@ export function createBottomSheet(container: HTMLElement): void {
     removedNote = null;
 
     const { id } = selected;
-    // 見出し: どの家具を触っているか。削除もここ（行の下に並べるより、家具の名前の隣が自然）
+    // 見出し: どの家具を触っているか（画面から削除は下の段の右端）
     const head = document.createElement('div');
     head.className = 'manage__head';
     const name = document.createElement('span');
     name.className = 'manage__name';
     name.textContent = selected.name ?? '家具';
-    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
-    // 同じ見た目にすると同じ重さに見えるので、グレーにして、消したあと一覧にその旨を出す
-    const remove = createButton('画面から削除', () => {
-      // 消すと同時に一覧が描かれるので、一言は消す前に用意する
-      removedNote = `「${selected.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
-      removeFromScreen(scene, selected);
-    }, 'is-small manage__delete');
-    head.append(name, remove);
+    head.append(name);
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
     // 実寸は「家具」タブの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか

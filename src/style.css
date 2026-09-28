@@ -1037,13 +1037,17 @@ body {
 .manage__removed {
   font-size: 12px;
 }
+/* 下の段の右端に寄せる（画面から削除） */
+.manage__bar-end {
+  margin-left: auto;
+}
 /* 細かく調整の中の、商品のリンク */
 .manage__product {
   display: flex;
   justify-content: flex-end;
   margin-top: 2px;
 }
-/* 操作タブの下の段（ひとつ戻す・初期値に戻す）。スクロールしても画面の下に残す */
+/* 操作タブの下の段（ひとつ戻す・初期値に戻す・画面から削除）。スクロールしても画面の下に残す */
 .manage__bar {
   position: sticky;
   bottom: -16px;
