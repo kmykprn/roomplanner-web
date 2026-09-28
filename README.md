@@ -194,6 +194,8 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 （`assets-src/furniture/sdxl.py`、元画像は `assets-src/furniture/inputs/`）、それを自前の 3D 生成
 （Hunyuan3D-2GP、背景除去は BiRefNet）に通しました（`assets-src/furniture/generate.sh`）。
 第三者の写真や製品の意匠は使っていません。アイコン（`src/assets/furniture/*.webp`）はそのモデルを描いたものです。
+2D（切り抜き）のサンプル（`src/assets/furniture/*-cutout.webp`）は、同じ元画像を
+[BiRefNet](https://github.com/ZhengPeng7/BiRefNet)（MIT）で背景を消し、物のまわりで切り詰めたものです（`assets-src/furniture/cutout.py`）。
 
 ## 写真の解析について
 
