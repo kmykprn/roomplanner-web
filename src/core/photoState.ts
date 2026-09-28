@@ -16,7 +16,6 @@ import {
 import { shrinkForDisplay } from '@/core/imageResize';
 import { readFocal35, vfovFromFocal35 } from '@/core/exifFocal';
 import { deleteBackground, deleteDepth, deleteMask, saveBackground, saveDepth } from '@/platform/backgroundStore';
-import type { DownloadProgress } from '@/core/onnxModel';
 import type { DepthMap } from '@/core/depthModel';
 import {
   clampPhotoView,
@@ -69,27 +68,17 @@ export interface MaskTool {
 }
 
 /**
- * 室内の寸法の計算（寸法の画面の「保存」）で、いまやっていること。
- *
- *   download  … 計算に使うデータ（モデル）を落としている。初回だけ
- *   calibrate … 写真の傾きと画角を出している（core/photoCalibModel.ts）
- *   depth     … 写真の奥行きを出している（core/depthModel.ts）
- *   fit       … 奥行きの倍率を線の長さに合わせている（core/depthPlacement.ts）
- */
-export type MeasureStep = 'download' | 'calibrate' | 'depth' | 'fit';
-
-/**
- * 室内の寸法の計算の様子。
+ * 室内の寸法の計算（寸法の画面の「保存」）の様子。
  *
  *   idle    … まだ計算していない
- *   running … 計算中。始めた時刻から経過秒数を出す
+ *   running … 保存を押したが、写真の解析（裏で走っている）の終わりを待っている。押した時刻から経過秒数を出す
  *   done    … 計算した
  *   failed  … 計算できなかった。もう一度ボタンを押してもらう。
  *             reason が lines なら、線の端が奥行きの分からない所にあった（線を動かしてもらう）
  */
 export type MeasureState =
   | { status: 'idle' }
-  | { status: 'running'; step: MeasureStep; startedAt: number; download: DownloadProgress | null }
+  | { status: 'running'; startedAt: number }
   | { status: 'done' }
   | { status: 'failed'; reason: 'compute' | 'lines' };
 
@@ -256,8 +245,9 @@ export async function setBackground(file: File): Promise<void> {
   // 隠す場所も前の写真のものなので消す
   photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
   clearMask();
-  // 選んだ直後に、表示する範囲を決めてもらう
+  // 選んだ直後に、表示する範囲を決めてもらう。その間に、裏で写真の解析を始める
   setFramingPhoto(true);
+  startAnalysis();
 }
 
 /**
@@ -474,94 +464,95 @@ function visibleRegion(): VisibleRegion {
   return { x, y, width: Math.min(1, origin.x + size.width) - x, height: Math.min(1, origin.y + size.height) - y };
 }
 
-/** 進み具合の知らせを間引く間隔（ms）。データを落とす間は細かく届くので、毎回は画面を書き換えない */
-const PROGRESS_INTERVAL_MS = 100;
+/**
+ * 写真の解析（傾き・画角と奥行き）。背景の写真を選んだら裏で始める（startAnalysis）。
+ * 同じ写真で 2 度走らないよう、いま走っている（または走り終えた）解析を写真ごとに 1 つ持つ。
+ * 失敗したときは failed にしておき、裏では繰り返さない（保存を押したときにやり直す）
+ */
+let analysis: { url: string; promise: Promise<boolean>; failed: boolean } | null = null;
+
+/** この写真の解析を始める（走っていればそれを待つ）。retry なら失敗していてもやり直す。奥行きが出たら true */
+function analyze(retry: boolean): Promise<boolean> {
+  const { backgroundUrl, backgroundAspect, lensFocal35 } = photoState.get();
+  if (!backgroundUrl || !backgroundAspect) return Promise.resolve(false);
+  if (analysis?.url === backgroundUrl && !(retry && analysis.failed)) return analysis.promise;
+  const current = { url: backgroundUrl, promise: Promise.resolve(false), failed: false };
+  current.promise = computeDepth(backgroundUrl, backgroundAspect, lensFocal35)
+    .then(() => photoState.get().backgroundUrl === backgroundUrl && photoState.get().depthMap !== null)
+    .catch((error: unknown) => {
+      console.error('写真を解析できませんでした', error);
+      return false;
+    })
+    .then((ok) => {
+      current.failed = !ok;
+      return ok;
+    });
+  analysis = current;
+  return current.promise;
+}
+
+/**
+ * 背景の写真の解析を裏で始める。写真を選んだとき・起動時に写真を読み戻したとき（奥行きが残っていなければ）に呼ぶ。
+ * 解析が終わると、傾きと画角がすぐ家具に効き、寸法の画面の保存は線に合わせ直すだけで済む。
+ * 進み具合は画面に出さない（出すのは、保存を押して解析の終わりを待つときだけ）
+ */
+export function startAnalysis(): void {
+  const { backgroundStatus, depthMap } = photoState.get();
+  if (backgroundStatus !== 'ready' || depthMap) return;
+  void analyze(false);
+}
 
 /**
  * 室内の寸法を計算する（寸法の画面の「保存」）。計算できたら true。
  *
- * 写真の傾きと画角（GeoCalib）と、写真の奥行き（MoGe-2）をまとめて出す。
- * 奥行きは画角が分かっている前提で出すので、傾きと画角が先。
- * 計算の道具（onnxruntime とモデル）は大きいので、ボタンが押されてから読む。
- * 写真は端末の中だけで処理する
+ * 写真の解析（傾き・画角と奥行き）は裏で済んでいることが多い。まだなら終わりを待ち、
+ * 失敗していたらやり直す。そのあと奥行きを線の長さに合わせる（1 秒かからない）
  */
 export async function measureRoom(): Promise<boolean> {
-  const { backgroundUrl, backgroundAspect, lensFocal35, measure, scaleLines } = photoState.get();
+  const { backgroundUrl, backgroundAspect, measure, scaleLines } = photoState.get();
   const lines = measuredLines(scaleLines);
   if (!backgroundUrl || !backgroundAspect || measure.status === 'running' || lines.length === 0) return false;
-  const startedAt = Date.now();
   // 家具がいま写真のどこに写っているかを先に控える。傾きと画角が変わっても、同じ場所に置き直すため
   const furnitureAt = furnitureOnPhoto();
   // 待っている間に写真が替わっていたら、その写真の結果ではないので捨てる
   const isCurrent = (): boolean => photoState.get().backgroundUrl === backgroundUrl;
-  const report = (step: MeasureStep, download: DownloadProgress | null = null): void => {
-    if (isCurrent()) photoState.set({ measure: { status: 'running', step, startedAt, download } });
-  };
 
-  try {
-    // 奥行きをこの写真で計算済みなら、線の長さに合わせ直すだけで済む（1 秒かからない）
-    if (!photoState.get().depthMap) await computeDepth(backgroundUrl, backgroundAspect, lensFocal35, report);
-    const { depthMap } = photoState.get();
-    const lens = depthLens();
-    if (!isCurrent() || !depthMap || !lens) return false;
-
-    report('fit');
-    const scale = fitDepthScale(lines, depthMap, lens);
-    if (!scale) {
-      photoState.set({ measure: { status: 'failed', reason: 'lines' } });
+  if (!photoState.get().depthMap) {
+    photoState.set({ measure: { status: 'running', startedAt: Date.now() } });
+    const ok = await analyze(true);
+    if (!isCurrent()) return false;
+    if (!ok) {
+      photoState.set({ measure: { status: 'failed', reason: 'compute' } });
       return false;
     }
-    photoState.set({
-      depthScale: { ...scale, lines },
-      measure: { status: 'done' },
-    });
-    placeFurnitureOnDepth(furnitureAt);
-    return true;
-  } catch (error) {
-    console.error('室内の寸法を計算できませんでした', error);
-    if (isCurrent()) photoState.set({ measure: { status: 'failed', reason: 'compute' } });
+  }
+  const { depthMap } = photoState.get();
+  const lens = depthLens();
+  if (!depthMap || !lens) return false;
+
+  const scale = fitDepthScale(lines, depthMap, lens);
+  if (!scale) {
+    photoState.set({ measure: { status: 'failed', reason: 'lines' } });
     return false;
   }
+  photoState.set({ depthScale: { ...scale, lines }, measure: { status: 'done' } });
+  placeFurnitureOnDepth(furnitureAt);
+  return true;
 }
 
 /**
  * 写真の傾き・画角と奥行きを出して、状態に入れる。
- * 写真が途中で替わったら、入れずに終わる（呼んだ側が isCurrent で確かめる）
+ * 写真が途中で替わったら、入れずに終わる（呼んだ側が確かめる）。
+ * 計算の道具（onnxruntime とモデル）は大きいので、ここで初めて読む。写真は端末の中だけで処理する
  */
-async function computeDepth(
-  backgroundUrl: string,
-  backgroundAspect: number,
-  lensFocal35: number | null,
-  report: (step: MeasureStep, download?: DownloadProgress | null) => void
-): Promise<void> {
+async function computeDepth(backgroundUrl: string, backgroundAspect: number, lensFocal35: number | null): Promise<void> {
   const isCurrent = (): boolean => photoState.get().backgroundUrl === backgroundUrl;
-  report('download');
-  const [{ loadCalibModel, calibratePhoto }, { loadDepthModel, estimateDepth }] = await Promise.all([
+  const [{ calibratePhoto }, { estimateDepth }] = await Promise.all([
     import('@/core/photoCalibModel'),
     import('@/core/depthModel'),
   ]);
 
-  // 2 つのモデルを同時に落とし、落とした量は足して 1 つの進み具合にする
-  const downloads: Record<'calib' | 'depth', DownloadProgress> = {
-    calib: { loaded: 0, total: null },
-    depth: { loaded: 0, total: null },
-  };
-  let reportedAt = 0;
-  const onDownload = (which: 'calib' | 'depth') => (progress: DownloadProgress): void => {
-    downloads[which] = progress;
-    const now = Date.now();
-    if (now - reportedAt < PROGRESS_INTERVAL_MS) return;
-    reportedAt = now;
-    const { calib, depth } = downloads;
-    report('download', {
-      loaded: calib.loaded + depth.loaded,
-      total: calib.total !== null && depth.total !== null ? calib.total + depth.total : null,
-    });
-  };
-  await Promise.all([loadCalibModel(onDownload('calib')), loadDepthModel(onDownload('depth'))]);
-
   // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
-  report('calibrate');
   const exifVfov = lensFocal35 ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
   const calibration = await calibratePhoto(backgroundUrl, exifVfov);
   if (!isCurrent()) return;
@@ -571,7 +562,6 @@ async function computeDepth(
     floorFit: clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg }),
   });
 
-  report('depth');
   const depthMap = await estimateDepth(backgroundUrl, calibration.vfovDeg);
   if (!isCurrent()) return;
   photoState.set({ depthMap });

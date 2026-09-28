@@ -12,7 +12,7 @@
  * モデルは重みだけを int8 で持ち、計算は fp32 のまま。ふつうの int8 化はブラウザでは 5 倍遅くなった。
  */
 
-import { decodePhoto, loadModel, runModel, toInputPlanes, type DownloadProgress, type TensorData } from '@/core/onnxModel';
+import { decodePhoto, runModel, toInputPlanes, type TensorData } from '@/core/onnxModel';
 
 const MODEL_FILE = 'moge2-vits-int8w.onnx';
 /** モデルの入力の大きさ（横長の向き）。書き出したときに固定している */
@@ -29,11 +29,6 @@ export interface DepthMap {
   width: number;
   height: number;
   data: Float32Array;
-}
-
-/** モデルを先に落としておく（落とす進み具合を出すため、推定とは分けて呼べるようにしている） */
-export function loadDepthModel(onProgress?: (progress: DownloadProgress) => void): Promise<void> {
-  return loadModel(MODEL_FILE, onProgress);
 }
 
 /**

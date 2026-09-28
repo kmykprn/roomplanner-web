@@ -12,7 +12,7 @@
 
 import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
-import { photoState, restoreDepth, setMaskUrl, settledView, showBackground, type FittedScale, type PhotoState } from '@/core/photoState';
+import { photoState, restoreDepth, setMaskUrl, settledView, showBackground, startAnalysis, type FittedScale, type PhotoState } from '@/core/photoState';
 import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
 import { normalizeFloorFit } from '@/core/floorFit';
 import { normalizeScaleLine, normalizeScaleLines } from '@/core/scaleLine';
@@ -102,6 +102,8 @@ export function restorePhoto(): void {
       // 室内の寸法を計算した奥行きも、写真に付いているものなので同じく戻す
       const depthMap = await readDepth();
       if (depthMap) restoreDepth(depthMap);
+      // 奥行きが残っていなければ（以前の版で選んだ写真など）、裏で解析する
+      else startAnalysis();
     })
     .catch(() => {
       // 読めなくても起動は続ける。写真を選び直せばよい
