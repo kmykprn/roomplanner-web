@@ -15,6 +15,8 @@ export interface HeightStep {
    * 「‹ 戻る」で取りやめたときは全体が null
    */
   ask(files: File[]): Promise<(number | null)[] | null>;
+  /** 聞いている途中なら取りやめる（「‹ 戻る」と同じ。ask は null を返す）。家具タブを離れたとき */
+  cancel(): void;
 }
 
 const HINT = [
@@ -122,7 +124,11 @@ export function createHeightStep(): HeightStep {
     }
   }
 
-  return { element, ask };
+  function cancel(): void {
+    answer?.(undefined);
+  }
+
+  return { element, ask, cancel };
 }
 
 /** 入力を m にする。空や数でないものは「入れなかった」扱い */

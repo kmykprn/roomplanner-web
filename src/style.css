@@ -498,45 +498,6 @@ body {
     box-shadow: 0 0 0 4px rgba(10, 126, 164, 0.25), 0 0 14px 2px rgba(10, 126, 164, 0.55);
   }
 }
-/* 見出しの右の ? と、押したときの吹き出し */
-.sub__head {
-  position: relative;
-}
-.sub__help {
-  width: 20px;
-  height: 20px;
-  margin-left: 6px;
-  padding: 0;
-  border: 1.5px solid var(--primary);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 16px;
-  vertical-align: middle;
-  cursor: pointer;
-}
-.sub__help.is-open {
-  background: var(--primary);
-  color: #fff;
-}
-.sub__tip {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  z-index: 5;
-  width: min(280px, 90%);
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--text);
-  color: #fff;
-  font-size: 12.5px;
-  line-height: 1.6;
-  transform: translateX(-50%);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-}
 /* 見出しを出さないバー（説明の文が何のバーかを言っているとき） */
 .slider-row.slider-row--bare {
   grid-template-columns: 1fr;

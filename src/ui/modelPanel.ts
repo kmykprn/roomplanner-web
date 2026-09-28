@@ -91,7 +91,7 @@ interface FailedItem {
   dismiss(): void;
 }
 
-export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
+export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HTMLElement; showHome(): void } {
   const panel = document.createElement('div');
   panel.className = 'lib';
 
@@ -147,6 +147,12 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     },
   });
 
+  /**
+   * 一覧（ホーム）に戻した回数。高さを聞いている間に家具タブを離れたら、
+   * 待っていた処理が戻ってきても画面を書き替えないために使う
+   */
+  let homeCount = 0;
+
   /** 匿名なら**写真を選ぶ前に**ログインを求める。iOS のリダイレクトは写真を持ち越せないため */
   async function pickAndStart(): Promise<void> {
     const files = await pickImages();
@@ -154,7 +160,9 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     chooser.close();
     // 切り抜く前に、写真ごとの実際の高さを聞く。「‹ 戻る」なら何もせず一覧に戻る
     normal.hidden = true;
+    const home = homeCount;
     const heights = await heightStep.ask(files);
+    if (home !== homeCount) return;
     normal.hidden = false;
     if (!heights) return;
     void startCutout(files, heights);
@@ -208,7 +216,10 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     const files = await pickImages();
     if (files.length === 0) return;
     maker.element.hidden = true;
+    const home = homeCount;
     const heights = await heightStep.ask(files);
+    // 高さを聞いている間に家具タブを離れていたら、3D を作る姿には戻さない
+    if (home !== homeCount) return;
     maker.element.hidden = false;
     if (!heights) return;
     void startCutout(files, heights);
@@ -352,7 +363,21 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
     }
   }, 1000);
 
-  return panel;
+  /**
+   * 一覧（ホーム）に戻す。家具タブを離れたときに呼ぶ（bottomSheet.ts）。
+   * 開いていた姿（家具を追加・3D モデルを作る・編集・高さの入力）はすべて閉じる。
+   * 編集の保存していない変更と、高さを聞いていた写真は、「‹ 戻る」と同じく捨てる
+   */
+  function showHome(): void {
+    homeCount += 1;
+    heightStep.cancel();
+    chooser.close();
+    maker.close();
+    editor.close();
+    normal.hidden = false;
+  }
+
+  return { element: panel, showHome };
 }
 
 /** 「＋ 作る」のタイル。格子の先頭に置く */

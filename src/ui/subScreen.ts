@@ -1,7 +1,7 @@
 /**
  * 「背景の調整」の各画面（拡大・縮小／寸法／家具より手前に表示する範囲）に共通の枠。
  *
- *   上の段 … 左に「‹ 戻る」、真ん中に見出し（help があれば見出しの右に ?。押すと help の文を吹き出しで出す）
+ *   上の段 … 左に「‹ 戻る」、真ん中に見出し
  *   中身   … 画面ごとの説明と部品（body に入れる）
  *   下の段 … 左にその画面でだけ使うボタン（actions に入れる）、右に「保存」
  *
@@ -20,7 +20,7 @@ export interface SubScreen {
   done: HTMLButtonElement;
 }
 
-export function createSubScreen(options: { title: string; help?: string; onBack(): void; onDone(): void }): SubScreen {
+export function createSubScreen(options: { title: string; onBack(): void; onDone(): void }): SubScreen {
   const element = document.createElement('div');
   element.className = 'sub';
 
@@ -37,7 +37,6 @@ export function createSubScreen(options: { title: string; help?: string; onBack(
   const spacer = document.createElement('span');
   spacer.className = 'edit__spacer';
   head.append(back, title, spacer);
-  if (options.help) title.append(createHelp(options.help, head));
 
   const body = document.createElement('div');
   body.className = 'sub__body';
@@ -55,38 +54,6 @@ export function createSubScreen(options: { title: string; help?: string; onBack(
 
   element.append(head, body, foot);
   return { element, body, actions, back, done };
-}
-
-/**
- * 見出しの右の ?。押すと、画面の目的の文を見出しの下に吹き出しで出す。
- * もう一度押すか、ほかの場所を押すと閉じる。ふだん読まなくてよい文を、画面から外しておくためのもの
- */
-function createHelp(text: string, head: HTMLElement): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'sub__help';
-  button.textContent = '?';
-  button.setAttribute('aria-label', '説明を表示');
-  button.setAttribute('aria-expanded', 'false');
-
-  const tip = document.createElement('p');
-  tip.className = 'sub__tip';
-  tip.setAttribute('role', 'tooltip');
-  tip.textContent = text;
-  tip.hidden = true;
-  head.append(tip);
-
-  const setOpen = (open: boolean): void => {
-    tip.hidden = !open;
-    button.classList.toggle('is-open', open);
-    button.setAttribute('aria-expanded', String(open));
-  };
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setOpen(tip.hidden);
-  });
-  document.addEventListener('click', () => setOpen(false));
-  return button;
 }
 
 /** 説明の文を 1 文ずつ段落にして並べる（1 文 1 メッセージ） */

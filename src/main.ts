@@ -312,12 +312,13 @@ photoState.subscribe(applyPhotoView);
 /**
  * 寸法を合わせている間の見せ方。線を写真の上の層に描く。
  *
- * **家具は隠さない。** 線を合わせながら、置いた家具とまわりの物を見比べられるように
+ * **家具と影は隠す。** 線を合わせる物が家具に隠れないように。画面を閉じると元どおり出す
  */
 function applyScaling(): void {
   const { isScaling, scaleLines, selectedScaleLine, view } = photoState.get();
   const scaling = isPhotoMode() && isScaling;
-  photoFurniture.group.visible = isPhotoMode();
+  photoFurniture.group.visible = isPhotoMode() && !isScaling;
+  photoShadow.group.visible = isPhotoMode() && !isScaling;
   photoShadow.setGrounds(
     false,
     photoState.get().furniture.map((item) => ({ position: item.position, size: item.size }))
