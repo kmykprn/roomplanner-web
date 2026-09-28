@@ -50,8 +50,9 @@ import { authState, redirectLogin } from '@/platform/auth';
 import { walletState, remainingGenerations } from '@/core/wallet';
 import { NO_CREDITS_MESSAGE } from '@/platform/api';
 import { pickImage, pickImages } from '@/platform/picker';
-import { createHeightStep, parseHeight } from '@/ui/heightStep';
-import { placementSize, setModelHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
+import { createHeightStep } from '@/ui/heightStep';
+import { createSizeField } from '@/ui/sizeField';
+import { placementSize, setModelHeight } from '@/core/furnitureHeight';
 import { savePreview } from '@/platform/previewCache';
 import { createIcon, type IconName } from '@/ui/icons';
 import { createLoginPanel } from '@/ui/loginPanel';
@@ -821,20 +822,21 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   headSpacer.className = 'edit__spacer';
   head.append(back, title, headSpacer);
 
-  const iconRow = document.createElement('div');
-  iconRow.className = 'edit__row';
-  const icon = document.createElement('span');
-  icon.className = 'thumb__img edit__icon';
-  const iconPreview = createPreviewImage(icon);
+  // アイコン。ほかの欄と同じく、見出しの下に中身（画像と「変更」）を横に並べる
   const iconField = document.createElement('div');
   iconField.className = 'field';
   const iconLabel = document.createElement('span');
   iconLabel.className = 'field__label';
   iconLabel.textContent = 'アイコン';
+  const iconLine = document.createElement('div');
+  iconLine.className = 'edit__icon-line';
+  const icon = document.createElement('span');
+  icon.className = 'thumb__img edit__icon';
+  const iconPreview = createPreviewImage(icon);
   const iconButton = document.createElement('button');
   iconButton.type = 'button';
   iconButton.className = 'button is-quiet is-small';
-  iconButton.textContent = 'アイコンを変更';
+  iconButton.textContent = '変更';
   iconButton.addEventListener('click', async () => {
     if (!current) return;
     const file = await pickImage();
@@ -847,8 +849,8 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     current = { ...current, previewKey: saved.key };
     iconPreview.show(saved.key);
   });
-  iconField.append(iconLabel, iconButton);
-  iconRow.append(icon, iconField);
+  iconLine.append(icon, iconButton);
+  iconField.append(iconLabel, iconLine);
 
   const nameField = document.createElement('div');
   nameField.className = 'field';
@@ -863,29 +865,9 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   nameInput.maxLength = 40;
   nameField.append(nameLabel, nameInput);
 
-  // 実際の高さ。保存すると、置いてある同じ家具もこの高さにそろう（core/furnitureHeight.ts）
-  const heightField = document.createElement('div');
-  heightField.className = 'field';
-  const heightLabel = document.createElement('label');
-  heightLabel.className = 'field__label';
-  heightLabel.textContent = '家具の実際の高さ';
-  heightLabel.htmlFor = 'model-editor-height';
-  const heightInline = document.createElement('div');
-  heightInline.className = 'field__inline';
-  const heightInput = document.createElement('input');
-  heightInput.type = 'number';
-  heightInput.inputMode = 'decimal';
-  heightInput.id = 'model-editor-height';
-  heightInput.className = 'field__input field__input--short';
-  heightInput.min = String(REAL_HEIGHT_LIMITS.min * 100);
-  heightInput.max = String(REAL_HEIGHT_LIMITS.max * 100);
-  const heightUnit = document.createElement('span');
-  heightUnit.textContent = 'cm';
-  heightInline.append(heightInput, heightUnit);
-  const heightNote = document.createElement('p');
-  heightNote.className = 'hint';
-  heightNote.textContent = '変更して保存すると、すでに置いてあるこの家具も、新しい高さに合わせた大きさで表示されます。';
-  heightField.append(heightLabel, heightInline, heightNote);
+  // サイズ。幅・奥行き・高さのどれかを変えると、比率を保って全体が変わる。
+  // 保存すると、置いてある同じ家具もこのサイズにそろう（core/furnitureHeight.ts）
+  const sizeField = createSizeField();
 
   // 商品ページから取り込んだ家具なら、店名・寸法と「楽天で見る」を出す
   const productField = document.createElement('div');
@@ -925,9 +907,9 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
       updateModel(current.id, { name });
       renamePlacedCopies(current, name);
     }
-    // 空や数でないものは変えない（消して保存しても、前の高さのまま）
-    const height = parseHeight(heightInput.value);
-    if (height !== null && Math.abs(height - shownHeight(current)) > 1e-6) setModelHeight(current.id, height);
+    // 空や数でないものは変えない（消して保存しても、前のサイズのまま）。比率は保つので、高さで決まる
+    const size = sizeField.value();
+    if (size && Math.abs(size[1] - shownHeight(current)) > 1e-6) setModelHeight(current.id, size[1]);
     close();
   });
   actions.append(save);
@@ -989,7 +971,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   modalBox.append(confirmTitle, confirmRow, confirmNote, confirmButtons);
   modal.append(modalBox);
 
-  element.append(head, iconRow, nameField, heightField, productField, actions, modelField, spacer, divider, remove, modal);
+  element.append(head, iconField, nameField, sizeField.element, productField, actions, modelField, spacer, divider, remove, modal);
 
   /** 欄に出す高さ（m）。入れてあればそれ、無ければ置くときの高さ */
   function shownHeight(model: GeneratedModel): number {
@@ -1036,7 +1018,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     const kind = FACET_NAME[facet];
     title.textContent = `${kind}の編集`;
     nameInput.value = model.name;
-    heightInput.value = String(Math.round(shownHeight(model) * 100));
+    sizeField.show(placementSize(model, facet), facet === 'flat');
     iconPreview.show(model.previewKey);
     confirmIconPreview.show(model.previewKey);
     confirmTitle.textContent = `この ${kind}を削除します`;
@@ -1047,9 +1029,10 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     renderModelField();
     productField.hidden = !model.product;
     if (model.product) {
+      // 寸法はサイズの欄に出ているので、ここでは店名だけ。取れなかったときは入れてもらう
       productNote.textContent = model.size
-        ? `${model.product.shop}・幅 ${(model.size[0] * 100).toFixed(0)} × 奥行 ${(model.size[2] * 100).toFixed(0)} × 高さ ${(model.size[1] * 100).toFixed(0)} cm`
-        : `${model.product.shop}・寸法を取得できませんでした。「操作」タブで大きさを調整してください`;
+        ? model.product.shop
+        : `${model.product.shop}・商品ページから寸法を取得できなかったため、サイズを入力してください`;
       productLinkSlot.replaceChildren(createProductLink(model.product));
     }
     modal.hidden = true;

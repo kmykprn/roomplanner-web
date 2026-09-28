@@ -19,7 +19,6 @@ import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
-import { heightOf, previewPlacedHeight, setPlacedHeight, REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
 import { photoState, setFramingPhoto, setMasking, setScaling } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
@@ -27,7 +26,7 @@ type TabId = 'interior' | 'background' | 'models' | 'manage';
 /**
  * 「操作」の行に敷くバーの決まりごと。
  *
- * **値の単位は行ごとに違う。** 向きと傾きは度、高さはセンチ、大きさは目盛りの番号。
+ * **値の単位は行ごとに違う。** 向きと傾きは度、床からの高さはセンチ。
  * どれも整数にしてあるのは、range が整数きざみのときにいちばん素直に動くため
  */
 interface ManageSlider {
@@ -79,23 +78,6 @@ function toDegrees(radians: number): number {
   return (radians * 180) / Math.PI;
 }
 
-/** 高さ（m）を、バーの目盛りの番号にする */
-function heightToSlider(height: number): number {
-  const { min, max } = REAL_HEIGHT_LIMITS;
-  const position = Math.log(Math.max(min, height) / min) / Math.log(max / min);
-  return Math.round(clamp(position, 0, 1) * HEIGHT_SLIDER_STEPS);
-}
-
-/** バーの目盛りの番号を、高さ（m）にする */
-function sliderToHeight(value: number): number {
-  const { min, max } = REAL_HEIGHT_LIMITS;
-  return min * (max / min) ** (value / HEIGHT_SLIDER_STEPS);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 const TABS: Record<TabId, string> = {
   interior: '内装',
   background: '背景',
@@ -106,15 +88,6 @@ const TABS: Record<TabId, string> = {
 /** モードごとのタブの並び。部屋は内装（壁と床）、写真は背景（部屋の写真）から始まる */
 const ROOM_TABS: TabId[] = ['interior', 'models', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
-
-/**
- * 「高さ」のバーの目盛りの数。
- *
- * **バーの位置は高さに正比例させず、掛け算で対応させる**（5 cm〜5 m を対数で）。
- * そうすると、指を同じだけ動かせば、小さくても大きくても同じ割合だけ変わる。
- * 数値の欄も同じ行にあるので、正確な値はそちらで入れる
- */
-const HEIGHT_SLIDER_STEPS = 1000;
 
 /** 床からの高さの範囲（メートル）。写真モードには床が無いので、下にも行けるようにしてある */
 const FLOOR_OFFSET_LIMITS = { min: -2.5, max: 2.5 };
@@ -258,7 +231,7 @@ export function createBottomSheet(container: HTMLElement): void {
     }, 'is-small manage__delete');
     head.append(name, remove);
 
-    // ふだん使う 2 行: 向き（板なら傾き）と高さ
+    // ふだん使う行: 向き（板なら傾き）。家具のサイズは「家具」タブの編集で決める（置いたものごとには変えない）
     const rows: ReturnType<typeof createManageRow>[] = [];
     // 切り抜きの板はカメラの方を向くので、向きも前後の傾きも効かない。
     // 板に効くのは画面の中で回す「傾き」だけ
@@ -271,8 +244,7 @@ export function createBottomSheet(container: HTMLElement): void {
         : createManageRow('向き', angleSlider(
             (item) => item.rotationY,
             (radians) => setRotation(id, radians)
-          )),
-      createHeightRow(id)
+          ))
     );
 
     // めったに使わないものは畳む。写真の傾きが合わないときの補正と、やり直し
@@ -339,53 +311,6 @@ export function createBottomSheet(container: HTMLElement): void {
     return {
       element: row.element,
       refresh: (item) => row.setValue(slider.valueOf(item)),
-    };
-  }
-
-  /**
-   * 「高さ」の行。バーと cm の数値を同じ行に置く。
-   *
-   * バーは 5 cm〜5 m を対数で（大きくても小さくても同じ割合で動く）、正確な値は数値で。
-   * どちらで変えても家具の実際の高さになり、比率を保って全体が変わる。
-   * 保管庫の項目から置いた家具なら、バーを離したとき・数値を入れたときに項目へ書き戻す
-   * （core/furnitureHeight.ts）
-   */
-  function createHeightRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.inputMode = 'decimal';
-    input.className = 'field__input field__input--short slider-row__number';
-    input.min = String(REAL_HEIGHT_LIMITS.min * 100);
-    input.max = String(REAL_HEIGHT_LIMITS.max * 100);
-    input.setAttribute('aria-label', '高さ（cm）');
-    const unit = document.createElement('span');
-    unit.className = 'slider-row__unit';
-    unit.textContent = 'cm';
-    const number = document.createElement('span');
-    number.className = 'slider-row__after';
-    number.append(input, unit);
-    input.addEventListener('change', () => {
-      const centimetres = Number(input.value);
-      if (!Number.isFinite(centimetres) || centimetres <= 0) return;
-      setPlacedHeight(activeScene(), id, centimetres / 100);
-    });
-
-    const row = createSliderRow({
-      label: '高さ',
-      min: 0,
-      max: HEIGHT_SLIDER_STEPS,
-      ends: ['5 cm', '5 m'],
-      onInput: (value) => previewPlacedHeight(activeScene(), id, sliderToHeight(value)),
-      onChange: (value) => setPlacedHeight(activeScene(), id, sliderToHeight(value)),
-      after: number,
-    });
-    return {
-      element: row.element,
-      refresh: (item) => {
-        row.setValue(heightToSlider(heightOf(item)));
-        // 打ち込んでいる最中に書き戻すと、入力が消える
-        if (document.activeElement !== input) input.value = String(Math.round(heightOf(item) * 100));
-      },
     };
   }
 

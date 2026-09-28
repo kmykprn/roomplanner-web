@@ -1443,6 +1443,72 @@ body {
   height: 64px;
   flex: none;
 }
+/* アイコンの欄: 画像と「変更」を横に並べる */
+.edit__icon-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* サイズの欄: 左に箱の図、右に幅・奥行き・高さ */
+.size-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.size-figure {
+  flex: none;
+  width: 140px;
+  height: 132px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f7f9fa;
+}
+.size-figure__box path {
+  fill: none;
+  stroke: #b9c2c7;
+  stroke-width: 1;
+}
+.size-figure__box .is-hidden-edge {
+  stroke-dasharray: 3 3;
+}
+.size-figure__line path {
+  fill: none;
+  stroke: #f5b400;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.size-figure__line text {
+  fill: #8a6a00;
+  font-size: 10px;
+  font-weight: 700;
+}
+/* 入力中の辺は太く、光らせる */
+.size-figure__line.is-active path {
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 3px rgba(245, 180, 0, 0.9));
+}
+.size-field__inputs {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+}
+.size-field__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.size-field__name {
+  width: 44px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.size-field__row .field__input--short {
+  width: 84px;
+}
+.size-field__row:focus-within .field__input {
+  border-color: #f5b400;
+  box-shadow: 0 0 0 2px rgba(245, 180, 0, 0.35);
+}
 .field {
   display: grid;
   gap: 4px;
