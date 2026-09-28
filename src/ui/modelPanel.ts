@@ -21,7 +21,6 @@
 import type { PlacedFurniture } from '@/config/furniture';
 import { IS_CONFIGURED } from '@/config/api';
 import { activeScene } from '@/core/mode';
-import { currentEngine, ENGINES, setEngine, type Engine } from '@/core/engine';
 import { progressFor } from '@/core/progress';
 import {
   dismissError,
@@ -198,7 +197,22 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
       showAll();
       maker.close();
     },
+    onAddFlat: () => void pickAndStartFromMaker(),
   });
+
+  /**
+   * 「3D モデルを作る」の「＋ 2D を作る」。画像を選び、高さを聞いて切り抜きを始め、
+   * 3D を作る姿に戻る（切り抜き中のタイルがその場に並ぶ）。この姿へはログインしてからしか来られない
+   */
+  async function pickAndStartFromMaker(): Promise<void> {
+    const files = await pickImages();
+    if (files.length === 0) return;
+    maker.element.hidden = true;
+    const heights = await heightStep.ask(files);
+    maker.element.hidden = false;
+    if (!heights) return;
+    void startCutout(files, heights);
+  }
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element);
 
@@ -342,11 +356,11 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): HTMLElement {
 }
 
 /** 「＋ 作る」のタイル。格子の先頭に置く */
-function createAddTile(open: () => void): HTMLElement {
-  const thumb = createThumb('追加');
+function createAddTile(open: () => void, caption = '追加', label = '家具を追加'): HTMLElement {
+  const thumb = createThumb(caption);
   thumb.image.classList.add('is-add');
   thumb.image.append(createIcon('plus'));
-  thumb.button.setAttribute('aria-label', '家具を追加');
+  thumb.button.setAttribute('aria-label', label);
   thumb.button.addEventListener('click', open);
   return thumb.element;
 }
@@ -377,13 +391,19 @@ interface Chooser {
  *
  * 3D は 2D から作るので、**先に元の 2D を選ばせる**。すでに 3D があるものは出さない
  * （同じ家具の 3D が 2 つできてしまうため）。選ぶまで「3D モデルを作成」は押せない。
+ *
+ * 格子の先頭の「＋ 2D を作る」から、その場で 2D を作れる（一覧に戻らなくてよい）。
+ * 切り抜き中のものも同じ格子に並べ、できあがると選べるタイルに変わる。
+ * 「3D モデルを作成」は下に固定する。2D が多いと、選んだあとボタンまでスクロールが要った
  */
 interface ModelMakerActions {
   onClose(): void;
   onStart(model: GeneratedModel): void;
+  /** 「＋ 2D を作る」。画像を選んで切り抜きを始める */
+  onAddFlat(): void;
 }
 
-function createModelMaker({ onClose, onStart }: ModelMakerActions): {
+function createModelMaker({ onClose, onStart, onAddFlat }: ModelMakerActions): {
   element: HTMLElement;
   open(): void;
   close(): void;
@@ -408,13 +428,10 @@ function createModelMaker({ onClose, onStart }: ModelMakerActions): {
 
   const ask = document.createElement('p');
   ask.className = 'hint';
-  ask.textContent = 'どの 2D（切り抜き）から作りますか？';
 
   const grid = document.createElement('div');
   grid.className = 'tiles';
-
-  const divider = document.createElement('div');
-  divider.className = 'divider';
+  const addTile = createAddTile(onAddFlat, '2D を作る', '2D（切り抜き）を作る');
 
   const start = document.createElement('button');
   start.type = 'button';
@@ -431,8 +448,14 @@ function createModelMaker({ onClose, onStart }: ModelMakerActions): {
   /** 選んでいる 2D。閉じるたびに忘れる（前回の選択が残っていると誤って作りやすい） */
   let selectedId: string | null = null;
   const nodes = new Map<string, ThumbNode<GeneratedModel>>();
+  const cutoutNodes = new Map<string, ThumbNode<CutoutJob>>();
 
-  element.append(head, ask, grid, divider, createEngineChoice(), start, note);
+  // 作成ボタンと、押せない理由。スクロールしても下に残す
+  const foot = document.createElement('div');
+  foot.className = 'lib__maker-foot';
+  foot.append(start, note);
+
+  element.append(head, ask, grid, foot);
 
   /** 3D をまだ持っていない 2D。新しい順 */
   function candidates(): GeneratedModel[] {
@@ -444,7 +467,15 @@ function createModelMaker({ onClose, onStart }: ModelMakerActions): {
   function render(): void {
     const models = candidates();
     if (selectedId !== null && !models.some((model) => model.id === selectedId)) selectedId = null;
+    const cutting = cutoutState.get().jobs.filter((job) => job.phase !== 'failed');
+    // 2D が 1 つも無い（切り抜き中も無い）なら、まず作ってもらう
+    ask.textContent =
+      models.length === 0 && cutting.length === 0
+        ? '＋ から 2D（切り抜き）を作ってください。'
+        : 'どの 2D（切り抜き）から作りますか？';
     grid.replaceChildren(
+      addTile,
+      ...syncThumbs(cutoutNodes, cutting, createCutoutThumb),
       ...syncThumbs(nodes, models, (model) =>
         createPickThumb(model, (id) => {
           selectedId = selectedId === id ? null : id;
@@ -457,7 +488,8 @@ function createModelMaker({ onClose, onStart }: ModelMakerActions): {
     // 回数を使い切っているなら、選んでも作れない。押せない理由をそのまま出す
     const noCredits = remainingGenerations() === 0;
     start.disabled = selectedId === null || noCredits;
-    note.hidden = !start.disabled;
+    // 選べる 2D がまだ無いときは、上の文（＋ から作ってください）だけで足りるので出さない
+    note.hidden = !start.disabled || (models.length === 0 && !noCredits);
     note.textContent = noCredits ? NO_CREDITS_MESSAGE : '2D（切り抜き）を選択してください';
   }
 
@@ -478,6 +510,13 @@ function createModelMaker({ onClose, onStart }: ModelMakerActions): {
   walletState.subscribe(() => {
     if (!element.hidden) render();
   });
+  // 切り抜き中の円を進める（切り抜きの状態が変わったときと、1 秒ごと）
+  cutoutState.subscribe(() => {
+    if (!element.hidden) render();
+  });
+  setInterval(() => {
+    if (!element.hidden && cutoutState.get().jobs.some((job) => job.phase !== 'failed')) render();
+  }, 1000);
 
   return { element, open, close };
 }
@@ -501,63 +540,6 @@ function createPickThumb(model: GeneratedModel, pick: (id: string) => void): Thu
   }
   update(model);
   return { element: thumb.element, update, dispose: preview.dispose };
-}
-
-/**
- * 3D の作り方の切り替え。
- *
- * 選んだ結果は端末に残る（`src/core/engine.ts`）。既定は速いほう（TRELLIS）。
- * 作成中のものには影響しない（依頼した時点の作り方で進み具合を出す）
- */
-function createEngineChoice(): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'engine';
-
-  const label = document.createElement('span');
-  label.className = 'engine__label';
-  label.id = 'engine-label';
-  label.textContent = '3D の作り方';
-
-  const bar = document.createElement('div');
-  bar.className = 'seg';
-  bar.setAttribute('role', 'group');
-  bar.setAttribute('aria-labelledby', label.id);
-
-  const buttons = new Map<Engine, HTMLButtonElement>();
-  for (const { value, label: text, note } of ENGINES) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.id = `engine-${value}`;
-    button.className = 'seg__item';
-    button.textContent = text;
-    button.title = note;
-    button.addEventListener('click', () => {
-      setEngine(value);
-      renderChoice();
-    });
-    buttons.set(value, button);
-    bar.append(button);
-  }
-
-  const note = document.createElement('p');
-  note.className = 'hint engine__note';
-
-  function renderChoice(): void {
-    const engine = currentEngine();
-    for (const [value, button] of buttons) {
-      const active = value === engine;
-      button.classList.toggle('is-active', active);
-      button.setAttribute('aria-pressed', String(active));
-    }
-    note.textContent =
-      engine === 'trellis'
-        ? '約 2 分でできます。裏側が暗くなることがあります'
-        : '約 8 分かかります。裏側まで作ります';
-  }
-
-  renderChoice();
-  wrap.append(label, bar, note);
-  return wrap;
 }
 
 function createChooser(actions: Record<Way, () => void> & { onClose(): void }): Chooser {
