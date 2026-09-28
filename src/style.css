@@ -1556,12 +1556,23 @@ body {
   margin: 4px 0;
   background: var(--border);
 }
-/* 3D にする 2D を選ぶ姿。一覧と同じ格子を出し、下に作り方と作成ボタンを置く */
+/* 3D にする 2D を選ぶ姿。一覧と同じ格子を出し、下に作成ボタンを置く */
 .lib__maker {
   display: grid;
   gap: 10px;
   width: 100%;
   align-content: start;
+}
+/* 作成ボタンは下に固定する。下の余白（.sheet__body の 16px）の分だけ下げて、画面の端に付ける */
+.lib__maker-foot {
+  position: sticky;
+  bottom: -16px;
+  display: grid;
+  gap: 6px;
+  margin: 0 -16px -16px;
+  padding: 10px 16px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
 }
 /* 選ぶためのタイル。選んだものにだけチェックを出す */
 .thumb__pick {
@@ -1707,19 +1718,3 @@ body {
   margin: 0;
 }
 
-/* 3D の作り方の切り替え（家具を追加の画面の下に、控えめに置く） */
-.engine {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.engine__label {
-  font-size: 12px;
-  color: #687076;
-}
-
-.engine__note {
-  margin: 0;
-}
