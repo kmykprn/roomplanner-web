@@ -28,10 +28,13 @@ import { createSentences, createSubScreen } from '@/ui/subScreen';
 /** 長さとして受け付ける範囲（cm） */
 const LENGTH_LIMITS = { min: 5, max: 2000 };
 
-/** 見出しの ? で出す、この画面の目的 */
-const PURPOSE = '寸法を合わせると、家具が背景の中の物と同じ縮尺で表示されます。';
+/** この画面の目的。見出しのすぐ下に小さく出す */
+const PURPOSE = [
+  '部屋の寸法を設定すると、家具の大きさが部屋の寸法に合わせて調整されます。',
+  '誤差が出る場合があります。',
+];
 const STEPS = [
-  '寸法が分かっている物にオレンジの線を合わせ、長さを cm で入力してください。',
+  '画像の中で、実際の寸法がわかっているもの（例：床や壁）にオレンジの線を合わせ、長さを入力してください。',
   '長さを入力したら、「保存」を押してください。',
 ];
 const ADD_HINT = '線を増やすと、寸法の計算が正確になります。';
@@ -108,7 +111,6 @@ export function createScalePanel(): HTMLElement {
 
   const screen = createSubScreen({
     title: '寸法',
-    help: PURPOSE,
     onBack: () => {
       if (entered !== undefined) setScaleLines(entered);
       setScaling(false);
@@ -131,7 +133,7 @@ export function createScalePanel(): HTMLElement {
 
   const measureStatus = createMeasureStatus();
 
-  screen.body.append(createSentences(STEPS), group, measureStatus);
+  screen.body.append(createSentences(PURPOSE, 'sub__text is-sub'), createSentences(STEPS), group, measureStatus);
 
   function render(): void {
     const { isScaling, scaleLines, selectedScaleLine, measure } = photoState.get();
