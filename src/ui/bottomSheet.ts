@@ -157,6 +157,9 @@ export function createBottomSheet(container: HTMLElement): void {
   const photoPanel = createPhotoPanel();
   const interiorPanel = createInteriorPanel();
 
+  /** 直前に描いたタブ。家具タブから離れた瞬間を見分ける */
+  let shownTab: TabId | null = null;
+
   function visibleTabs(): TabId[] {
     return isPhotoMode() ? PHOTO_TABS : ROOM_TABS;
   }
@@ -166,6 +169,10 @@ export function createBottomSheet(container: HTMLElement): void {
 
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
+
+    // 家具タブを離れたら、家具タブは一覧（ホーム）に戻しておく。次に開いたとき、前の途中の姿が残らないように
+    if (shownTab === 'models' && activeTab !== 'models') modelPanel.showHome();
+    shownTab = activeTab;
 
     // 手前の範囲の指定も大きさ合わせも「背景」タブの中で行う。タブを離れたら終える。
     // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる。**
@@ -195,7 +202,7 @@ export function createBottomSheet(container: HTMLElement): void {
 
   function renderActiveTab(): HTMLElement {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
-    if (activeTab === 'models') return modelPanel;
+    if (activeTab === 'models') return modelPanel.element;
     if (activeTab === 'background') return photoPanel;
     if (activeTab === 'interior') return interiorPanel;
     return renderManageTab();
