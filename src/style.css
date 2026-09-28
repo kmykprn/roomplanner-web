@@ -683,10 +683,7 @@ body {
   color: #7a8388;
   font-size: 12px;
 }
-.bg-card__note.is-error {
-  color: #b03030;
-}
-/* 解析に失敗したときだけ出す帯 */
+/* 背景の調整の見出し */
 .bg-heading {
   margin: 4px 0 0;
   color: #7a8388;
