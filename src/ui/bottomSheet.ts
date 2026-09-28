@@ -9,6 +9,7 @@
  */
 
 import type { PlacedFurniture } from '@/config/furniture';
+import type { EditableScene } from '@/core/furnitureScene';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
@@ -19,6 +20,7 @@ import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
+import { beginEdit, canUndo, discardLater, editHistory, endEdit, recordEdit, undo } from '@/core/editHistory';
 import { photoState, setFramingPhoto, setMasking, setScaling } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'models' | 'manage';
@@ -207,6 +209,43 @@ export function createBottomSheet(container: HTMLElement): void {
    * 間は値だけを書き替え、別の家具を選んだときだけ作り直す
    */
   let manageView: { itemId: string; refresh(item: PlacedFurniture): void } | null = null;
+  /**
+   * 操作タブの下の段。左に「ひとつ戻す」、その隣に「初期値に戻す」、右端に「画面から削除」
+   * （初期値に戻すと画面から削除は、家具を選んでいるときだけ）。
+   * スクロールしても下に残す（背景の調整の画面の下の段と同じ並び）。
+   * タブを描き直しても作り直さず使い回し、戻せるかどうかは履歴が変わるたびに書き替える
+   */
+  const manageFoot = (() => {
+    const element = document.createElement('div');
+    element.className = 'manage__bar';
+    const undoButton = createButton('ひとつ戻す', () => undo(activeScene()), 'is-quiet is-small');
+    const resetButton = createButton('初期値に戻す', () => {
+      const { selectedId } = activeScene().state();
+      if (selectedId) resetItem(selectedId);
+    }, 'is-quiet is-small');
+    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
+    // 同じ見た目にすると同じ重さに見えるので、グレーにして、消したあと一覧にその旨を出す
+    const removeButton = createButton('画面から削除', () => {
+      const scene = activeScene();
+      const { selectedId, furniture } = scene.state();
+      const item = furniture.find((entry) => entry.id === selectedId);
+      if (!item) return;
+      // 消すと同時に一覧が描かれるので、一言は消す前に用意する
+      removedNote = `「${item.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
+      removeFromScreen(scene, item);
+    }, 'is-small manage__delete manage__bar-end');
+    element.append(undoButton, resetButton, removeButton);
+    const refresh = (): void => {
+      const scene = activeScene();
+      const hasSelection = scene.state().furniture.some((item) => item.id === scene.state().selectedId);
+      undoButton.disabled = !canUndo(scene);
+      resetButton.hidden = !hasSelection;
+      removeButton.hidden = !hasSelection;
+    };
+    editHistory.subscribe(refresh);
+    return { element, refresh };
+  })();
+
   /** 「細かく調整」を開いているか。別の家具を選んでも開いたままにする */
   let moreOpen = false;
   /** 「画面から削除」の直後に一覧へ出す一言。次に家具を選ぶまで残す */
@@ -232,28 +271,20 @@ export function createBottomSheet(container: HTMLElement): void {
     const selected = furniture.find((f) => f.id === selectedId);
 
     if (!selected) {
-      wrapper.append(createFurnitureList(furniture));
+      wrapper.append(createFurnitureList(furniture), manageFoot.element);
+      manageFoot.refresh();
       return wrapper;
     }
     removedNote = null;
 
     const { id } = selected;
-    // 見出し: どの家具を触っているか。削除もここ（行の下に並べるより、家具の名前の隣が自然）
+    // 見出し: どの家具を触っているか（画面から削除は下の段の右端）
     const head = document.createElement('div');
     head.className = 'manage__head';
     const name = document.createElement('span');
     name.className = 'manage__name';
     name.textContent = selected.name ?? '家具';
-    // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
-    // 同じ見た目にすると同じ重さに見えるので、グレーにして、消したあと一覧にその旨を出す
-    const remove = createButton('画面から削除', () => {
-      // 消すと同時に一覧が描かれるので、一言は消す前に用意する
-      removedNote = `「${selected.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
-      scene.remove(id);
-      // 写真から作った家具の中身は、保管庫にも残っていなければここで捨てる
-      releaseFurnitureAssets(selected);
-    }, 'is-small manage__delete');
-    head.append(name, remove);
+    head.append(name);
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
     // 実寸は「家具」タブの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
@@ -308,16 +339,18 @@ export function createBottomSheet(container: HTMLElement): void {
         onInput: (centimetres) => setFloorOffset(id, centimetres / 100),
       })
     );
-    const foot = document.createElement('div');
-    foot.className = 'manage__foot';
-    // 商品ページから取り込んだ家具なら、ここから買いに行ける（戻すの左に置く）
-    if (selected.product) foot.append(createProductLink(selected.product));
-    // いじりすぎて分からなくなったときに戻れる場所。バーを 1 本ずつ真ん中へ戻すのは現実的ではない
-    foot.append(createButton('初期値に戻す', () => resetItem(id), 'is-quiet is-small'));
-    moreBody.append(...moreRows.map((row) => row.element), foot);
+    moreBody.append(...moreRows.map((row) => row.element));
+    // 商品ページから取り込んだ家具なら、ここから買いに行ける
+    if (selected.product) {
+      const productRow = document.createElement('div');
+      productRow.className = 'manage__product';
+      productRow.append(createProductLink(selected.product));
+      moreBody.append(productRow);
+    }
     more.append(summary, moreBody);
 
-    wrapper.append(head, ...rows.map((row) => row.element), more);
+    wrapper.append(head, ...rows.map((row) => row.element), more, manageFoot.element);
+    manageFoot.refresh();
 
     const allRows = [...rows, ...moreRows];
     manageView = {
@@ -333,10 +366,25 @@ export function createBottomSheet(container: HTMLElement): void {
     label: string,
     slider: ManageSlider
   ): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const row = createSliderRow({ label, ...slider });
+    const row = createSliderRow({ label, ...trackEdits(slider) });
     return {
       element: row.element,
       refresh: (item) => row.setValue(slider.valueOf(item)),
+    };
+  }
+
+  /**
+   * バーの操作を履歴に残すようにする。動かし始めた姿を控え、離したときに 1 回の操作として積む
+   * （ひとつ戻すで、動かす前の姿に戻る）
+   */
+  function trackEdits<T extends { onInput(value: number): void }>(slider: T): T & { onChange(): void } {
+    return {
+      ...slider,
+      onInput: (value: number) => {
+        beginEdit(activeScene());
+        slider.onInput(value);
+      },
+      onChange: () => endEdit(activeScene()),
     };
   }
 
@@ -352,7 +400,7 @@ export function createBottomSheet(container: HTMLElement): void {
       min: 0,
       max: SCALE_STEPS,
       ends: ['50%', '200%'],
-      onInput: (value) => setScale(id, sliderToScale(value)),
+      ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
       after: percent,
     });
     return {
@@ -417,10 +465,7 @@ export function createBottomSheet(container: HTMLElement): void {
       pick.append(icon, name);
       pick.addEventListener('click', () => scene.select(item.id));
 
-      const remove = createButton('', () => {
-        scene.remove(item.id);
-        releaseFurnitureAssets(item);
-      }, 'is-small manage__delete');
+      const remove = createButton('', () => removeFromScreen(scene, item), 'is-small manage__delete');
       remove.setAttribute('aria-label', `${name.textContent} を画面から削除`);
       remove.append(createIcon('trash'));
 
@@ -449,14 +494,25 @@ export function createBottomSheet(container: HTMLElement): void {
     // 置いたときの大きさを覚えていない古い記録もあるので、その場合は大きさを変えない
     const size = item.baseSize ? ([...item.baseSize] as [number, number, number]) : item.size;
     const [x, , z] = item.position;
-    scene.update(id, {
+    recordEdit(scene, () => scene.update(id, {
       rotationY: 0,
       pitch: 0,
       roll: 0,
       tilt: 0,
       size,
       position: scene.constrain([x, 0, z], size, 0),
-    });
+    }));
+  }
+
+  /**
+   * 置いた家具を画面から消す。ひとつ戻すで戻せるよう、中身（3D や切り抜き）は戻せなくなるまで捨てない
+   * （保管庫にも他の家具にも使われていなければ、そのときに捨てる）
+   */
+  function removeFromScreen(scene: EditableScene, item: PlacedFurniture): void {
+    beginEdit(scene);
+    scene.remove(item.id);
+    discardLater(scene, () => releaseFurnitureAssets(item));
+    endEdit(scene);
   }
 
   /** 家具のどれか 1 つの値を差し替える。傾きのように、位置を丸め直す必要がないもの向け */

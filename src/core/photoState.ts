@@ -43,6 +43,7 @@ import {
   type PhotoPose,
 } from '@/core/depthPlacement';
 import { EYE_DISTANCE } from '@/interaction/photoCamera';
+import { clearHistory } from '@/core/editHistory';
 
 /**
  * 背景写真の読み込み具合。
@@ -244,6 +245,8 @@ export async function setBackground(file: File): Promise<void> {
     ...FRESH_MEASURE,
   });
   deleteDepth().catch(() => {});
+  // 前の写真での家具の操作は、別の写真では戻せても意味がないので捨てる
+  clearHistory(photoScene);
 
   // 次に開いたときも残っているように、縮めた1枚を端末に置く。
   // 置けなくても（容量・プライベートモード）いま見えているものは変わらない
@@ -295,6 +298,7 @@ export function clearBackground(): void {
   // 端末に残した1枚も捨てる。次に開いたときに戻ってこないように
   deleteBackground().catch(() => {});
   deleteDepth().catch(() => {});
+  clearHistory(photoScene);
   clearMask();
 }
 

@@ -41,6 +41,8 @@ export interface EditableScene extends SceneRules {
   remove(id: string): void;
   update(id: string, patch: Partial<PlacedFurniture>): void;
   select(id: string | null): void;
+  /** 家具の一覧を丸ごと入れ替える（ひとつ戻す。core/editHistory.ts） */
+  restore(furniture: PlacedFurniture[]): void;
 }
 
 /**
@@ -83,6 +85,10 @@ export function createFurnitureScene<T extends FurnitureSceneState>(
 
     select(id) {
       patch({ selectedId: id });
+    },
+
+    restore(furniture) {
+      patch({ furniture });
     },
   };
 }
