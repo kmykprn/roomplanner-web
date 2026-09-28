@@ -8,8 +8,8 @@
  * 高さ 1 つで足りるのは、切り抜きも 3D モデルも縦横の比率をすでに持っているから。
  * その比率（形）は中身を読み込んだときに測って、保管庫の項目に覚えさせる（learnShape）。
  *
- * 実際の高さは、いまの大きさ（size）の高さそのもの。置いたときの大きさ（baseSize）は
- * 「初期値に戻す」の戻り先で、高さを変えたときは一緒に書き替える。
+ * 実際の高さ（実寸）は、置いたときの大きさ（baseSize）の高さ。baseSize は「初期値に戻す」の戻り先でもある。
+ * 見えている大きさ（size）は、操作タブの「大きさ」で実寸の何 % にするかを家具ごとに決める。
  */
 
 import type { PlacedFurniture } from '@/config/furniture';
@@ -85,11 +85,17 @@ export function setModelHeight(modelId: string, height: number): void {
   }
 }
 
-/** 3 辺の比率を保って高さを変える。「初期値に戻す」の戻り先も同じ大きさにする */
+/**
+ * 実寸（高さ）を変える。3 辺の比率は保つ。
+ * 実寸は「初期値に戻す」の戻り先（baseSize）に入れ、見えている大きさは、操作タブで決めた
+ * 実寸に対する割合（大きさ）を保って変える（120% にしていた家具は、新しい実寸の 120% になる）
+ */
 function applyHeight(scene: EditableScene, item: PlacedFurniture, height: number): void {
-  const size = withHeight(item.size, height);
+  const real = withHeight(item.baseSize ?? item.size, height);
+  const ratio = item.baseSize && item.baseSize[1] > 0 ? item.size[1] / item.baseSize[1] : 1;
+  const size = scaled(real, ratio);
   scene.update(item.id, {
-    baseSize: size,
+    baseSize: real,
     size,
     position: scene.constrain(item.position, size, item.rotationY),
   });
