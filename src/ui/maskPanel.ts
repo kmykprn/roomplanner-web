@@ -42,13 +42,13 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } | null {
   switch (kind) {
     case 'brush':
-      return { text: '家具よりも手前に表示する範囲を、指でなぞってください。', done: false };
+      return { text: '画面上を指でなぞると、なぞった部分は家具よりも手前に表示されるようになります。', done: false };
     case 'eraser':
       // 「消しゴム」の名前で何が起きるか分かるので、案内は出さない
       return null;
     case 'polygon':
       if (corners === 0) {
-        return { text: '家具よりも手前に表示する範囲を、点をつなげて指定してください。', done: false };
+        return { text: '画面上で点をタップしてつなげると、囲んだ部分は家具よりも手前に表示されるようになります。', done: false };
       }
       if (corners < MIN_CORNERS) {
         return { text: `点をあと ${MIN_CORNERS - corners} 個タップすると、範囲を囲むことができます。`, done: false };
