@@ -78,7 +78,7 @@ export function createPhotoPanel(): HTMLElement {
   const frameTile = createTile('frame', '拡大・縮小', () => setFramingPhoto(true));
   const scaleTile = createTile('ruler', '寸法', () => setScaling(true));
   const maskTile = createTile('layers', '家具より手前に\n表示する範囲', () => setMasking(true));
-  tiles.append(frameTile.element, scaleTile.element, maskTile.element);
+  tiles.append(frameTile, scaleTile, maskTile);
 
   /** 下の一言。案内・読み込みの失敗を、状況に応じて 1 つだけ出す */
   const note = document.createElement('p');
@@ -88,7 +88,7 @@ export function createPhotoPanel(): HTMLElement {
   panel.append(normal, frame, scale, mask);
 
   function render(): void {
-    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto, maskUrl } =
+    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto } =
       photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
@@ -105,11 +105,6 @@ export function createPhotoPanel(): HTMLElement {
 
     heading.hidden = !ready;
     tiles.hidden = !ready;
-    // 拡大・縮小はいまの状態を言葉にしにくい（倍率の数字も伝わらない）ので、何も出さない。
-    // 背景の画像そのものが答えになっている。寸法も、何本の線で合わせたかは利用者の役に立たないので出さない
-    frameTile.setValue('', false);
-    scaleTile.setValue('', false);
-    maskTile.setValue(maskUrl ? '設定済み' : '未設定', Boolean(maskUrl));
 
     note.classList.toggle('is-error', failed);
     note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : '';
@@ -131,7 +126,7 @@ function createTile(
   icon: IconName,
   label: string,
   onClick: () => void
-): { element: HTMLButtonElement; setValue(text: string, emphasized: boolean): void } {
+): HTMLButtonElement {
   const element = document.createElement('button');
   element.type = 'button';
   element.className = 'bg-tile';
@@ -142,17 +137,8 @@ function createTile(
   const title = document.createElement('span');
   title.className = 'bg-tile__label';
   title.textContent = label;
-  const value = document.createElement('span');
-  value.className = 'bg-tile__value';
-  element.append(iconBox, title, value);
-  return {
-    element,
-    setValue: (text, emphasized) => {
-      value.textContent = text;
-      // 設定済みだけ主の色にして、済んでいることを目に留まるようにする
-      value.classList.toggle('is-set', emphasized);
-    },
-  };
+  element.append(iconBox, title);
+  return element;
 }
 
 function createSmallButton(label: string, onClick: () => void): HTMLButtonElement {
