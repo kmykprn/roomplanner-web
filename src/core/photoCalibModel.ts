@@ -10,7 +10,7 @@
  * ネットワークの入力は RGB を 0〜1 にしただけで、平均や標準偏差の正規化は無い。
  */
 
-import { decodePhoto, loadModel, runModel, toInputPlanes, type DownloadProgress } from '@/core/onnxModel';
+import { decodePhoto, runModel, toInputPlanes } from '@/core/onnxModel';
 import { calibrateFromFields, type CalibFields } from '@/core/photoCalib';
 
 /** 縮小後の短辺（GeoCalib の既定値） */
@@ -29,11 +29,6 @@ export interface PhotoCalibration {
   rollDeg: number;
   /** 最適化の残り誤差。写真が場で説明できていないほど大きい */
   cost: number;
-}
-
-/** モデルを先に落としておく（落とす進み具合を出すため、解析とは分けて呼べるようにしている） */
-export function loadCalibModel(onProgress?: (progress: DownloadProgress) => void): Promise<void> {
-  return loadModel(MODEL_FILE, onProgress);
 }
 
 /** 写真を読み込んで、ネットワークの入力（NCHW, 0〜1）にする */

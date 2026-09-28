@@ -1,40 +1,20 @@
 /**
  * 室内の寸法の計算の、進み具合の 1 行（寸法の画面の線の枠の下）。計算中と失敗したときだけ出す。
  *
- *   ✻ 写真の奥行きを計算しています… 12秒
+ *   ✻ 写真を解析しています… 12秒
  *
- * 計算は長いと数十秒かかる。止まっていないことが分かるように、**経過秒数と、いまやっている
- * ことを 1 行だけ**出す。行は段階が進むごとに入れ替わる（Claude Code の進み具合と同じ見せ方）。
+ * 写真の解析は背景を選んだときに裏で始まるので、ふつうは保存の時点で終わっている。まだのときだけ、
+ * 止まっていないことが分かるように**経過秒数と 1 行**を出す（Claude Code の進み具合と同じ見せ方）。
+ * 文は段階を分けず「写真を解析しています」だけ（ダウンロードなどの言葉は出すと驚かれる）。
  * 先頭の記号は ✻ 1 つだけで、動いていることはゆっくり回して示す（CSS）。形を入れ替えると目がちらついた。
  */
 
-import { photoState, type MeasureState } from '@/core/photoState';
+import { photoState } from '@/core/photoState';
 
 /** 計算中の先頭の記号 */
 const SPARK = '✻';
 /** 経過秒数を書き換える間隔（ms）。秒の変わり目から遅れすぎないよう、1 秒より短くする */
 const TICK_INTERVAL_MS = 250;
-
-const BYTES_PER_MB = 1024 * 1024;
-
-/** いまやっていることの文 */
-function stepText(measure: Extract<MeasureState, { status: 'running' }>): string {
-  switch (measure.step) {
-    case 'download': {
-      const download = measure.download;
-      if (!download) return '計算に使うデータをダウンロードしています';
-      const loaded = Math.round(download.loaded / BYTES_PER_MB);
-      const amount = download.total ? `${loaded} / ${Math.round(download.total / BYTES_PER_MB)}MB` : `${loaded}MB`;
-      return `計算に使うデータをダウンロードしています（${amount}）`;
-    }
-    case 'calibrate':
-      return '写真の傾きと画角を計算しています';
-    case 'depth':
-      return '写真の奥行きを計算しています';
-    case 'fit':
-      return '線の長さから縮尺を合わせています';
-  }
-}
 
 export function createMeasureStatus(): HTMLElement {
   const line = document.createElement('p');
@@ -66,7 +46,7 @@ export function createMeasureStatus(): HTMLElement {
 
     if (measure.status === 'running') {
       glyph.textContent = SPARK;
-      text.textContent = `${stepText(measure)}…`;
+      text.textContent = '写真を解析しています…';
       tick();
       if (timer === null) timer = window.setInterval(tick, TICK_INTERVAL_MS);
       return;

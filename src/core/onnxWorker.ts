@@ -3,11 +3,10 @@
  *
  * **推論を画面とは別のスレッドで動かすためのもの。** 画面と同じスレッドで動かすと、
  * 推論の数秒〜数十秒の間は画面が固まり、経過秒数も進まなくなる。
- * モデルを落とすのもここで行い、落とした量は進み具合として画面に送る。
+ * モデルを落とすのもここで行う（初めて推論するとき。2 回目からは同じものを使う）。
  *
  * やりとり（画面 → ワーカー）:
- *   load … モデルを落として動かせる状態にする。落とした量を progress で返す
- *   run  … 読んだモデルで推論する。入力と出力は数値の配列と形
+ *   run … モデルで推論する。入力と出力は数値の配列と形
  */
 
 /// <reference lib="webworker" />
@@ -32,40 +31,16 @@ function reply(message: WorkerReply, transfer: Transferable[] = []): void {
   self.postMessage(message, transfer);
 }
 
-/** 落とした量を数えながら、ファイルを丸ごと読む */
-async function download(id: number, url: string): Promise<Uint8Array> {
-  const response = await fetch(url);
-  if (!response.ok || !response.body) throw new Error(`モデルを読めませんでした（${response.status}）`);
-  const header = Number(response.headers.get('Content-Length'));
-  const total = Number.isFinite(header) && header > 0 ? header : null;
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let loaded = 0;
-  reply({ id, type: 'progress', loaded, total });
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.byteLength;
-    reply({ id, type: 'progress', loaded, total });
-  }
-
-  const bytes = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
-}
-
 /** モデルを読む。2 回目からは落とさずに同じものを使う */
-function load(id: number, url: string): Promise<ort.InferenceSession> {
+function load(url: string): Promise<ort.InferenceSession> {
   let session = sessions.get(url);
   if (!session) {
-    session = download(id, url)
-      .then((bytes) => ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }))
+    session = fetch(url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`モデルを読めませんでした（${response.status}）`);
+        return response.arrayBuffer();
+      })
+      .then((bytes) => ort.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'] }))
       .catch((error) => {
         sessions.delete(url); // 落とせなかったら次回また試す
         throw error;
@@ -76,7 +51,7 @@ function load(id: number, url: string): Promise<ort.InferenceSession> {
 }
 
 async function run(url: string, feeds: Record<string, TensorData>): Promise<Record<string, TensorData>> {
-  const session = await load(-1, url);
+  const session = await load(url);
   const inputs: Record<string, ort.Tensor> = {};
   for (const [name, tensor] of Object.entries(feeds)) inputs[name] = new ort.Tensor('float32', tensor.data, tensor.dims);
   const outputs = await session.run(inputs);
@@ -89,16 +64,11 @@ async function run(url: string, feeds: Record<string, TensorData>): Promise<Reco
 
 self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
-  const work =
-    request.type === 'load'
-      ? load(request.id, request.url).then(() => reply({ id: request.id, type: 'done', outputs: null }))
-      : run(request.url, request.feeds).then((outputs) =>
-          reply(
-            { id: request.id, type: 'done', outputs },
-            Object.values(outputs).map((tensor) => tensor.data.buffer)
-          )
-        );
-  work.catch((error: unknown) =>
-    reply({ id: request.id, type: 'error', message: error instanceof Error ? error.message : String(error) })
-  );
+  run(request.url, request.feeds)
+    .then((outputs) =>
+      reply({ id: request.id, type: 'done', outputs }, Object.values(outputs).map((tensor) => tensor.data.buffer))
+    )
+    .catch((error: unknown) =>
+      reply({ id: request.id, type: 'error', message: error instanceof Error ? error.message : String(error) })
+    );
 });
