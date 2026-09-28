@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "build:app": "tsc --noEmit && CAPACITOR=1 vite build && cap sync ios",
     "preview": "vite preview --host",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.5.1",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
+    "@playwright/test": "^1.63.0",
     "@types/three": "^0.180.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.11",

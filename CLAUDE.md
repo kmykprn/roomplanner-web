@@ -37,6 +37,10 @@ React の宣言的レンダリングを 3D シーングラフに被せること�
 - **修正内容は、可能な限りヘッドレスブラウザで動作を確認してから出すこと**
   - Chromium が `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` にある
   - バグ修正では「直ったこと」と「デグレしていないこと」の両方を確認する
+- **バグを直したら、同じ不具合が戻らないよう `tests/` に Playwright のテストを足すこと**
+  - `npm test` で動く（開発用サーバーを立ててアプリを開く。`import('/src/...')` でアプリの状態に触れる）
+  - 足したテストは、直す前のコードで落ちることも確かめる
+  - GitHub では PR と main への push で `.github/workflows/test.yml` が動く。main はこの `test` が通らないとマージできない
 
 # レビュールール
 
