@@ -347,8 +347,8 @@ export function createBottomSheet(container: HTMLElement): void {
       pick.className = 'manage__pick';
       const icon = document.createElement('span');
       icon.className = 'manage__icon';
-      if (item.sourceImageKey) {
-        createPreviewImage(icon).show(item.sourceImageKey);
+      if (item.imageUrl || item.sourceImageKey) {
+        createPreviewImage(icon).show({ cutoutKey: item.imageUrl, previewKey: item.sourceImageKey });
       } else {
         icon.style.background = item.color;
       }

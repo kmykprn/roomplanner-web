@@ -957,8 +957,11 @@ body {
   flex: none;
   width: 36px;
   height: 36px;
+  padding: 3px;
   border-radius: 6px;
-  background: #e6e2dc center / cover no-repeat;
+  background: #fff center / contain no-repeat;
+  background-origin: content-box;
+  border: 1px solid var(--border);
 }
 
 .manage__name {
@@ -1364,6 +1367,11 @@ body {
   color: #7a8388;
 }
 
+/*
+ * 家具のアイコン。画像は枠を覆わず、全体を枠の内側に収める（覆うと縦長・横長の画像の端が切れた）。
+ * 地は白。商品の画像は白地が多く、地の色を変えると画像の四角が浮いて見えた。
+ * 切り抜きは背景が消えているので、白地の上に家具だけが真ん中に乗る
+ */
 .thumb__img {
   display: flex;
   align-items: center;
@@ -1372,7 +1380,10 @@ body {
   height: 72px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #e6e2dc center / cover no-repeat;
+  background: #fff center no-repeat;
+  background-size: contain;
+  background-origin: content-box;
+  padding: 5px;
 }
 
 /* 作成中は写真を薄くして、上に円を重ねる */
@@ -1442,12 +1453,6 @@ body {
   width: 64px;
   height: 64px;
   flex: none;
-}
-/* アイコンの欄: 画像と「変更」を横に並べる */
-.edit__icon-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 /* サイズの欄: 左に箱の図、右に幅・奥行き・高さ */
 .size-field {

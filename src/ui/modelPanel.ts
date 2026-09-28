@@ -49,11 +49,10 @@ import {
 import { authState, redirectLogin } from '@/platform/auth';
 import { walletState, remainingGenerations } from '@/core/wallet';
 import { NO_CREDITS_MESSAGE } from '@/platform/api';
-import { pickImage, pickImages } from '@/platform/picker';
+import { pickImages } from '@/platform/picker';
 import { createHeightStep } from '@/ui/heightStep';
 import { createSizeField } from '@/ui/sizeField';
 import { placementSize, setModelHeight } from '@/core/furnitureHeight';
-import { savePreview } from '@/platform/previewCache';
 import { createIcon, type IconName } from '@/ui/icons';
 import { createLoginPanel } from '@/ui/loginPanel';
 import { createPreviewImage } from '@/ui/previewImage';
@@ -498,7 +497,7 @@ function createPickThumb(model: GeneratedModel, pick: (id: string) => void): Thu
     current = next;
     thumb.name.textContent = next.name;
     thumb.button.setAttribute('aria-label', `${next.name} から 3D モデルを作る`);
-    preview.show(next.previewKey);
+    preview.show({ cutoutKey: next.imageKey, previewKey: next.previewKey });
   }
   update(model);
   return { element: thumb.element, update, dispose: preview.dispose };
@@ -772,7 +771,7 @@ function createModelThumb(
     thumb.name.textContent = next.model.name;
     thumb.button.setAttribute('aria-label', `${next.model.name} の${kind}を置く`);
     more.setAttribute('aria-label', `${next.model.name} の${kind}を編集`);
-    preview.show(next.model.previewKey);
+    preview.show({ cutoutKey: next.model.imageKey, previewKey: next.model.previewKey });
   }
   update(tile);
   return { element: thumb.element, update, dispose: preview.dispose };
@@ -822,35 +821,16 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   headSpacer.className = 'edit__spacer';
   head.append(back, title, headSpacer);
 
-  // アイコン。ほかの欄と同じく、見出しの下に中身（画像と「変更」）を横に並べる
+  // アイコン。ほかの欄と同じく、見出しの下に画像を出す（切り抜きがあればそれ。previewImage.ts）
   const iconField = document.createElement('div');
   iconField.className = 'field';
   const iconLabel = document.createElement('span');
   iconLabel.className = 'field__label';
   iconLabel.textContent = 'アイコン';
-  const iconLine = document.createElement('div');
-  iconLine.className = 'edit__icon-line';
   const icon = document.createElement('span');
   icon.className = 'thumb__img edit__icon';
   const iconPreview = createPreviewImage(icon);
-  const iconButton = document.createElement('button');
-  iconButton.type = 'button';
-  iconButton.className = 'button is-quiet is-small';
-  iconButton.textContent = '変更';
-  iconButton.addEventListener('click', async () => {
-    if (!current) return;
-    const file = await pickImage();
-    if (!file) return;
-    // 新しいキーで保存する。同じキーに上書きすると、置いてある家具が見ている前の画像まで変わる
-    const saved = await savePreview(crypto.randomUUID(), file);
-    if (!saved) return;
-    URL.revokeObjectURL(saved.url);
-    updateModel(current.id, { previewKey: saved.key });
-    current = { ...current, previewKey: saved.key };
-    iconPreview.show(saved.key);
-  });
-  iconLine.append(icon, iconButton);
-  iconField.append(iconLabel, iconLine);
+  iconField.append(iconLabel, icon);
 
   const nameField = document.createElement('div');
   nameField.className = 'field';
@@ -1019,8 +999,8 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     title.textContent = `${kind}の編集`;
     nameInput.value = model.name;
     sizeField.show(placementSize(model, facet), facet === 'flat');
-    iconPreview.show(model.previewKey);
-    confirmIconPreview.show(model.previewKey);
+    iconPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
+    confirmIconPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
     confirmTitle.textContent = `この ${kind}を削除します`;
     confirmText.textContent = model.name;
     remove.textContent = `この ${kind}を完全に削除`;
