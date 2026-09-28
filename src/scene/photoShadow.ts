@@ -52,20 +52,16 @@ const SHADOW_COLOR = 0x000000;
 /** 床（y=0）に敷く面の広さ（m）。透明なので広くても困らない */
 const CATCHER_SIZE = 40;
 
+/** 家具ごとに敷く面の形の大きさ（m）。実際の大きさは家具に合わせて拡大・縮小する */
+const ITEM_CATCHER_SIZE = 1;
 /**
- * 家具ごとに敷く面の広さ（m）の最低値。
+ * 家具ごとの面を、上から見た家具の長い辺（幅と奥行きの大きいほう）の何倍にするか。
  *
- * **むやみに広くしない。** 広げると、別の家具の影まで拾ってしまう。
- * 影が伸びる長さ（家具の高さと同じくらい）を覆えれば足り、
- * 大きくした家具だけ、その大きさに合わせて広げる（ITEM_CATCHER_RATIO）
+ * **その家具の影だけを受けるよう、足元を少し超える程度にとどめる。** 面を広げると、
+ * 近くの別の家具（とくに持ち上げた家具）の影まで拾い、その家具から離れた床に四角い影が出た。
+ * 真上に近い光なので、影は足元の輪郭とほぼ同じ。回した家具でも輪郭が収まるよう √2 倍より少し広くする
  */
-const ITEM_CATCHER_SIZE = 3;
-/**
- * 家具ごとの面を、家具のいちばん長い辺の何倍にするか。
- * 真上の光なので影は足元の輪郭とほぼ同じだが、傾けた家具は輪郭より外に出る。
- * 面が小さいと、大きくした家具の影が面の縁で切れる
- */
-const ITEM_CATCHER_RATIO = 2;
+const ITEM_CATCHER_RATIO = 1.5;
 
 /** 影を計算する範囲（m）。狭いと影が切れ、広いと同じ解像度を配るのでぼやける */
 const SHADOW_EXTENT = 8;
@@ -84,6 +80,16 @@ export interface PhotoShadow {
 export interface GroundItem {
   position: [number, number, number];
   size: [number, number, number];
+}
+
+/**
+ * 影を受ける面の材質。影の落ちた所だけ暗くなり、ほかは透明。
+ *
+ * **奥行き（深度バッファ）は書かない。** 透明でも書くと、面より低い所にある物（ほかの家具の脚など）が
+ * 上から見下ろすカメラからは面の向こうにあるとみなされて描かれず、四角く切り取られた（ShadowMaterial の既定は書く）
+ */
+function createCatcherMaterial(): THREE.ShadowMaterial {
+  return new THREE.ShadowMaterial({ color: SHADOW_COLOR, opacity: SHADOW_OPACITY, depthWrite: false });
 }
 
 export function createPhotoShadow(): PhotoShadow {
@@ -110,10 +116,7 @@ export function createPhotoShadow(): PhotoShadow {
   shadowCamera.far = SHADOW_EXTENT * 4;
   shadowCamera.updateProjectionMatrix();
 
-  const catcher = new THREE.Mesh(
-    new THREE.PlaneGeometry(CATCHER_SIZE, CATCHER_SIZE),
-    new THREE.ShadowMaterial({ color: SHADOW_COLOR, opacity: SHADOW_OPACITY })
-  );
+  const catcher = new THREE.Mesh(new THREE.PlaneGeometry(CATCHER_SIZE, CATCHER_SIZE), createCatcherMaterial());
   catcher.rotation.x = -Math.PI / 2;
   catcher.receiveShadow = true;
 
@@ -133,7 +136,7 @@ export function createPhotoShadow(): PhotoShadow {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(ITEM_CATCHER_SIZE, ITEM_CATCHER_SIZE),
         // 材質は床の面と分ける。共有すると、濃さを変えたときに両方が動いてしまう
-        new THREE.ShadowMaterial({ color: SHADOW_COLOR, opacity: SHADOW_OPACITY })
+        createCatcherMaterial()
       );
       mesh.rotation.x = -Math.PI / 2;
       mesh.receiveShadow = true;
@@ -146,8 +149,8 @@ export function createPhotoShadow(): PhotoShadow {
       mesh.visible = Boolean(item);
       if (!item) return;
       mesh.position.set(...item.position);
-      // 面の形は 3 m 四方のまま、大きさに合わせて拡大する（最低 3 m）
-      const side = Math.max(ITEM_CATCHER_SIZE, Math.max(...item.size) * ITEM_CATCHER_RATIO);
+      // 上から見た長い辺に合わせて、足元を少し超える大きさにする
+      const side = Math.max(item.size[0], item.size[2]) * ITEM_CATCHER_RATIO;
       mesh.scale.setScalar(side / ITEM_CATCHER_SIZE);
     });
   }
