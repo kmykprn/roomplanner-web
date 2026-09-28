@@ -70,6 +70,30 @@ function signedDegrees(radians: number): number {
   return wrapped > 180 ? wrapped - 360 : wrapped;
 }
 
+/**
+ * 「大きさ」のバーの目盛りの数と、動かせる倍率（実寸に対する割合）。
+ * バーの位置は倍率に正比例させず、掛け算で対応させる（50%〜200% を対数で）。
+ * そうすると真ん中がちょうど 100%（実寸）になり、大きくするのも小さくするのも同じ手ざわりになる
+ */
+const SCALE_STEPS = 1000;
+const SCALE_LIMITS = { min: 0.5, max: 2 };
+
+function scaleToSlider(scale: number): number {
+  const { min, max } = SCALE_LIMITS;
+  const position = Math.log(scale / min) / Math.log(max / min);
+  return Math.round(Math.min(1, Math.max(0, position)) * SCALE_STEPS);
+}
+
+function sliderToScale(value: number): number {
+  const { min, max } = SCALE_LIMITS;
+  return min * (max / min) ** (value / SCALE_STEPS);
+}
+
+/** 置いた家具の、実寸（置いたときの大きさ）に対する割合。実寸を覚えていない古い記録は 100% とみなす */
+function scaleOf(item: PlacedFurniture): number {
+  return item.baseSize && item.baseSize[1] > 0 ? item.size[1] / item.baseSize[1] : 1;
+}
+
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
@@ -231,7 +255,8 @@ export function createBottomSheet(container: HTMLElement): void {
     }, 'is-small manage__delete');
     head.append(name, remove);
 
-    // ふだん使う行: 向き（板なら傾き）。家具のサイズは「家具」タブの編集で決める（置いたものごとには変えない）
+    // ふだん使う行: 向き（板なら傾き）と大きさ。
+    // 実寸は「家具」タブの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
     const rows: ReturnType<typeof createManageRow>[] = [];
     // 切り抜きの板はカメラの方を向くので、向きも前後の傾きも効かない。
     // 板に効くのは画面の中で回す「傾き」だけ
@@ -244,7 +269,8 @@ export function createBottomSheet(container: HTMLElement): void {
         : createManageRow('向き', angleSlider(
             (item) => item.rotationY,
             (radians) => setRotation(id, radians)
-          ))
+          )),
+      createScaleRow(id)
     );
 
     // めったに使わないものは畳む。写真の傾きが合わないときの補正と、やり直し
@@ -312,6 +338,39 @@ export function createBottomSheet(container: HTMLElement): void {
       element: row.element,
       refresh: (item) => row.setValue(slider.valueOf(item)),
     };
+  }
+
+  /**
+   * 「大きさ」の行。置いたこの 1 つだけを、実寸の 50%〜200% で見せる。右に今の割合を出す
+   * （バーの真ん中が 100% = 実寸。背景の写真で縮尺がずれて見えるときの調整用）
+   */
+  function createScaleRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
+    const percent = document.createElement('span');
+    percent.className = 'slider-row__after manage__percent';
+    const row = createSliderRow({
+      label: '大きさ',
+      min: 0,
+      max: SCALE_STEPS,
+      ends: ['50%', '200%'],
+      onInput: (value) => setScale(id, sliderToScale(value)),
+      after: percent,
+    });
+    return {
+      element: row.element,
+      refresh: (item) => {
+        row.setValue(scaleToSlider(scaleOf(item)));
+        percent.textContent = `${Math.round(scaleOf(item) * 100)}%`;
+      },
+    };
+  }
+
+  /** 置いたこの 1 つの大きさを、実寸に対する割合で決める。回した向きのまま置ける範囲へ押し戻す */
+  function setScale(id: string, scale: number): void {
+    const scene = activeScene();
+    const item = scene.state().furniture.find((f) => f.id === id);
+    if (!item?.baseSize) return;
+    const size: [number, number, number] = [item.baseSize[0] * scale, item.baseSize[1] * scale, item.baseSize[2] * scale];
+    scene.update(id, { size, position: scene.constrain(item.position, size, item.rotationY) });
   }
 
   /**
