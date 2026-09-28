@@ -1054,14 +1054,6 @@ body {
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
-/* 画面から削除（見出しの右）。アイコンだけの丸いボタン */
-.manage__delete--icon {
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-}
 
 /* 「画面から削除」は置いた分を外すだけで、置き直せる。
    取り消せない削除（家具の完全削除）と同じ赤にすると、同じ重さに見えてしまうのでグレー */

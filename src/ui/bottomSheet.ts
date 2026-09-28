@@ -272,13 +272,11 @@ export function createBottomSheet(container: HTMLElement): void {
     name.textContent = selected.name ?? '家具';
     // **消えるのは置いた分だけで、いつでも置き直せる。** 家具そのものを消す赤いボタンと
     // 同じ見た目にすると同じ重さに見えるので、グレーにして、消したあと一覧にその旨を出す
-    const remove = createButton('', () => {
+    const remove = createButton('画面から削除', () => {
       // 消すと同時に一覧が描かれるので、一言は消す前に用意する
       removedNote = `「${selected.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
       removeFromScreen(scene, selected);
-    }, 'is-small manage__delete manage__delete--icon');
-    remove.setAttribute('aria-label', '画面から削除');
-    remove.append(createIcon('trash'));
+    }, 'is-small manage__delete');
     head.append(name, remove);
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
