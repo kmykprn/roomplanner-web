@@ -128,6 +128,11 @@ export interface PhotoState extends FurnitureSceneState {
   isScaling: boolean;
   /** 表示する範囲を調整している最中か。この間は 1 本指で写真をずらす */
   isFramingPhoto: boolean;
+  /**
+   * 写真を選んだ流れの中で寸法の画面を開いているか（拡大・縮小の画面で保存したら続けて開く）。
+   * このときだけ、寸法の画面に「あとで設定する」を出す
+   */
+  scalingFromSetup: boolean;
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -160,6 +165,7 @@ export const photoState = createStore<PhotoState>({
   selectedScaleLine: 0,
   depthScale: null,
   isScaling: false,
+  scalingFromSetup: false,
   isFramingPhoto: false,
   maskUrl: null,
   isMasking: false,
@@ -245,8 +251,8 @@ export async function setBackground(file: File): Promise<void> {
   // 隠す場所も前の写真のものなので消す
   photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
   clearMask();
-  // 選んだ直後に、表示する範囲を決めてもらう。その間に、裏で写真の解析を始める
-  setFramingPhoto(true);
+  // 選んだ直後に、表示する範囲を決めてもらい、続けて寸法を合わせてもらう。その間に、裏で写真の解析を始める
+  beginPhotoSetup();
   startAnalysis();
 }
 
@@ -299,7 +305,30 @@ export function setMasking(isMasking: boolean): void {
 
 /** 表示する範囲を調整する姿に入る・出る */
 export function setFramingPhoto(isFramingPhoto: boolean): void {
+  // 保存以外で閉じたら（戻る・ほかのタブ）、写真を選んだ流れはそこで終える
+  if (!isFramingPhoto) setupPending = false;
   if (photoState.get().isFramingPhoto !== isFramingPhoto) photoState.set({ isFramingPhoto });
+}
+
+/**
+ * 新しい写真を選んだ流れの途中か。写真を選ぶと「拡大・縮小」の画面が開き、そこで保存すると
+ * 続けて「寸法」の画面を開く（寸法の設定は背景タブの中にあって気づきにくいため、流れの中で通ってもらう）
+ */
+let setupPending = false;
+
+/** 写真を選んだ直後の流れを始める。表示する範囲を決めてもらい、保存したら寸法へ進む */
+function beginPhotoSetup(): void {
+  setFramingPhoto(true);
+  setupPending = true;
+}
+
+/** 拡大・縮小の画面の「保存」。写真を選んだ流れの途中なら、続けて寸法の画面を開く */
+export function finishFraming(): void {
+  const next = setupPending;
+  setFramingPhoto(false);
+  if (!next) return;
+  setScaling(true);
+  photoState.set({ scalingFromSetup: true });
 }
 
 /**
@@ -346,7 +375,7 @@ export function setScaling(isScaling: boolean): void {
   }
   const restored = viewBeforeScaling;
   viewBeforeScaling = null;
-  photoState.set({ isScaling, ...(restored ? { view: restored } : {}) });
+  photoState.set({ isScaling, scalingFromSetup: false, ...(restored ? { view: restored } : {}) });
 }
 
 /**
