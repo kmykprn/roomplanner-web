@@ -5,8 +5,8 @@
  * 背景の画像が家具の上にかぶさるので、後ろへ動かした家具が隠れる。
  *
  *   上の段 … 「‹ 戻る」と見出し（ui/subScreen.ts）
- *   案内   … いまなにをすればいいかを、道具と進み具合に合わせて 1 文で出す
- *   部品   … 道具（なぞる・囲む・消す）と、道具ごとの設定（細い・太い、囲みを閉じる）を 1 行に
+ *   案内   … いまなにをすればいいかを、道具と進み具合に合わせて 1 文で出す（消しゴムは出さない）
+ *   部品   … 道具（なぞる・点で囲む・消しゴム）と、道具ごとの設定（細い・太い、囲みを閉じる）を 1 行に
  *   下の段 … 「ひとつ戻す」「すべて消す」と「保存」
  *
  * 「戻る」は入ったときの形に戻す（core/maskEditor.ts の cancelSession）。
@@ -23,16 +23,15 @@ import {
   type MaskToolKind,
 } from '@/core/photoState';
 
-const NO_PHOTO = '先に「背景」タブで背景の画像を選んでください';
-
 const TOOLS: Array<[MaskToolKind, string]> = [
   ['brush', 'なぞる'],
-  ['polygon', '囲む'],
-  ['eraser', '消す'],
+  ['polygon', '点で囲む'],
+  ['eraser', '消しゴム'],
 ];
 
 /**
  * 今なにをすればいいかの 1 文。done は「押すべきものが現れた」状態で、案内の色を緑にする。
+ * 消しゴムは名前で何が起きるか分かるので null（案内を出さない）。
  *
  * 目的の文（「手前に表示したいエリアを…」）だけでは、指でなぞるのか点を打つのかが
  * 分からず、押してみて初めて分かる状態だった。道具と進み具合ごとに動作を書く。
@@ -40,20 +39,22 @@ const TOOLS: Array<[MaskToolKind, string]> = [
  * 緑になるのは囲むの 3 点以上だけ。なぞるは塗り続けるだけで「次に押すもの」が無いので、
  * 塗った後も文と色を変えない（一筆で緑になって以後ずっと緑、が気持ち悪かった）
  */
-function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } {
+function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } | null {
   switch (kind) {
     case 'brush':
-      return { text: '指でなぞった部分は、家具よりも手前に表示されます。', done: false };
+      return { text: '家具よりも手前に表示する範囲を、指でなぞってください。', done: false };
     case 'eraser':
-      return { text: '指でなぞった部分は、家具よりも手前に表示されなくなります。', done: false };
+      // 「消しゴム」の名前で何が起きるか分かるので、案内は出さない
+      return null;
     case 'polygon':
       if (corners === 0) {
-        return { text: '物のふちに沿って点をタップすると、囲んだ範囲が家具よりも手前に表示されます。', done: false };
+        return { text: '家具よりも手前に表示する範囲を、点をつなげて指定してください。', done: false };
       }
       if (corners < MIN_CORNERS) {
         return { text: `点をあと ${MIN_CORNERS - corners} 個タップすると、範囲を囲むことができます。`, done: false };
       }
-      return { text: '最初の点をもう一度タップすると、囲んだ範囲が家具よりも手前に表示されます。', done: true };
+      // 最初の点をもう一度タップしても閉じられるが、案内には閉じ方を 1 つだけ書く
+      return { text: '「囲みを閉じる」を押すと、囲んだ範囲が家具よりも手前に表示されます。', done: true };
   }
 }
 
@@ -92,44 +93,34 @@ export function createMaskPanel(): HTMLElement {
   let wasMasking = false;
 
   function render(): void {
-    const { backgroundStatus, maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking } = photoState.get();
+    const { maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking } = photoState.get();
     if (isMasking && !wasMasking) maskEditor.beginSession();
     wasMasking = isMasking;
     panel.hidden = !isMasking;
-    const hasPhoto = backgroundStatus === 'ready';
+    // この画面へは背景の画像があるときしか入れない（タイルが画像のあるときだけ出る）ので、画像の有無は見ない
     const { kind } = maskTool;
 
-    if (hasPhoto) {
-      const { text, done } = guideFor(kind, maskPolygon.length);
-      guide.className = done ? 'mask__guide is-done' : 'mask__guide';
-      guide.textContent = text;
-    } else {
-      guide.className = 'hint';
-      guide.textContent = NO_PHOTO;
+    const next = guideFor(kind, maskPolygon.length);
+    guide.hidden = next === null;
+    if (next) {
+      guide.className = next.done ? 'mask__guide is-done' : 'mask__guide';
+      guide.textContent = next.text;
     }
 
     toolSwitch.setActive(TOOLS.findIndex(([id]) => id === kind));
-    toolSwitch.setEnabled(hasPhoto);
-    undoButton.disabled = !hasPhoto || (maskUndoDepth === 0 && maskPolygon.length === 0);
-    clearButton.disabled = !hasPhoto || !maskUrl;
+    undoButton.disabled = maskUndoDepth === 0 && maskPolygon.length === 0;
+    clearButton.disabled = !maskUrl;
 
     // 道具ごとに要るものだけ出す
     widthSwitch.element.hidden = kind === 'polygon';
     widthSwitch.setActive(maskTool.thick ? 1 : 0);
-    widthSwitch.setEnabled(hasPhoto);
     closeButton.hidden = kind !== 'polygon';
     closeButton.disabled = maskPolygon.length < MIN_CORNERS;
-    closeButton.textContent = closeLabel(maskPolygon.length);
   }
 
   render();
   photoState.subscribe(render);
   return panel;
-}
-
-/** 「囲みを閉じる」の文字。進み具合は案内の行が言うので、ここは点の数だけ */
-function closeLabel(corners: number): string {
-  return `囲みを閉じる（${corners}点）`;
 }
 
 function createButton(label: string, onClick: () => void, className: string): HTMLButtonElement {
@@ -144,7 +135,6 @@ function createButton(label: string, onClick: () => void, className: string): HT
 function createSegment(items: Array<[label: string, select: () => void]>): {
   element: HTMLElement;
   setActive(index: number): void;
-  setEnabled(enabled: boolean): void;
 } {
   const element = document.createElement('div');
   element.className = 'seg';
@@ -159,6 +149,5 @@ function createSegment(items: Array<[label: string, select: () => void]>): {
   return {
     element,
     setActive: (index) => buttons.forEach((b, i) => b.classList.toggle('is-active', i === index)),
-    setEnabled: (enabled) => buttons.forEach((b) => (b.disabled = !enabled)),
   };
 }
