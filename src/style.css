@@ -1037,11 +1037,30 @@ body {
 .manage__removed {
   font-size: 12px;
 }
-.manage__foot {
+/* 細かく調整の中の、商品のリンク */
+.manage__product {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
   margin-top: 2px;
+}
+/* 操作タブの下の段（ひとつ戻す・初期値に戻す）。スクロールしても画面の下に残す */
+.manage__bar {
+  position: sticky;
+  bottom: -16px;
+  display: flex;
+  gap: 8px;
+  margin: 8px -16px -16px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+/* 画面から削除（見出しの右）。アイコンだけの丸いボタン */
+.manage__delete--icon {
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
 }
 
 /* 「画面から削除」は置いた分を外すだけで、置き直せる。
@@ -1334,7 +1353,7 @@ body {
 .product-link {
   text-decoration: none;
 }
-.manage__foot .product-link {
+.manage__product .product-link {
   margin-right: auto;
 }
 
@@ -1726,3 +1745,23 @@ body {
   margin: 0;
 }
 
+
+/* 選んだ家具の真上のつまみ（↕）。ドラッグすると家具が上下に動く。位置は毎フレーム transform で決める */
+.lift-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: ns-resize;
+  touch-action: none;
+}

@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import type { CameraControls } from '@/interaction/cameraControls';
 import type { FurnitureLayer } from '@/scene/furniture';
 import { restingHeightAt, type EditableScene } from '@/core/furnitureScene';
+import { beginEdit, endEdit } from '@/core/editHistory';
 
 /** この距離（ピクセル）以内で指を離したらドラッグではなくタップとみなす */
 const TAP_THRESHOLD_PX = 8;
@@ -91,9 +92,10 @@ export function createFurnitureDrag(
     pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
-  /** 掴んでいるものを放し、カメラ操作を掴む前の状態へ戻す */
+  /** 掴んでいるものを放し、カメラ操作を掴む前の状態へ戻す。動かしていれば 1 回の操作として履歴に積む */
   function releaseDrag(): void {
     if (!draggingId) return;
+    if (draggingTarget) endEdit(draggingTarget.scene);
     draggingId = null;
     draggingTarget = null;
     cameraControls.enabled = cameraWasEnabled;
@@ -157,6 +159,8 @@ export function createFurnitureDrag(
     const { scene, surface } = draggingTarget;
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
+    // 動かし始めた姿を控える（ひとつ戻すで、ここへ戻る）。タップだけなら何も残らない
+    beginEdit(scene);
     // 水平な面では、地平線の近くを指しても遠くへ飛ばさない
     if (surface === 'level' && next.distanceTo(camera.position) > LEVEL_MAX_DISTANCE) return;
 

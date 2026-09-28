@@ -28,6 +28,7 @@ import { applyPhotoCamera, floorPointOnScreen } from '@/interaction/photoCamera'
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createScaleLineDrag } from '@/interaction/scaleLineDrag';
 import { createPhotoPan } from '@/interaction/photoPan';
+import { createLiftHandle } from '@/interaction/liftHandle';
 import { drawScaleLines } from '@/ui/scaleLineOverlay';
 import { CAMERA_HEIGHT } from '@/core/floorFit';
 import { photoPointAt, type PhotoPoint } from '@/core/photoView';
@@ -119,6 +120,18 @@ createFurnitureDrag(
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
   () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto
 );
+
+// 選んだ家具の真上のつまみ（↕）。ドラッグすると家具がその場で上下に動く
+createLiftHandle({
+  container: viewer.canvas.parentElement as HTMLElement,
+  canvas: viewer.canvas,
+  camera: viewer.camera,
+  scene: () => (isPhotoMode() ? photoScene : roomScene),
+  isEnabled: () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto,
+  // 部屋は床より下へは行かない。写真には床の面が無い（奥行きで置いた家具の足元は 0 とは限らない）
+  lowest: () => (isPhotoMode() ? -Infinity : 0),
+  onFrame: (callback) => viewer.onFrame(callback),
+});
 
 // 大きさを合わせる。合わせている姿のときだけ効く。線の両端を動かす
 createScaleLineDrag(viewer.canvas, () => isPhotoMode() && photoState.get().isScaling);
