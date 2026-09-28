@@ -197,6 +197,7 @@ export function createBottomSheet(container: HTMLElement): void {
       })
     );
 
+    disposeList();
     body.replaceChildren(renderActiveTab());
   }
 
@@ -216,6 +217,25 @@ export function createBottomSheet(container: HTMLElement): void {
    * 間は値だけを書き替え、別の家具を選んだときだけ作り直す
    */
   let manageView: { itemId: string; refresh(item: PlacedFurniture): void } | null = null;
+  /**
+   * いま出している家具の一覧（何も選んでいないとき）。
+   *
+   * **一覧に出ている中身が変わったときだけ作り直す。** 選んでいない家具を指で動かすと、
+   * 位置が変わるたびに状態が届く。そのたびに作り直すと、アイコンを読み直す間だけ枠が空になり、チラつく
+   */
+  let listView: { key: string; dispose(): void } | null = null;
+
+  /** 一覧に出ている中身（並び・名前・アイコン・色と、削除の直後の一言）。位置や大きさは入れない */
+  function listKey(furniture: PlacedFurniture[]): string {
+    const items = furniture.map((item) => [item.id, item.name, item.typeId, item.imageUrl, item.sourceImageKey, item.color]);
+    return JSON.stringify([items, removedNote]);
+  }
+
+  /** 一覧のアイコンが読み込んだ画像を解放する。一覧を画面から外すときに呼ぶ */
+  function disposeList(): void {
+    listView?.dispose();
+    listView = null;
+  }
   /**
    * 操作タブの下の段。左に「ひとつ戻す」、その隣に「初期値に戻す」、右端に「画面から削除」
    * （初期値に戻すと画面から削除は、家具を選んでいるときだけ）。
@@ -278,7 +298,9 @@ export function createBottomSheet(container: HTMLElement): void {
     const selected = furniture.find((f) => f.id === selectedId);
 
     if (!selected) {
-      wrapper.append(createFurnitureList(furniture), manageFoot.element);
+      const icons: ReturnType<typeof createPreviewImage>[] = [];
+      wrapper.append(createFurnitureList(furniture, icons), manageFoot.element);
+      listView = { key: listKey(furniture), dispose: () => icons.forEach((icon) => icon.dispose()) };
       manageFoot.refresh();
       return wrapper;
     }
@@ -434,7 +456,7 @@ export function createBottomSheet(container: HTMLElement): void {
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
    * 選べない。一覧からなら選べるし、消せる。行を押すと選択になり、操作の行に切り替わる
    */
-  function createFurnitureList(furniture: PlacedFurniture[]): HTMLElement {
+  function createFurnitureList(furniture: PlacedFurniture[], icons: ReturnType<typeof createPreviewImage>[]): HTMLElement {
     const list = document.createElement('div');
     list.className = 'manage__list';
     if (furniture.length === 0) {
@@ -462,7 +484,9 @@ export function createBottomSheet(container: HTMLElement): void {
       const icon = document.createElement('span');
       icon.className = 'manage__icon';
       if (item.imageUrl || item.sourceImageKey) {
-        createPreviewImage(icon).show({ cutoutKey: item.imageUrl, previewKey: item.sourceImageKey });
+        const preview = createPreviewImage(icon);
+        preview.show({ cutoutKey: item.imageUrl, previewKey: item.sourceImageKey });
+        icons.push(preview);
       } else {
         icon.style.background = item.color;
       }
@@ -599,6 +623,8 @@ export function createBottomSheet(container: HTMLElement): void {
       manageView?.refresh(shown);
       return;
     }
+    // 一覧を出していて、一覧の中身が変わっていなければそのまま（動かしただけなど）
+    if (!selectedId && listView?.key === listKey(furniture)) return;
     render();
   };
   appState.subscribe(followSelection);
