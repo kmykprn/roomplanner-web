@@ -130,10 +130,10 @@ createMaskPaint(viewer.canvas);
 
 // 写真に寄る操作。2本指のときだけ動くので、家具のドラッグとは取り合わない。
 // 写真がまだ無いうちは効かせない（寄る相手が無いのに3Dだけ拡大されると訳が分からない）
-// 寸法の画面では効かせない（線を合わせている最中に背景が拡大・縮小されると戸惑う）
+// 寸法の画面でも効かせる（線の端を細かく合わせるため）。画面を出ると入る前の見え方に戻る（photoState の setScaling）
 createPhotoZoom(
   viewer.canvas,
-  () => isPhotoMode() && photoState.get().backgroundStatus === 'ready' && !photoState.get().isScaling
+  () => isPhotoMode() && photoState.get().backgroundStatus === 'ready'
 );
 const updateWallVisibility = createWallVisibility(roomObjects.walls, viewer.camera, room);
 

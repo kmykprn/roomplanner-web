@@ -12,7 +12,7 @@
 
 import { appState, type AppState } from '@/core/appState';
 import { roomSizeFor } from '@/config/interior';
-import { photoState, restoreDepth, setMaskUrl, showBackground, type FittedScale, type PhotoState } from '@/core/photoState';
+import { photoState, restoreDepth, setMaskUrl, settledView, showBackground, type FittedScale, type PhotoState } from '@/core/photoState';
 import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
 import { normalizeFloorFit } from '@/core/floorFit';
 import { normalizeScaleLine, normalizeScaleLines } from '@/core/scaleLine';
@@ -155,7 +155,8 @@ export function persistPhotoOnChange(): void {
     if (state.backgroundStatus === 'loading') return;
     const saved: SavedPhoto = {
       furniture: state.furniture,
-      view: state.view,
+      // 寸法の画面で一時的に寄っている間は、入る前の見え方を残す
+      view: settledView(),
       floorFit: state.floorFit,
       vfovDeg: state.vfovDeg,
       lensFocal35: state.lensFocal35,
