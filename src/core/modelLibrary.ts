@@ -120,7 +120,20 @@ export function restoreModelLibrary(): void {
   const models = raw === null
     ? importPlaced()
     : (Array.isArray(saved) ? saved : []).filter(isSavedModel).map(normalizeSaved);
-  setModels(seedSamples(models));
+  setModels(seedSamples(withSampleCutouts(models)));
+}
+
+/**
+ * 以前から入っているサンプルに、あとから足した 2D（切り抜き）を持たせる。
+ * サンプルを入れるのは最初の起動の 1 回だけなので、それより前から使っている端末ではここで足す。
+ * 一覧に残っていて 2D をまだ持っていないサンプルだけ（消したサンプルは戻さない）
+ */
+function withSampleCutouts(models: GeneratedModel[]): GeneratedModel[] {
+  return models.map((model) => {
+    if (model.imageKey !== null) return model;
+    const sample = SAMPLE_MODELS.find((entry) => entry.id === model.id);
+    return sample?.imageKey ? { ...model, imageKey: sample.imageKey } : model;
+  });
 }
 
 /** サンプルの家具を、まだ入れたことが無ければ先頭に足す */
