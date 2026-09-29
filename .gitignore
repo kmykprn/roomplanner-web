@@ -34,3 +34,7 @@ google-services.json
 *.keystore
 *.jks
 ExportOptions.plist
+
+# Playwright の結果（npm test で作られる）
+test-results/
+playwright-report/

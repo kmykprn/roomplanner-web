@@ -37,6 +37,17 @@ const pending = new Map<EditableScene, Pending>();
 /** 履歴が変わったことを画面に知らせる（戻せるかどうかの表示を描き直す） */
 export const editHistory = createStore<{ version: number }>({ version: 0 });
 
+/**
+ * 指で触っている途中か（どれかの置き場で beginEdit してから endEdit するまで）。
+ * 端末への保存は、これが終わるまで待ってまとめて 1 回にする（persistence.ts）
+ */
+export const editSession = createStore<{ editing: boolean }>({ editing: false });
+
+function syncEditing(): void {
+  const editing = pending.size > 0;
+  if (editSession.get().editing !== editing) editSession.set({ editing });
+}
+
 function changed(): void {
   editHistory.set({ version: editHistory.get().version + 1 });
 }
@@ -48,6 +59,7 @@ function copyOf(furniture: PlacedFurniture[]): PlacedFurniture[] {
 /** 操作を始める。すでに始めていれば何もしない（最初に触ったときの姿を控えておく） */
 export function beginEdit(scene: EditableScene): void {
   if (!pending.has(scene)) pending.set(scene, { before: copyOf(scene.state().furniture), onDiscard: [] });
+  syncEditing();
 }
 
 /**
@@ -65,6 +77,7 @@ export function endEdit(scene: EditableScene): void {
   const current = pending.get(scene);
   if (!current) return;
   pending.delete(scene);
+  syncEditing();
   if (JSON.stringify(current.before) === JSON.stringify(scene.state().furniture)) {
     current.onDiscard.forEach((task) => task());
     return;
@@ -103,5 +116,6 @@ export function clearHistory(scene: EditableScene): void {
   stacks.get(scene)?.forEach((entry) => entry.onDiscard.forEach((task) => task()));
   stacks.delete(scene);
   pending.delete(scene);
+  syncEditing();
   changed();
 }
