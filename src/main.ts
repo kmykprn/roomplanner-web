@@ -18,7 +18,7 @@ import { buildInteriorTextures } from '@/scene/interiorTextures';
 import type { RoomSize } from '@/config/room';
 import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
-import { createPhotoShadow } from '@/scene/photoShadow';
+import { createPhotoShadow, groundsOf } from '@/scene/photoShadow';
 import { createFurnitureLayer } from '@/scene/furniture';
 import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
@@ -319,10 +319,7 @@ function applyScaling(): void {
   const scaling = isPhotoMode() && isScaling;
   photoFurniture.group.visible = isPhotoMode() && !isScaling;
   photoShadow.group.visible = isPhotoMode() && !isScaling;
-  photoShadow.setGrounds(
-    false,
-    photoState.get().furniture.map((item) => ({ position: item.position, size: item.size }))
-  );
+  photoShadow.setGrounds(false, groundsOf(photoState.get().furniture));
   drawScaleLines(viewer.overlayLayer, scaling ? scaleLines : [], selectedScaleLine, view);
 }
 photoState.subscribe(applyScaling);

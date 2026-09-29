@@ -24,6 +24,7 @@
  */
 
 import * as THREE from 'three';
+import { isBillboard, type PlacedFurniture } from '@/config/furniture';
 
 /**
  * 光の向き（床の上の位置）。**ほぼ真上。**
@@ -80,6 +81,16 @@ export interface PhotoShadow {
 export interface GroundItem {
   position: [number, number, number];
   size: [number, number, number];
+}
+
+/**
+ * 影を受ける面を敷く家具と、その足元。**3D の家具だけ。**
+ *
+ * 切り抜きの板は影を落とさず、足元のぼかした楕円で接地を見せる（scene/billboard.ts）。
+ * 板の足元に面を敷くと、真上に持ち上げた別の家具の影だけを拾い、その家具の 2 つめの影に見えた
+ */
+export function groundsOf(furniture: PlacedFurniture[]): GroundItem[] {
+  return furniture.filter((item) => !isBillboard(item)).map((item) => ({ position: item.position, size: item.size }));
 }
 
 /**

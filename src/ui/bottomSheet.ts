@@ -8,7 +8,7 @@
  * 家具（置く・写真から作る）と操作は両方にある。
  */
 
-import type { PlacedFurniture } from '@/config/furniture';
+import { isBillboard, type PlacedFurniture } from '@/config/furniture';
 import type { EditableScene } from '@/core/furnitureScene';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createPreviewImage } from '@/ui/previewImage';
@@ -504,11 +504,6 @@ export function createBottomSheet(container: HTMLElement): void {
       list.append(row);
     }
     return list;
-  }
-
-  /** 切り抜きの板か（3D を持たず、切り抜きだけを持つ家具） */
-  function isBillboard(item: PlacedFurniture): boolean {
-    return Boolean(item.imageUrl) && !item.modelUrl;
   }
 
   /**
