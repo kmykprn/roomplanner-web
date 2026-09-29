@@ -26,6 +26,12 @@ const TAP_THRESHOLD_PX = 8;
  */
 const LEVEL_MAX_DISTANCE = 30;
 
+/**
+ * 足元がカメラの高さからこれより上にある家具は、水平な面ではなく画面に沿って動かす（m）。
+ * 目の高さに近い水平な面は、画面の中でほぼ 1 本の線に潰れ、少し指を動かすだけで遠くへ飛ぶ
+ */
+const EYE_MARGIN = 0.2;
+
 /** 操作の対象。モードで入れ替わるので、その都度引き直す */
 export interface DragTarget {
   scene: EditableScene;
@@ -34,12 +40,16 @@ export interface DragTarget {
    * 家具をどの面に沿って動かすか。
    *
    *   floor  … 床の上を滑る（部屋モード）。奥へ行けば小さく写る。何かの上に来たらその上面に載る
-   *   level  … 足元の高さの水平な面を滑る（写真モードで室内の寸法を計算したあと）。
-   *            足元は置いたときに写真の奥行きで決まっている。奥へ行けばなめらかに小さく写る。
+   *   level  … 足元の高さの水平な面を滑る（写真モード）。奥へ行けばなめらかに小さく写り、高さは変わらない。
+   *            寸法を計算したあとは、足元は置いたときに写真の奥行きで決まっている。
    *            ドラッグ中に写真の奥行きを拾い直さないのは、足元が物の縁をまたぐたびに
-   *            大きさが急に変わったため
-   *   screen … 画面の面に沿って動く（写真モードで計算する前）。左右と上下だけで、奥行きは変えない。
-   *            計算する前は写真の傾きが分からず、写真の床と 3D の床が合っていないので、奥へ動かして縮む意味がない
+   *            大きさが急に変わったため。
+   *            **寸法を計算する前もこの面を使う。** 前は画面に沿って動かしていたが、画面の上へ動かすと
+   *            奥へ行かずに宙に浮き、奥へ動かしたつもりで手前の家具の上に浮いていた（影が 2 つに見えた）。
+   *            高さを変えるのは ↕ の取っ手（interaction/liftHandle.ts）だけ
+   *   screen … 画面の面に沿って動く。左右と上下だけで、奥行きは変えない。
+   *            level で掴んだ家具の足元が目の高さより上にあるときだけ、代わりに使う
+   *            （水平な面が画面の下半分と交わらず、動かせなくなるため）
    */
   surface: 'floor' | 'level' | 'screen';
 }
@@ -83,6 +93,14 @@ export function createFurnitureDrag(
   let cameraWasEnabled = true;
   /** 掴んだ点と家具の原点のズレ。これを保たないと家具が指の中心に飛ぶ */
   let grabOffset = new THREE.Vector3();
+  /**
+   * 水平な面（level）で掴んだとき、指から足元までの画面上のずれ（NDC）。
+   *
+   * **足元を指と同じだけ画面の上で動かす。** 指の先の床の点との差を保つやり方だと、家具の胴体を
+   * 掴んだとき、その床の点は足元よりずっと奥になる。奥ほど 1px あたりの距離が大きいので、
+   * 少し動かすだけで家具が何 m も奥へ飛んだ
+   */
+  const grabNdcOffset = new THREE.Vector2();
   let pressPosition = { x: 0, y: 0 };
 
   /** 画面座標を -1..1 の正規化デバイス座標へ変換する */
@@ -122,8 +140,13 @@ export function createFurnitureDrag(
     const furnitureId = hits[0].object.userData.furnitureId as string | undefined;
     if (!furnitureId) return;
 
+    const item = target.scene.state().furniture.find((f) => f.id === furnitureId);
+    if (!item) return;
+
     draggingId = furnitureId;
-    draggingTarget = target;
+    // 足元が目の高さより上にある家具は、水平な面では動かせないので、画面に沿って動かす
+    const aboveEye = target.surface === 'level' && item.position[1] > camera.position.y - EYE_MARGIN;
+    draggingTarget = aboveEye ? { ...target, surface: 'screen' } : target;
 
     // 家具を動かしている間はカメラを固定する。
     // **戻すのは true ではなく元の値。** 写真モードはカメラ操作を止めてあるので、
@@ -131,16 +154,16 @@ export function createFurnitureDrag(
     cameraWasEnabled = cameraControls.enabled;
     cameraControls.enabled = false;
 
-    const item = target.scene.state().furniture.find((f) => f.id === furnitureId);
-    if (!item) return;
-
     // 平面は「法線・p + constant = 0」なので、家具を通す面は constant = -(法線方向の座標)
-    if (target.surface === 'screen') {
+    if (draggingTarget.surface === 'screen') {
       dragPlane.set(SCREEN_NORMAL, -item.position[2]);
     } else {
       dragPlane.set(FLOOR_NORMAL, -item.position[1]);
     }
-    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
+    if (draggingTarget.surface === 'level') {
+      const foot = new THREE.Vector3(...item.position).project(camera);
+      grabNdcOffset.set(foot.x - pointerNdc.x, foot.y - pointerNdc.y);
+    } else if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
       grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
     }
   }
@@ -152,11 +175,13 @@ export function createFurnitureDrag(
     if (!draggingId || !draggingTarget) return;
 
     toNdc(event);
+    const { scene, surface } = draggingTarget;
+    // 水平な面では、指から控えたずれだけ離れた画面の点（＝足元が来る点）の先を、足元の位置にする
+    if (surface === 'level') pointerNdc.add(grabNdcOffset);
     raycaster.setFromCamera(pointerNdc, camera);
     if (!raycaster.ray.intersectPlane(dragPlane, hitPoint)) return;
 
-    const next = hitPoint.add(grabOffset);
-    const { scene, surface } = draggingTarget;
+    const next = surface === 'level' ? hitPoint : hitPoint.add(grabOffset);
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
     // 動かし始めた姿を控える（ひとつ戻すで、ここへ戻る）。タップだけなら何も残らない
