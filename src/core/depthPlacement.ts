@@ -247,3 +247,42 @@ export function fitDepthScale(
   for (const value of map.data) if (value < nearest) nearest = value;
   return fitted.a > 0 && fitted.a * nearest + fitted.b > 0 ? fitted : scaleOnly;
 }
+
+/** 写真の点を通る視線が、高さ y の水平な面と交わる 3D の位置。交わらなければ（面の向こうを向いている）null */
+export function levelPointAt(point: PhotoPoint, y: number, lens: Lens, pose: PhotoPose): Vec | null {
+  const direction = toWorld(rayOf(point, lens), pose.fit);
+  const t = (y - pose.position[1]) / direction[1];
+  if (!Number.isFinite(t) || t <= 0) return null;
+  return [pose.position[0] + direction[0] * t, y, pose.position[2] + direction[2] * t];
+}
+
+/** 撮った高さを見積もるときに見る範囲（写真の縦の割合）。床が写っていることが多い下のほう */
+const FLOOR_SAMPLE_TOP = 0.66;
+/** 見た点のうち、低い順にこの割合を床とみなす（壁の根元や窓枠など、床より高い物を外す） */
+const FLOOR_SAMPLE_RATIO = 0.4;
+/** 撮った高さとしてありうる範囲（m）。外れたら見積もれなかったことにする */
+const CAMERA_HEIGHT_RANGE: [number, number] = [0.6, 2.5];
+
+/**
+ * 写真を撮った高さ（カメラから床までの m）を、解析した奥行きから見積もる。見積もれなければ null。
+ *
+ * **奥行きは高さを出すことだけに使い、床の形には使わない。** 解析した奥行きをそのまま 3D に直すと、
+ * 床が数度傾く（奥行きの解析と傾きの解析で、想定する画角が違うため）。一方で、天井やドアの高さは
+ * よく合う（実測で 5% 以内）。そこで床は「この高さの下にある水平な 1 枚の面」とし、写真の傾きは傾きの解析の値を使う。
+ * 写真の下のほうの点を、カメラの真下からどれだけ下にあるかで並べ、低いほうの点の中央値を床の深さとする
+ */
+export function estimateCameraHeight(map: DepthMap, lens: Lens, fit: FloorFit): number | null {
+  const drops: number[] = [];
+  const atCamera: PhotoPose = { fit, position: [0, 0, 0] };
+  for (let y = FLOOR_SAMPLE_TOP; y < 0.99; y += 0.02) {
+    for (let x = 0.04; x < 0.97; x += 0.04) {
+      const world = worldPointAt({ x, y }, map, { a: 1, b: 0 }, lens, atCamera);
+      if (world) drops.push(-world[1]);
+    }
+  }
+  if (drops.length < 20) return null;
+  drops.sort((a, b) => b - a);
+  const lowest = drops.slice(0, Math.max(1, Math.round(drops.length * FLOOR_SAMPLE_RATIO)));
+  const height = lowest[Math.floor(lowest.length / 2)];
+  return height >= CAMERA_HEIGHT_RANGE[0] && height <= CAMERA_HEIGHT_RANGE[1] ? height : null;
+}
