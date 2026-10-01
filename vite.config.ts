@@ -77,6 +77,18 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  optimizeDeps: {
+    /*
+     * 開発用サーバーが起動したときに、あらかじめまとめておくライブラリ。
+     *
+     * onnxruntime-web は写真の解析（core/onnxWorker.ts）で初めて読む。起動時のたどり方では見つからず、
+     * 途中で初めて読まれたときにまとめ直しになり、開いているページを強制的に読み込み直していた
+     * （「optimized dependencies changed. reloading」）。テストの途中でこれが起きると、
+     * 操作していたページが消えて落ちる。起動時にまとめておけば、途中で読み込み直さない。
+     * 本番の版（npm run build）の作り方には関係しない
+     */
+    include: ['onnxruntime-web/wasm'],
+  },
   server: {
     // スマホの実機から LAN 経由で開けるようにする
     host: true,
