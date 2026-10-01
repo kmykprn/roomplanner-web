@@ -225,7 +225,10 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     void startCutout(files, heights);
   }
 
-  panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element);
+  // 家具を押したときに下から出すメニュー。「部屋に追加」か「編集」を選ぶ
+  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
+
+  panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
   function openChooser(): void {
     normal.hidden = true;
@@ -319,7 +322,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
-    ordered.push(...syncThumbs(modelNodes, shown, (tile) => createModelThumb(tile, placeGenerated, openEditor)));
+    ordered.push(...syncThumbs(modelNodes, shown, (tile) => createModelThumb(tile, tileActions.open)));
     grid.replaceChildren(...ordered);
 
     // 押した失敗がまだあれば理由を出す。とじる・絞り込みで見えなくなったら畳む
@@ -370,6 +373,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
    */
   function showHome(): void {
     homeCount += 1;
+    tileActions.close();
     heightStep.cancel();
     chooser.close();
     maker.close();
@@ -749,35 +753,101 @@ function syncThumbs<T extends { id: string }>(
   return ordered;
 }
 
-function createModelThumb(
-  tile: ModelTile,
-  place: (tile: ModelTile) => void,
-  edit: (tile: ModelTile) => void
-): ThumbNode<ModelTile> {
+/**
+ * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、「部屋に追加」「編集」を出す。
+ *
+ * **押しただけでは置かない。** 前は押すとすぐ置き、編集は右上の小さな「⋯」からだった。
+ * 小さな印は狙いにくく、編集したいのに置いてしまうことがあった。下に大きなボタンを並べれば、親指で選べる。
+ * 外側（暗くした所）を押すと閉じる
+ */
+function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(tile: ModelTile): void }): {
+  element: HTMLElement;
+  open(tile: ModelTile): void;
+  close(): void;
+} {
+  const element = document.createElement('div');
+  element.className = 'tile-actions';
+  element.hidden = true;
+
+  const dim = document.createElement('div');
+  dim.className = 'tile-actions__dim';
+
+  const sheet = document.createElement('div');
+  sheet.className = 'tile-actions__sheet';
+  sheet.setAttribute('role', 'dialog');
+
+  const head = document.createElement('div');
+  head.className = 'tile-actions__head';
+  const image = document.createElement('span');
+  image.className = 'tile-actions__img';
+  const preview = createPreviewImage(image);
+  const text = document.createElement('div');
+  const name = document.createElement('div');
+  name.className = 'tile-actions__name';
+  const kind = document.createElement('div');
+  kind.className = 'tile-actions__kind';
+  text.append(name, kind);
+  head.append(image, text);
+
+  const place = document.createElement('button');
+  place.type = 'button';
+  place.className = 'button is-block tile-actions__button';
+  place.textContent = '部屋に追加';
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'button is-quiet is-block tile-actions__button';
+  edit.textContent = '編集';
+
+  sheet.append(head, place, edit);
+  element.append(dim, sheet);
+
+  let current: ModelTile | null = null;
+  function close(): void {
+    element.hidden = true;
+    current = null;
+  }
+  /** 閉じてから選んだことをする（置く・編集を開く）。先に閉じないと、編集の姿の上にメニューが残る */
+  function choose(action: (tile: ModelTile) => void): void {
+    const tile = current;
+    close();
+    if (tile) action(tile);
+  }
+  dim.addEventListener('click', close);
+  place.addEventListener('click', () => choose(actions.onPlace));
+  edit.addEventListener('click', () => choose(actions.onEdit));
+
+  return {
+    element,
+    open(tile) {
+      current = tile;
+      name.textContent = tile.model.name;
+      kind.textContent = facetLabel(tile.facet);
+      sheet.setAttribute('aria-label', `${tile.model.name} の${facetLabel(tile.facet)}`);
+      preview.show({ cutoutKey: tile.model.imageKey, previewKey: tile.model.previewKey });
+      element.hidden = false;
+    },
+    close,
+  };
+}
+
+/** タイルの種類の呼び名。メニューと読み上げで使う */
+function facetLabel(facet: ModelFacet): string {
+  return facet === 'solid' ? '3D モデル' : '2D（切り抜き）';
+}
+
+/** 家具のタイル。押すと「部屋に追加」と「編集」のメニューを開く（置くのはメニューから） */
+function createModelThumb(tile: ModelTile, open: (tile: ModelTile) => void): ThumbNode<ModelTile> {
   const thumb = createThumb(tile.model.name);
   let current = tile;
-  thumb.button.addEventListener('click', () => place(current));
+  thumb.button.addEventListener('click', () => open(current));
   const preview = createPreviewImage(thumb.image);
   // アイコンは 2D と 3D で同じものを使うので、左上の印だけが見分けになる
   thumb.image.append(createTag(tile.facet === 'solid' ? '3D' : '2D'));
 
-  // 右上の「⋯」で編集へ。押しても置いてしまわないよう、下のボタンには渡さない
-  const more = document.createElement('button');
-  more.type = 'button';
-  more.className = 'thumb__more';
-  more.textContent = '⋯';
-  more.addEventListener('click', (event) => {
-    event.stopPropagation();
-    edit(current);
-  });
-  thumb.image.append(more);
-
   function update(next: ModelTile): void {
     current = next;
-    const kind = next.facet === 'solid' ? '3D モデル' : '2D（切り抜き）';
     thumb.name.textContent = next.model.name;
-    thumb.button.setAttribute('aria-label', `${next.model.name} の${kind}を置く`);
-    more.setAttribute('aria-label', `${next.model.name} の${kind}を編集`);
+    thumb.button.setAttribute('aria-label', `${next.model.name} の${facetLabel(next.facet)}`);
     preview.show({ cutoutKey: next.model.imageKey, previewKey: next.model.previewKey });
   }
   update(tile);

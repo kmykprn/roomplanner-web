@@ -1388,26 +1388,6 @@ body {
   white-space: nowrap;
 }
 
-/* 一覧から外す ×。角に浮かせる。押しても下のサムネイルには渡さない */
-/* サムネイル右上の「⋯」。編集の姿へ */
-.thumb__more {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  line-height: 22px;
-  letter-spacing: 1px;
-  touch-action: manipulation;
-}
-
 /* 作ったモデルの編集の姿。通常の姿と入れ替わりで出る */
 .lib__edit {
   display: grid;
@@ -1727,4 +1707,124 @@ body {
 .lift-handle svg {
   width: 20px;
   height: 20px;
+}
+
+/*
+ * 家具のページ。下のタブの「家具」を押すと、画面全体に開く（ui/furniturePage.ts）。
+ * 見出し（写真モード・部屋モードの切り替え）や写真の上に重ねる。上に「×」と見出しだけを置く
+ */
+.page {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.page__bar {
+  flex: none;
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  height: 52px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page__close {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+}
+
+.page__close svg {
+  width: 22px;
+  height: 22px;
+}
+
+.page__title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.page__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px 24px;
+}
+
+/*
+ * 家具のタイルを押したときに、下から出すメニュー（「部屋に追加」「編集」）。
+ * 後ろの一覧は暗くして、押せないことを見せる。暗い所を押すと閉じる
+ */
+.tile-actions {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.tile-actions__dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 28, 0.38);
+}
+
+.tile-actions__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.tile-actions__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+/* 家具の画像。一覧のアイコンと同じく、枠を覆わず全体を収める */
+.tile-actions__img {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff center / contain no-repeat;
+  background-origin: content-box;
+  padding: 5px;
+}
+
+.tile-actions__name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.tile-actions__kind {
+  font-size: 12px;
+  color: #687076;
+}
+
+/* 親指で押しやすい高さにする */
+.tile-actions__button {
+  min-height: 48px;
+  font-size: 16px;
+  font-weight: 700;
 }
