@@ -225,7 +225,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     void startCutout(files, heights);
   }
 
-  // 家具を押したときに下から出すメニュー。「部屋に追加」（写真なら「背景に追加」）か「編集」を選ぶ
+  // 家具を押したときに下から出すメニュー。「部屋に追加」（写真なら「背景に追加」）と、名前の右の鉛筆で編集
   const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
@@ -666,7 +666,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     afterLoginNote = null;
   });
 
-  element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote, createIdentity());
+  element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote);
 
   function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
@@ -754,7 +754,8 @@ function syncThumbs<T extends { id: string }>(
 }
 
 /**
- * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、「部屋に追加」「編集」を出す。
+ * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、「部屋に追加」を出す。
+ * 編集は、名前の右の鉛筆のアイコンから開く（よく使う「追加」だけを大きなボタンにする）。
  * 置く先の呼び名は、画面右上の切り替え（部屋 / 背景）に合わせる（写真のときは「背景に追加」）。
  *
  * **押しただけでは置かない。** 前は押すとすぐ置き、編集は右上の小さな「⋯」からだった。
@@ -788,17 +789,18 @@ function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(til
   const kind = document.createElement('div');
   kind.className = 'tile-actions__kind';
   text.append(name, kind);
-  head.append(image, text);
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'tile-actions__edit';
+  edit.setAttribute('aria-label', '編集');
+  edit.append(createPencilIcon());
+  head.append(image, text, edit);
 
   const place = document.createElement('button');
   place.type = 'button';
   place.className = 'button is-block tile-actions__button';
-  const edit = document.createElement('button');
-  edit.type = 'button';
-  edit.className = 'button is-quiet is-block tile-actions__button';
-  edit.textContent = '編集';
 
-  sheet.append(head, place, edit);
+  sheet.append(head, place);
   element.append(dim, sheet);
 
   let current: ModelTile | null = null;
@@ -837,7 +839,24 @@ function facetLabel(facet: ModelFacet): string {
   return facet === 'solid' ? '3D モデル' : '2D（切り抜き）';
 }
 
-/** 家具のタイル。押すと「部屋に追加」（または「背景に追加」）と「編集」のメニューを開く（置くのはメニューから） */
+/** 鉛筆の記号（編集）。線の太さと端の丸みを、ほかの線のアイコンにそろえる */
+function createPencilIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M4 20h4L19 9l-4-4L4 16z');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '2');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
+}
+
+/** 家具のタイル。押すと「部屋に追加」（または「背景に追加」）と編集のメニューを開く（置くのはメニューから） */
 function createModelThumb(tile: ModelTile, open: (tile: ModelTile) => void): ThumbNode<ModelTile> {
   const thumb = createThumb(tile.model.name);
   let current = tile;
@@ -1212,27 +1231,6 @@ function failureDetailContent(item: FailedItem): HTMLElement[] {
   closeButton.textContent = 'とじる';
   closeButton.addEventListener('click', item.dismiss);
   return [message, closeButton];
-}
-
-/**
- * 利用者ID。限定公開のうちは、この識別子をサーバー側の許可リストに登録してもらう
- * 必要がある。個人情報は含まれない（uid は無作為な文字列で、Google に紐づけても変わらない）。
- * 全員が使えるようになったら、この表示ごと消してよい
- */
-function createIdentity(): HTMLElement {
-  const identity = document.createElement('details');
-  identity.className = 'identity';
-  const summary = document.createElement('summary');
-  summary.textContent = '利用者 ID';
-  const uidText = document.createElement('code');
-  identity.append(summary, uidText);
-  const render = (): void => {
-    const { status, uid } = authState.get();
-    uidText.textContent = status === 'failed' ? '取得できませんでした' : (uid ?? '取得中…');
-  };
-  render();
-  authState.subscribe(render);
-  return identity;
 }
 
 /**
