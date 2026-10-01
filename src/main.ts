@@ -30,7 +30,6 @@ import { createScaleLineDrag } from '@/interaction/scaleLineDrag';
 import { createPhotoPan } from '@/interaction/photoPan';
 import { createLiftHandle } from '@/interaction/liftHandle';
 import { drawScaleLines } from '@/ui/scaleLineOverlay';
-import { CAMERA_HEIGHT } from '@/core/floorFit';
 import { photoPointAt, type PhotoPoint } from '@/core/photoView';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
@@ -39,6 +38,7 @@ import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
+  photoCameraHeight,
   photoState,
   photoScene,
   setLensSource,
@@ -273,7 +273,7 @@ function applyPhotoView(): void {
 
   viewer.setContentAspect(backgroundAspect);
   viewer.setPhotoFov(vfovDeg);
-  applyPhotoCamera(viewer.camera, floorFit, CAMERA_HEIGHT);
+  applyPhotoCamera(viewer.camera, floorFit, photoCameraHeight());
   viewer.setPhotoView(view);
 }
 

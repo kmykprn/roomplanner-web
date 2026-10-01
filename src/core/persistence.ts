@@ -26,7 +26,7 @@ const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 type SavedPhoto = Pick<
   PhotoState,
   | 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg' | 'lensFocal35'
-  | 'scaleLines' | 'depthScale'
+  | 'cameraHeight' | 'scaleLines' | 'depthScale'
 >;
 
 /**
@@ -82,6 +82,8 @@ export function restorePhoto(): void {
     floorFit: normalizeFloorFit(saved.floorFit),
     vfovDeg: Number.isFinite(saved.vfovDeg) ? (saved.vfovDeg as number) : null,
     lensFocal35: Number.isFinite(saved.lensFocal35) && (saved.lensFocal35 as number) > 0 ? (saved.lensFocal35 as number) : null,
+    // 撮った高さ。以前の版の保存には無い（その写真は立って撮った前提の高さのまま。家具もその高さで置いてある）
+    cameraHeight: Number.isFinite(saved.cameraHeight) && (saved.cameraHeight as number) > 0 ? (saved.cameraHeight as number) : null,
     // 寸法の線と、線に合わせた奥行きの直し方。壊れていれば「まだ合わせていない」に戻す
     scaleLines: restoredScaleLines(saved),
     depthScale: normalizeFittedScale(saved.depthScale),
@@ -189,6 +191,7 @@ export function persistPhotoOnChange(): void {
       floorFit: state.floorFit,
       vfovDeg: state.vfovDeg,
       lensFocal35: state.lensFocal35,
+      cameraHeight: state.cameraHeight,
       scaleLines: state.scaleLines,
       depthScale: state.depthScale,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,

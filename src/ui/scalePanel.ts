@@ -24,7 +24,7 @@ import {
 } from '@/core/photoState';
 import { MAX_SCALE_LINES, type ScaleLine } from '@/core/scaleLine';
 import { createMeasureStatus } from '@/ui/measureStatus';
-import { createQuietButton, createSentences, createSubScreen } from '@/ui/subScreen';
+import { createSentences, createSubScreen } from '@/ui/subScreen';
 
 /** 長さとして受け付ける範囲（cm） */
 const LENGTH_LIMITS = { min: 5, max: 2000 };
@@ -110,7 +110,7 @@ export function createScalePanel(): HTMLElement {
   /** 入ったときの線。「戻る」でここに戻す */
   let entered: ScaleLine[] | undefined;
 
-  /** 入ったときの線に戻して閉じる（「戻る」と「あとで設定する」） */
+  /** 入ったときの線に戻して閉じる（「戻る」） */
   const leave = (): void => {
     if (entered !== undefined) setScaleLines(entered);
     setScaling(false);
@@ -138,14 +138,9 @@ export function createScalePanel(): HTMLElement {
   const measureStatus = createMeasureStatus();
 
   screen.body.append(createSentences(PURPOSE, 'sub__text is-sub'), createSentences(STEPS), group, measureStatus);
-  // 写真を選んだ流れで開いたときだけ。長さの分かる物が写っていないこともあるので、飛ばして進めるようにする
-  // （飛ばしたら、立って撮った前提の大きさで置く。あとから背景タブの「寸法」で設定できる）
-  const later = createQuietButton('あとで設定する', leave);
-  screen.actions.append(later);
 
   function render(): void {
-    const { isScaling, scaleLines, selectedScaleLine, measure, scalingFromSetup } = photoState.get();
-    later.hidden = !scalingFromSetup;
+    const { isScaling, scaleLines, selectedScaleLine, measure } = photoState.get();
     if (isScaling && screen.element.hidden !== false) entered = scaleLines.map((line) => ({ ...line }));
     if (!isScaling) entered = undefined;
     screen.element.hidden = !isScaling;
@@ -172,7 +167,6 @@ export function createScalePanel(): HTMLElement {
     // 計算の間は、保存も戻るも押せない（途中で閉じると、どちらの線の結果か分からなくなる）
     const running = measure.status === 'running';
     screen.back.disabled = running;
-    later.disabled = running;
     screen.done.disabled = running;
     // まだ家具に反映していない線があれば、保存を光らせる
     screen.done.classList.toggle('is-pending', !running && hasUnsavedScale());

@@ -34,7 +34,9 @@ import {
   type VisibleRegion,
 } from '@/core/scaleLine';
 import {
+  estimateCameraHeight,
   fitDepthScale,
+  levelPointAt,
   photoPointOf,
   worldPointAt,
   type DepthScale,
@@ -113,6 +115,11 @@ export interface PhotoState extends FurnitureSceneState {
   /** 計算した写真の奥行き。まだ計算していなければ null */
   depthMap: DepthMap | null;
   /**
+   * 写真を撮った高さ（カメラから床までの m）。写真の解析で奥行きから見積もる（core/depthPlacement.ts）。
+   * まだ解析していない・見積もれなかったときは null で、立って撮った前提の高さ（CAMERA_HEIGHT）を使う
+   */
+  cameraHeight: number | null;
+  /**
    * 寸法を合わせる線（core/scaleLine.ts）。最大 5 本。まだ出していなければ空で、
    * 寸法の画面に入ったときに見えている範囲の中に 1 本作る
    */
@@ -128,11 +135,6 @@ export interface PhotoState extends FurnitureSceneState {
   isScaling: boolean;
   /** 表示する範囲を調整している最中か。この間は 1 本指で写真をずらす */
   isFramingPhoto: boolean;
-  /**
-   * 写真を選んだ流れの中で寸法の画面を開いているか（拡大・縮小の画面で保存したら続けて開く）。
-   * このときだけ、寸法の画面に「あとで設定する」を出す
-   */
-  scalingFromSetup: boolean;
 
   /**
    * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
@@ -161,11 +163,11 @@ export const photoState = createStore<PhotoState>({
   lensFocal35: null,
   measure: { status: 'idle' },
   depthMap: null,
+  cameraHeight: null,
   scaleLines: [],
   selectedScaleLine: 0,
   depthScale: null,
   isScaling: false,
-  scalingFromSetup: false,
   isFramingPhoto: false,
   maskUrl: null,
   isMasking: false,
@@ -251,8 +253,9 @@ export async function setBackground(file: File): Promise<void> {
   // 隠す場所も前の写真のものなので消す
   photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
   clearMask();
-  // 選んだ直後に、表示する範囲を決めてもらい、続けて寸法を合わせてもらう。その間に、裏で写真の解析を始める
-  beginPhotoSetup();
+  // 選んだ直後に、表示する範囲を決めてもらう。その間に、裏で写真の解析を始める。
+  // 寸法の画面は開かない（解析した奥行きから撮った高さを出すので、寸法を合わせなくても大きさはほぼ合う）
+  setFramingPhoto(true);
   startAnalysis();
 }
 
@@ -305,30 +308,7 @@ export function setMasking(isMasking: boolean): void {
 
 /** 表示する範囲を調整する姿に入る・出る */
 export function setFramingPhoto(isFramingPhoto: boolean): void {
-  // 保存以外で閉じたら（戻る・ほかのタブ）、写真を選んだ流れはそこで終える
-  if (!isFramingPhoto) setupPending = false;
   if (photoState.get().isFramingPhoto !== isFramingPhoto) photoState.set({ isFramingPhoto });
-}
-
-/**
- * 新しい写真を選んだ流れの途中か。写真を選ぶと「拡大・縮小」の画面が開き、そこで保存すると
- * 続けて「寸法」の画面を開く（寸法の設定は背景タブの中にあって気づきにくいため、流れの中で通ってもらう）
- */
-let setupPending = false;
-
-/** 写真を選んだ直後の流れを始める。表示する範囲を決めてもらい、保存したら寸法へ進む */
-function beginPhotoSetup(): void {
-  setFramingPhoto(true);
-  setupPending = true;
-}
-
-/** 拡大・縮小の画面の「保存」。写真を選んだ流れの途中なら、続けて寸法の画面を開く */
-export function finishFraming(): void {
-  const next = setupPending;
-  setFramingPhoto(false);
-  if (!next) return;
-  setScaling(true);
-  photoState.set({ scalingFromSetup: true });
 }
 
 /**
@@ -348,9 +328,10 @@ const FRESH_SCALE: Pick<PhotoState, 'scaleLines' | 'selectedScaleLine'> = {
 };
 
 /** 室内の寸法の計算を、写真ごとの初期状態に戻す。新しい写真を選んだとき・外したとき */
-const FRESH_MEASURE: Pick<PhotoState, 'measure' | 'depthMap' | 'depthScale'> = {
+const FRESH_MEASURE: Pick<PhotoState, 'measure' | 'depthMap' | 'cameraHeight' | 'depthScale'> = {
   measure: { status: 'idle' },
   depthMap: null,
+  cameraHeight: null,
   depthScale: null,
 };
 
@@ -375,7 +356,7 @@ export function setScaling(isScaling: boolean): void {
   }
   const restored = viewBeforeScaling;
   viewBeforeScaling = null;
-  photoState.set({ isScaling, scalingFromSetup: false, ...(restored ? { view: restored } : {}) });
+  photoState.set({ isScaling, ...(restored ? { view: restored } : {}) });
 }
 
 /**
@@ -442,9 +423,14 @@ function depthLens(): Lens | null {
   return vfovDeg !== null && backgroundAspect !== null ? { vfovDeg, aspect: backgroundAspect } : null;
 }
 
+/** 写真を撮った高さ（m）。見積もれていなければ、立って撮った前提の高さ */
+export function photoCameraHeight(): number {
+  return photoState.get().cameraHeight ?? CAMERA_HEIGHT;
+}
+
 /** 写真を描いているカメラの向きと位置（interaction/photoCamera.ts と同じ置き方） */
 function currentPose(): PhotoPose {
-  return { fit: photoState.get().floorFit, position: [0, CAMERA_HEIGHT, EYE_DISTANCE] };
+  return { fit: photoState.get().floorFit, position: [0, photoCameraHeight(), EYE_DISTANCE] };
 }
 
 /**
@@ -477,6 +463,27 @@ function placeFurnitureOnDepth(points: Map<string, PhotoPoint>): void {
   const furniture = photoState.get().furniture.map((item) => {
     const point = points.get(item.id);
     const position = point ? depthPointAt(point) : null;
+    return position ? { ...item, position } : item;
+  });
+  photoState.set({ furniture });
+}
+
+/**
+ * カメラが変わっても（画角・傾き・撮った高さ）、家具が写真の同じ場所に写ったままになるよう置き直す。
+ *
+ * 写真の解析は裏で進むので、終わる前に置いた家具がある。解析の結果でカメラが変わると、
+ * そのままでは家具が画面の上で動いてしまう。変える前に写真のどこに写っていたかを控え、
+ * 変えたあと、同じ点を通る視線と、その家具の足元の高さの水平な面との交点へ置き直す
+ */
+function keepOnPhoto(change: () => void): void {
+  const points = furnitureOnPhoto();
+  change();
+  const lens = depthLens() ?? lensSource?.();
+  if (!lens || points.size === 0) return;
+  const pose = currentPose();
+  const furniture = photoState.get().furniture.map((item) => {
+    const point = points.get(item.id);
+    const position = point ? levelPointAt(point, item.position[1], lens, pose) : null;
     return position ? { ...item, position } : item;
   });
   photoState.set({ furniture });
@@ -586,14 +593,14 @@ async function computeDepth(backgroundUrl: string, backgroundAspect: number, len
   const calibration = await calibratePhoto(backgroundUrl, exifVfov);
   if (!isCurrent()) return;
   // 見下ろし角はそのまま。ロールはカメラの回す向きが逆なので符号を返す
-  photoState.set({
-    vfovDeg: calibration.vfovDeg,
-    floorFit: clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg }),
-  });
+  const floorFit = clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg });
+  keepOnPhoto(() => photoState.set({ vfovDeg: calibration.vfovDeg, floorFit }));
 
   const depthMap = await estimateDepth(backgroundUrl, calibration.vfovDeg);
   if (!isCurrent()) return;
-  photoState.set({ depthMap });
+  // 奥行きから撮った高さを出す。寸法を合わせていなくても、家具の大きさが写真に合う
+  const cameraHeight = estimateCameraHeight(depthMap, { vfovDeg: calibration.vfovDeg, aspect: backgroundAspect }, floorFit);
+  keepOnPhoto(() => photoState.set({ depthMap, cameraHeight }));
   // 次に開いたときに計算し直さなくて済むように残す。残せなくても、いまの結果は使える
   saveDepth(depthMap).catch(() => {});
 }
