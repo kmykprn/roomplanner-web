@@ -99,22 +99,14 @@ viewer.scene.add(
 
 // --- 操作を繋ぐ ---
 const cameraControls = createCameraControls(viewer.canvas, viewer.camera);
-/**
- * 写真モードで家具を動かす面。室内の寸法を計算したあとは、足元の高さの水平な面を滑らせる
- * （写真の傾きが分かり、足元も写真の奥行きで決まっているので、奥へ動かすと写真どおりに小さくなる）
- */
-function photoDragSurface(): 'level' | 'screen' {
-  const { depthMap, depthScale } = photoState.get();
-  return depthMap && depthScale ? 'level' : 'screen';
-}
-
 createFurnitureDrag(
   viewer.canvas,
   viewer.camera,
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? { scene: photoScene, layer: photoFurniture, surface: photoDragSurface() }
+      ? // 写真モードでは、寸法を計算する前も後も、足元の高さの水平な面を滑らせる。高さを変えるのは ↕ の取っ手だけ
+        { scene: photoScene, layer: photoFurniture, surface: 'level' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
