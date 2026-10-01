@@ -6,11 +6,15 @@
  *
  * **タブの並びはモードで変わる。** 写真モードには背景の選択がある。
  * 家具（置く・写真から作る）と操作は両方にある。
+ *
+ * **「家具」はタブの中身ではなく、別のページを開く。** 押すと家具のページ（ui/furniturePage.ts）が
+ * 画面全体に開き、「×」で閉じると元のタブに戻る。家具を置いたときは、閉じて「操作」タブを出す
  */
 
 import { isBillboard, type PlacedFurniture } from '@/config/furniture';
 import type { EditableScene } from '@/core/furnitureScene';
 import { createModelPanel } from '@/ui/modelPanel';
+import { createFurniturePage } from '@/ui/furniturePage';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel } from '@/ui/photoPanel';
@@ -145,20 +149,30 @@ export function createBottomSheet(container: HTMLElement): void {
   /** 「家具」で置いた直後の家具。これを選んだときはタブを移さない */
   let justPlacedId: string | null = null;
 
-  // 生成は8分かかり、その間もタブを行き来できる必要がある。
+  // 生成は8分かかり、その間もページを開け閉めできる必要がある。
   // 毎回作り直すと進行表示が途切れるので、1つ作って使い回す。
-  // 置いた直後は選択状態になるが、「操作」タブへは移らない。
-  // 続けて置きたいときに、置くたびにタブが変わると邪魔になる
+  // 置いたら家具のページを閉じ、「操作」タブを出す。置いた家具がすぐ見え、向きや大きさをすぐ変えられる
   const modelPanel = createModelPanel({
     onPlaced: (id) => {
       justPlacedId = id;
+      closeFurniturePage();
+      activeTab = 'manage';
+      render();
     },
   });
+  const furniturePage = createFurniturePage(modelPanel.element, closeFurniturePage);
+  container.appendChild(furniturePage.element);
+
+  /**
+   * 家具のページを閉じる。開いていた姿（追加・3D モデルを作る・編集・高さの入力）はすべて閉じて一覧に戻す。
+   * 次に開いたとき、前の途中の姿が残らないように
+   */
+  function closeFurniturePage(): void {
+    furniturePage.close();
+    modelPanel.showHome();
+  }
   const photoPanel = createPhotoPanel();
   const interiorPanel = createInteriorPanel();
-
-  /** 直前に描いたタブ。家具タブから離れた瞬間を見分ける */
-  let shownTab: TabId | null = null;
 
   function visibleTabs(): TabId[] {
     return isPhotoMode() ? PHOTO_TABS : ROOM_TABS;
@@ -169,10 +183,6 @@ export function createBottomSheet(container: HTMLElement): void {
 
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
-
-    // 家具タブを離れたら、家具タブは一覧（ホーム）に戻しておく。次に開いたとき、前の途中の姿が残らないように
-    if (shownTab === 'models' && activeTab !== 'models') modelPanel.showHome();
-    shownTab = activeTab;
 
     // 手前の範囲の指定も大きさ合わせも「背景」タブの中で行う。タブを離れたら終える。
     // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる。**
@@ -190,6 +200,11 @@ export function createBottomSheet(container: HTMLElement): void {
         button.classList.toggle('is-active', tab === activeTab);
         button.textContent = TABS[tab];
         button.addEventListener('click', () => {
+          // 「家具」は別のページを開く。下のタブはそのまま
+          if (tab === 'models') {
+            furniturePage.open();
+            return;
+          }
           activeTab = tab;
           render();
         });
@@ -203,7 +218,6 @@ export function createBottomSheet(container: HTMLElement): void {
 
   function renderActiveTab(): HTMLElement {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
-    if (activeTab === 'models') return modelPanel.element;
     if (activeTab === 'background') return photoPanel;
     if (activeTab === 'interior') return interiorPanel;
     return renderManageTab();
