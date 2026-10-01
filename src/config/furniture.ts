@@ -68,3 +68,8 @@ export interface PlacedFurniture {
    */
   sourceImageKey?: string;
 }
+
+/** 切り抜きの板か（3D を持たず、切り抜きだけを持つ家具） */
+export function isBillboard(item: PlacedFurniture): boolean {
+  return Boolean(item.imageUrl) && !item.modelUrl;
+}
