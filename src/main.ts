@@ -99,7 +99,7 @@ viewer.scene.add(
 
 // --- 操作を繋ぐ ---
 const cameraControls = createCameraControls(viewer.canvas, viewer.camera);
-createFurnitureDrag(
+const furnitureDrag = createFurnitureDrag(
   viewer.canvas,
   viewer.camera,
   // 掴んだ時点のモードで対象を決める
@@ -113,13 +113,17 @@ createFurnitureDrag(
   () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto
 );
 
-// 選んだ家具の真上のつまみ（↕）。ドラッグすると家具がその場で上下に動く
+// 選んだ家具の真上のつまみ（上下の三角）。ドラッグすると家具がその場で上下に動く。家具そのものを動かしている間は隠す
 createLiftHandle({
   container: viewer.canvas.parentElement as HTMLElement,
   canvas: viewer.canvas,
   camera: viewer.camera,
   scene: () => (isPhotoMode() ? photoScene : roomScene),
-  isEnabled: () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto,
+  isEnabled: () =>
+    !furnitureDrag.isMoving() &&
+    !photoState.get().isMasking &&
+    !photoState.get().isScaling &&
+    !photoState.get().isFramingPhoto,
   // 部屋は床より下へは行かない。写真には床の面が無い（奥行きで置いた家具の足元は 0 とは限らない）
   lowest: () => (isPhotoMode() ? -Infinity : 0),
   onFrame: (callback) => viewer.onFrame(callback),

@@ -1703,7 +1703,7 @@ body {
 }
 
 
-/* 選んだ家具の真上のつまみ（↕）。ドラッグすると家具が上下に動く。位置は毎フレーム transform で決める */
+/* 選んだ家具の真上のつまみ（上下の三角）。ドラッグすると家具が上下に動く。位置は毎フレーム transform で決める */
 .lift-handle {
   position: absolute;
   top: 0;
@@ -1716,9 +1716,15 @@ body {
   border-radius: 50%;
   background: var(--primary);
   color: #fff;
-  font-size: 16px;
-  line-height: 1;
+  display: grid;
+  place-items: center;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   cursor: ns-resize;
   touch-action: none;
+}
+
+/* 記号は 20 の枠で描いてあり、20px で置くと 1 単位がちょうど 1 画素になる */
+.lift-handle svg {
+  width: 20px;
+  height: 20px;
 }
