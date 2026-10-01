@@ -20,7 +20,7 @@
 
 import type { PlacedFurniture } from '@/config/furniture';
 import { IS_CONFIGURED } from '@/config/api';
-import { activeScene } from '@/core/mode';
+import { activeScene, isPhotoMode } from '@/core/mode';
 import { progressFor } from '@/core/progress';
 import {
   dismissError,
@@ -225,7 +225,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     void startCutout(files, heights);
   }
 
-  // 家具を押したときに下から出すメニュー。「部屋に追加」か「編集」を選ぶ
+  // 家具を押したときに下から出すメニュー。「部屋に追加」（写真なら「背景に追加」）か「編集」を選ぶ
   const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
@@ -755,6 +755,7 @@ function syncThumbs<T extends { id: string }>(
 
 /**
  * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、「部屋に追加」「編集」を出す。
+ * 置く先の呼び名は、画面右上の切り替え（部屋 / 背景）に合わせる（写真のときは「背景に追加」）。
  *
  * **押しただけでは置かない。** 前は押すとすぐ置き、編集は右上の小さな「⋯」からだった。
  * 小さな印は狙いにくく、編集したいのに置いてしまうことがあった。下に大きなボタンを並べれば、親指で選べる。
@@ -792,7 +793,6 @@ function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(til
   const place = document.createElement('button');
   place.type = 'button';
   place.className = 'button is-block tile-actions__button';
-  place.textContent = '部屋に追加';
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'button is-quiet is-block tile-actions__button';
@@ -822,6 +822,8 @@ function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(til
       current = tile;
       name.textContent = tile.model.name;
       kind.textContent = facetLabel(tile.facet);
+      // 開くたびに、いまの置き先の呼び名にする
+      place.textContent = isPhotoMode() ? '背景に追加' : '部屋に追加';
       sheet.setAttribute('aria-label', `${tile.model.name} の${facetLabel(tile.facet)}`);
       preview.show({ cutoutKey: tile.model.imageKey, previewKey: tile.model.previewKey });
       element.hidden = false;
@@ -835,7 +837,7 @@ function facetLabel(facet: ModelFacet): string {
   return facet === 'solid' ? '3D モデル' : '2D（切り抜き）';
 }
 
-/** 家具のタイル。押すと「部屋に追加」と「編集」のメニューを開く（置くのはメニューから） */
+/** 家具のタイル。押すと「部屋に追加」（または「背景に追加」）と「編集」のメニューを開く（置くのはメニューから） */
 function createModelThumb(tile: ModelTile, open: (tile: ModelTile) => void): ThumbNode<ModelTile> {
   const thumb = createThumb(tile.model.name);
   let current = tile;
