@@ -1,11 +1,11 @@
 /**
- * 選んだ家具の真上に出す、上下に動かすつまみ（↕）。
+ * 選んだ家具の真上に出す、上下に動かすつまみ（上下の三角）。
  *
  * 家具そのものをドラッグすると床の上を動く（画面の上へ動かすと奥へ進む）。棚の上の物や壁掛けの物を
  * 持ち上げたいときは、このつまみをドラッグする。**触る場所で動き方が決まる**ので、切り替えを置かずに済む。
  *
  * つまみは画面の上の要素（キャンバスの外）なので、キャンバスの家具のドラッグやカメラ操作とは取り合わない。
- * 位置は毎フレーム、家具の上面の真ん中を画面に写して決める。
+ * 位置は毎フレーム、家具の上面の真ん中を画面に写して決める。家具そのものを動かしている間は隠す（isEnabled）。
  * 動かした分は、指で触れてから離すまでを 1 回の操作として履歴に残す（ひとつ戻す。core/editHistory.ts）。
  */
 
@@ -15,6 +15,30 @@ import { beginEdit, endEdit } from '@/core/editHistory';
 
 /** つまみを家具の上面からどれだけ上に出すか（CSS px） */
 const GAP_ABOVE = 26;
+
+/**
+ * つまみの記号: 角を丸めた上向きと下向きの三角。
+ *
+ * **20 の枠で描き、つまみの中に 20px で置く**（1 単位がちょうど 1 画素）。縁が画素の境目にそろい、にじまない。
+ * 三角の間は 4 画素（記号の高さの 4 分の 1）あける。狭いと小さく出したときに上下がくっついて見えた。
+ * 角は縁取り（1.2）を丸めて作るので、見た目の外形は 4〜16 × 2〜8 と 12〜18
+ */
+const ICON_PATH = 'M10 2.6 L15.4 7.4 H4.6 Z M4.6 12.6 H15.4 L10 17.4 Z';
+
+function createLiftIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', ICON_PATH);
+  path.setAttribute('fill', 'currentColor');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.2');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
+}
 
 export interface LiftHandleOptions {
   /** つまみを置く入れ物（キャンバスと同じ入れ物） */
@@ -36,7 +60,7 @@ export function createLiftHandle(options: LiftHandleOptions): void {
   handle.type = 'button';
   handle.className = 'lift-handle';
   handle.setAttribute('aria-label', '家具を上下に動かす');
-  handle.textContent = '↕';
+  handle.append(createLiftIcon());
   handle.hidden = true;
   container.append(handle);
 

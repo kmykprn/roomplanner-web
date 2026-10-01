@@ -65,7 +65,7 @@ export function createFurnitureDrag(
    * 隠す場所を塗っている間は、同じ 1 本指の動きを筆のほうが使う
    */
   isEnabled: () => boolean = () => true
-): () => void {
+): { dispose(): void; isMoving(): boolean } {
   const raycaster = new THREE.Raycaster();
   const pointerNdc = new THREE.Vector2();
 
@@ -102,6 +102,8 @@ export function createFurnitureDrag(
    */
   const grabNdcOffset = new THREE.Vector2();
   let pressPosition = { x: 0, y: 0 };
+  /** 掴んだ家具を、タップとみなさない距離まで動かしたか。動かしている間は上下のつまみを隠す */
+  let moving = false;
 
   /** 画面座標を -1..1 の正規化デバイス座標へ変換する */
   function toNdc(event: PointerEvent): void {
@@ -116,6 +118,7 @@ export function createFurnitureDrag(
     if (draggingTarget) endEdit(draggingTarget.scene);
     draggingId = null;
     draggingTarget = null;
+    moving = false;
     cameraControls.enabled = cameraWasEnabled;
   }
 
@@ -174,6 +177,7 @@ export function createFurnitureDrag(
     if (!event.isPrimary) return;
     if (!draggingId || !draggingTarget) return;
 
+    if (Math.hypot(event.clientX - pressPosition.x, event.clientY - pressPosition.y) >= TAP_THRESHOLD_PX) moving = true;
     toNdc(event);
     const { scene, surface } = draggingTarget;
     // 水平な面では、指から控えたずれだけ離れた画面の点（＝足元が来る点）の先を、足元の位置にする
@@ -230,10 +234,13 @@ export function createFurnitureDrag(
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
 
-  return function dispose(): void {
-    canvas.removeEventListener('pointerdown', onPointerDown);
-    canvas.removeEventListener('pointermove', onPointerMove);
-    canvas.removeEventListener('pointerup', onPointerUp);
-    canvas.removeEventListener('pointercancel', onPointerUp);
+  return {
+    dispose(): void {
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerUp);
+    },
+    isMoving: () => moving,
   };
 }
