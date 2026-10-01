@@ -32,8 +32,8 @@ type TabId = 'interior' | 'background' | 'models' | 'manage';
 /**
  * 「操作」の行に敷くバーの決まりごと。
  *
- * **値の単位は行ごとに違う。** 向きと傾きは度、床からの高さはセンチ。
- * どれも整数にしてあるのは、range が整数きざみのときにいちばん素直に動くため
+ * いま使っているのは角度の行（向き・傾き）だけで、値は度。
+ * 整数にしてあるのは、range が整数きざみのときにいちばん素直に動くため
  */
 interface ManageSlider {
   min: number;
@@ -119,8 +119,6 @@ const TABS: Record<TabId, string> = {
 const ROOM_TABS: TabId[] = ['interior', 'models', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
 
-/** 床からの高さの範囲（メートル）。写真モードには床が無いので、下にも行けるようにしてある */
-const FLOOR_OFFSET_LIMITS = { min: -2.5, max: 2.5 };
 
 /**
  * 角度のバーの範囲。**真ん中が 0°**、つまり置いたときの姿勢になる。
@@ -372,16 +370,7 @@ export function createBottomSheet(container: HTMLElement): void {
         ))
       );
     }
-    moreRows.push(
-      createManageRow('床からの高さ', {
-        min: FLOOR_OFFSET_LIMITS.min * 100,
-        max: FLOOR_OFFSET_LIMITS.max * 100,
-        ends: [`${FLOOR_OFFSET_LIMITS.min} m`, `+${FLOOR_OFFSET_LIMITS.max} m`],
-        // バーは 1cm きざみ。メートルのままだと小数の丸めでつまみが落ち着かない
-        valueOf: (item) => Math.round(item.position[1] * 100),
-        onInput: (centimetres) => setFloorOffset(id, centimetres / 100),
-      })
-    );
+    // 床からの高さは、家具の真上の上下のつまみで変える（interaction/liftHandle.ts）。バーは置かない
     moreBody.append(...moreRows.map((row) => row.element));
     // 商品ページから取り込んだ家具なら、ここから買いに行ける
     if (selected.product) {
@@ -392,7 +381,9 @@ export function createBottomSheet(container: HTMLElement): void {
     }
     more.append(summary, moreBody);
 
-    wrapper.append(head, ...rows.map((row) => row.element), more, manageFoot.element);
+    // 畳む中身が無い（切り抜きの板で、商品ページも無い）なら、「細かく調整」ごと出さない
+    const hasMore = moreBody.childElementCount > 0;
+    wrapper.append(head, ...rows.map((row) => row.element), ...(hasMore ? [more] : []), manageFoot.element);
     manageFoot.refresh();
 
     const allRows = [...rows, ...moreRows];
@@ -560,18 +551,6 @@ export function createBottomSheet(container: HTMLElement): void {
     const scene = activeScene();
     if (!scene.state().furniture.some((f) => f.id === id)) return;
     scene.update(id, patch);
-  }
-
-  /** 床からの高さを決める。下限はモードが決める（部屋なら床、写真なら無し） */
-  function setFloorOffset(id: string, y: number): void {
-    const scene = activeScene();
-    const item = scene.state().furniture.find((f) => f.id === id);
-    if (!item) return;
-
-    const [x, , z] = item.position;
-    scene.update(id, {
-      position: scene.constrain([x, y, z], item.size, item.rotationY),
-    });
   }
 
   /**

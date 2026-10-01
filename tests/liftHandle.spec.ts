@@ -40,3 +40,19 @@ test('家具を動かしている間は上下のつまみを隠し、離した�
   await page.mouse.up();
   await expect(handle).toBeVisible();
 });
+
+/** 床からの高さは上下のつまみで変える。操作タブの「細かく調整」には、高さのバーを置かない */
+test('操作タブに床からの高さのバーを出さない', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.sheet__tab').first().waitFor();
+  await page.evaluate(async () => {
+    const { activeScene } = await import('/src/core/mode.ts');
+    const scene = activeScene();
+    scene.add({ id: 'box', typeId: 'box', name: '箱', color: '#888888', size: [0.6, 0.8, 0.6], position: [0, 0, 0], rotationY: 0 });
+    scene.select('box');
+  });
+  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await page.locator('.manage__more-summary').click();
+  await expect(page.getByText('前後の傾き')).toBeVisible();
+  await expect(page.getByText('床からの高さ')).toHaveCount(0);
+});

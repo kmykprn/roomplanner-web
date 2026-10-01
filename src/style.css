@@ -1079,28 +1079,6 @@ body {
   font-size: 12px;
 }
 
-/* 利用者ID。限定公開のうち、許可リストに登録してもらうために出す。
-   常に見えている必要はないので折りたたんでおく */
-.identity {
-  font-size: 12px;
-  color: #7a8388;
-}
-
-.identity summary {
-  cursor: pointer;
-}
-
-.identity code {
-  display: block;
-  margin-top: 4px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #eceff1;
-  /* uid は28文字あるので、狭い画面でも折り返して全部見えるようにする */
-  word-break: break-all;
-  user-select: all;
-}
-
 /* 円形プログレスインジケーター。
    表しているのは「経過 ÷ 想定8分」であって本当の進捗ではない（progressRing.ts 参照） */
 .ring {
@@ -1810,6 +1788,26 @@ body {
   background: #fff center / contain no-repeat;
   background-origin: content-box;
   padding: 5px;
+}
+
+/* 名前の右の鉛筆（編集）。押しやすいよう 44px の丸にする */
+.tile-actions__edit {
+  flex: none;
+  margin-left: auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+}
+
+.tile-actions__edit svg {
+  width: 20px;
+  height: 20px;
 }
 
 .tile-actions__name {
