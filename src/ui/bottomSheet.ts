@@ -40,6 +40,8 @@ interface ManageSlider {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
+  /** 指で動かしていて、この値の近くに来たら吸い付く（置いたときの姿に戻しやすいように） */
+  snapTo: number;
   valueOf(item: PlacedFurniture): number;
   onInput(value: number): void;
 }
@@ -58,6 +60,7 @@ function angleSlider(
     min: ANGLE_LIMITS.min,
     max: ANGLE_LIMITS.max,
     ends: [`${ANGLE_LIMITS.min}°`, `+${ANGLE_LIMITS.max}°`],
+    snapTo: 0,
     valueOf: (item) => signedDegrees(radiansOf(item)),
     onInput: (degrees) => apply(toRadians(degrees)),
   };
@@ -434,6 +437,8 @@ export function createBottomSheet(container: HTMLElement): void {
       min: 0,
       max: SCALE_STEPS,
       ends: ['50%', '200%'],
+      // 真ん中（100% = 実寸）で吸い付く
+      snapTo: scaleToSlider(1),
       ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
       after: percent,
     });

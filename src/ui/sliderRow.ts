@@ -9,7 +9,16 @@
  * 画面の中の家具や板そのものが答えなので、そちらを見ていればよい。
  * ただし「大きさ」は、実寸どおり（100%）かどうかが見た目では分からないので、割合を右に出す（after）。
  * 動かせる幅だけは両端に添える（どこまで行けるかは触る前に知りたいため）。
+ *
+ * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
+ * 止めるのは難しい。つまみを指で動かしていて中心の近く（SNAP_PX 以内）に来たら、中心の値に吸い付かせる。
+ * キーボードの矢印では吸い付かせない（1 ずつ動かしたいのに中心から出られなくなるため）。
  */
+
+/** つまみの幅（px）。つまみの中心が動ける範囲は、バーの幅からこれを引いた分（style.css と同じ値） */
+const THUMB_PX = 22;
+/** 中心からこの距離（px）以内に来たら吸い付く */
+const SNAP_PX = 8;
 
 export interface SliderRowOptions {
   /** 行の左に出す見出し */
@@ -18,6 +27,8 @@ export interface SliderRowOptions {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
+  /** 指で動かしていて、この値の近くに来たら吸い付く */
+  snapTo?: number;
   /** つまみが動いたとき */
   onInput(value: number): void;
   /** つまみを離したとき（動かし終わりに 1 度だけしたいことがあれば） */
@@ -63,7 +74,26 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   input.addEventListener('pointerdown', () => {
     holding = true;
   });
-  input.addEventListener('input', () => options.onInput(Number(input.value)));
+  /** 吸い付いている間か。吸い付いた瞬間にだけ振動させる */
+  let snapped = false;
+  input.addEventListener('input', () => {
+    let value = Number(input.value);
+    const { snapTo } = options;
+    if (snapTo !== undefined && holding) {
+      // 値の差を、つまみが動く長さの上の距離（px）に直して比べる
+      const travel = input.getBoundingClientRect().width - THUMB_PX;
+      const distance = (Math.abs(value - snapTo) / (options.max - options.min)) * travel;
+      const near = distance <= SNAP_PX;
+      if (near) {
+        value = snapTo;
+        input.value = String(snapTo);
+        // 対応している端末（Android など）では軽く振動させる。iPhone のブラウザは振動に対応していない
+        if (!snapped) navigator.vibrate?.(8);
+      }
+      snapped = near;
+    }
+    options.onInput(value);
+  });
   for (const type of ['pointerup', 'pointercancel', 'blur'] as const) {
     input.addEventListener(type, () => {
       holding = false;
