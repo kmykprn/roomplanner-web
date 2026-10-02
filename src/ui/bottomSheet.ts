@@ -20,7 +20,7 @@ import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel } from '@/ui/photoPanel';
 import { createInteriorPanel } from '@/ui/interiorPanel';
 import { createIcon } from '@/ui/icons';
-import { createSliderRow } from '@/ui/sliderRow';
+import { createSliderRow, type SliderMark } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
@@ -38,8 +38,10 @@ type TabId = 'interior' | 'background' | 'models' | 'manage';
 interface ManageSlider {
   min: number;
   max: number;
-  /** バーの両端に添える文字。動かせる幅が見て分かるように */
-  ends: [from: string, to: string];
+  /** バーの下の目盛り。動かせる幅と、いまどのあたりかが見て分かるように */
+  marks: SliderMark[];
+  /** 指で動かしていて、この値の近くに来たら吸い付く（置いたときの姿に戻しやすいように） */
+  snapTo: number;
   valueOf(item: PlacedFurniture): number;
   onInput(value: number): void;
 }
@@ -57,7 +59,8 @@ function angleSlider(
   return {
     min: ANGLE_LIMITS.min,
     max: ANGLE_LIMITS.max,
-    ends: [`${ANGLE_LIMITS.min}°`, `+${ANGLE_LIMITS.max}°`],
+    marks: ANGLE_MARKS,
+    snapTo: 0,
     valueOf: (item) => signedDegrees(radiansOf(item)),
     onInput: (degrees) => apply(toRadians(degrees)),
   };
@@ -95,6 +98,13 @@ function sliderToScale(value: number): number {
   return min * (max / min) ** (value / SCALE_STEPS);
 }
 
+/** 大きさのバーの目盛り。バーは対数なので、目盛りの間隔は等しくない。真ん中の 100%（実寸）だけ目立たせる */
+const SCALE_MARKS: SliderMark[] = [0.5, 0.75, 1, 1.5, 2].map((scale) => ({
+  value: scaleToSlider(scale),
+  label: `${Math.round(scale * 100)}%`,
+  main: scale === 1,
+}));
+
 /** 置いた家具の、実寸（置いたときの大きさ）に対する割合。実寸を覚えていない古い記録は 100% とみなす */
 function scaleOf(item: PlacedFurniture): number {
   return item.baseSize && item.baseSize[1] > 0 ? item.size[1] / item.baseSize[1] : 1;
@@ -127,6 +137,15 @@ const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
  * 真ん中から左右に振れる形なら、「どちらへどれだけ動かしたか」が一目で分かる
  */
 const ANGLE_LIMITS = { min: -180, max: 180 };
+
+/**
+ * 角度のバーの目盛り。45° ごとに線、90° ごとに数字。真ん中の 0°（置いたときの姿勢）だけ目立たせる
+ */
+const ANGLE_MARKS: SliderMark[] = [-180, -135, -90, -45, 0, 45, 90, 135, 180].map((degrees) => ({
+  value: degrees,
+  label: degrees % 90 === 0 ? `${degrees > 0 ? '+' : ''}${degrees}°` : undefined,
+  main: degrees === 0,
+}));
 
 export function createBottomSheet(container: HTMLElement): void {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
@@ -433,7 +452,9 @@ export function createBottomSheet(container: HTMLElement): void {
       label: '大きさ',
       min: 0,
       max: SCALE_STEPS,
-      ends: ['50%', '200%'],
+      marks: SCALE_MARKS,
+      // 真ん中（100% = 実寸）で吸い付く
+      snapTo: scaleToSlider(1),
       ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
       after: percent,
     });
