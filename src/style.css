@@ -824,67 +824,6 @@ body {
   text-align: right;
 }
 
-/* 目盛りを付けたバーの両端の文字・右の数字・見出し。目盛りの分だけ下に場所を取るので、文字もその分上げてバーの線にそろえる */
-.slider-row__bar:has(.slider-row__track) .slider-row__end,
-.slider-row__bar:has(.slider-row__track) .slider-row__after,
-.slider-row:has(.slider-row__track) > .slider-row__label {
-  padding-bottom: 16px;
-}
-
-/* 目盛りを付けたバー。目盛りの線と数字の分だけ下に場所を取る */
-.slider-row__track {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 16px;
-}
-
-.slider-row__track .slider-row__range {
-  display: block;
-}
-
-.slider-row__marks {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 18px;
-  pointer-events: none;
-}
-
-.slider-row__tick {
-  position: absolute;
-  top: 0;
-  width: 1.5px;
-  height: 5px;
-  background: #b8c2c6;
-  transform: translateX(-50%);
-}
-
-/* 中心（向きの 0°、大きさの 100%）。ここで吸い付く */
-.slider-row__tick.is-main {
-  width: 2px;
-  height: 8px;
-  background: var(--primary);
-}
-
-.slider-row__mark-label {
-  position: absolute;
-  top: 7px;
-  font-size: 10px;
-  line-height: 1;
-  color: #7a8388;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  transform: translateX(-50%);
-}
-
-.slider-row__mark-label.is-main {
-  top: 9px;
-  color: var(--primary);
-  font-weight: 700;
-}
-
 /*
  * つまみは指で掴める大きさ（22px）にする。
  * 見た目はブラウザ既定に任せず、線もつまみも自分で描く（既定は端末ごとに差が大きい）

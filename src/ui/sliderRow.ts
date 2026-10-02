@@ -8,21 +8,12 @@
  * **いまの値の数字は原則出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
  * 画面の中の家具や板そのものが答えなので、そちらを見ていればよい。
  * ただし「大きさ」は、実寸どおり（100%）かどうかが見た目では分からないので、割合を右に出す（after）。
- * 動かせる幅は両端に添える（ends）。真ん中など目印にしたい値には、バーの下に目盛りを付ける（marks）。
+ * 動かせる幅だけは両端に添える（どこまで行けるかは触る前に知りたいため）。
  *
  * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
  * 止めるのは難しい。つまみを指で動かしていて中心の近く（SNAP_PX 以内）に来たら、中心の値に吸い付かせる。
  * キーボードの矢印では吸い付かせない（1 ずつ動かしたいのに中心から出られなくなるため）。
  */
-
-/** バーの下の目盛り 1 本 */
-export interface SliderMark {
-  value: number;
-  /** 目盛りの下に出す数字。無ければ線だけ */
-  label?: string;
-  /** 中心などの目立たせる目盛り（青く長い線と太字） */
-  main?: boolean;
-}
 
 /** つまみの幅（px）。つまみの中心が動ける範囲は、バーの幅からこれを引いた分（style.css と同じ値） */
 const THUMB_PX = 22;
@@ -35,9 +26,7 @@ export interface SliderRowOptions {
   min: number;
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
-  ends?: [from: string, to: string];
-  /** バーの下に付ける目盛り */
-  marks?: SliderMark[];
+  ends: [from: string, to: string];
   /** 指で動かしていて、この値の近くに来たら吸い付く */
   snapTo?: number;
   /** つまみが動いたとき */
@@ -116,20 +105,8 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
     input.addEventListener('change', () => onChange(Number(input.value)));
   }
 
-  // 目盛りがあれば、バーと目盛りを 1 つの枠に入れて、目盛りをバーの真下に並べる
-  let range: HTMLElement = input;
-  if (options.marks) {
-    const track = document.createElement('div');
-    track.className = 'slider-row__track';
-    track.append(input, createMarks(options.marks, options.min, options.max));
-    range = track;
-  }
-  if (options.ends) {
-    const [from, to] = options.ends;
-    bar.append(createEndLabel(from), range, createEndLabel(to));
-  } else {
-    bar.append(range);
-  }
+  const [from, to] = options.ends;
+  bar.append(createEndLabel(from), input, createEndLabel(to));
   if (options.after) bar.append(options.after);
   if (options.hideLabel) element.classList.add('slider-row--bare');
   element.append(...(options.hideLabel ? [bar] : [heading, bar]));
@@ -144,32 +121,6 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
       }
     },
   };
-}
-
-/**
- * バーの下の目盛り。つまみの中心が通る位置に合わせて置く
- * （バーの両端からつまみの半分ずつ内側。CSS の calc で、幅が変わっても合う）
- */
-function createMarks(marks: SliderMark[], min: number, max: number): HTMLElement {
-  const element = document.createElement('div');
-  element.className = 'slider-row__marks';
-  element.setAttribute('aria-hidden', 'true');
-  for (const mark of marks) {
-    const ratio = (mark.value - min) / (max - min);
-    const left = `calc(${THUMB_PX / 2}px + ${ratio} * (100% - ${THUMB_PX}px))`;
-    const tick = document.createElement('span');
-    tick.className = mark.main ? 'slider-row__tick is-main' : 'slider-row__tick';
-    tick.style.left = left;
-    element.append(tick);
-    if (mark.label) {
-      const label = document.createElement('span');
-      label.className = mark.main ? 'slider-row__mark-label is-main' : 'slider-row__mark-label';
-      label.style.left = left;
-      label.textContent = mark.label;
-      element.append(label);
-    }
-  }
-  return element;
 }
 
 function createEndLabel(text: string): HTMLElement {

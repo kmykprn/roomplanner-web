@@ -20,7 +20,7 @@ import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel } from '@/ui/photoPanel';
 import { createInteriorPanel } from '@/ui/interiorPanel';
 import { createIcon } from '@/ui/icons';
-import { createSliderRow, type SliderMark } from '@/ui/sliderRow';
+import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
@@ -40,8 +40,6 @@ interface ManageSlider {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
-  /** バーの下の目盛り。真ん中（置いたときの姿）だけに付ける */
-  marks: SliderMark[];
   /** 指で動かしていて、この値の近くに来たら吸い付く（置いたときの姿に戻しやすいように） */
   snapTo: number;
   valueOf(item: PlacedFurniture): number;
@@ -62,7 +60,6 @@ function angleSlider(
     min: ANGLE_LIMITS.min,
     max: ANGLE_LIMITS.max,
     ends: [`${ANGLE_LIMITS.min}°`, `+${ANGLE_LIMITS.max}°`],
-    marks: ANGLE_MARKS,
     snapTo: 0,
     valueOf: (item) => signedDegrees(radiansOf(item)),
     onInput: (degrees) => apply(toRadians(degrees)),
@@ -101,9 +98,6 @@ function sliderToScale(value: number): number {
   return min * (max / min) ** (value / SCALE_STEPS);
 }
 
-/** 大きさのバーの目盛り。真ん中の 100%（実寸）だけに付ける */
-const SCALE_MARKS: SliderMark[] = [{ value: scaleToSlider(1), label: '100%', main: true }];
-
 /** 置いた家具の、実寸（置いたときの大きさ）に対する割合。実寸を覚えていない古い記録は 100% とみなす */
 function scaleOf(item: PlacedFurniture): number {
   return item.baseSize && item.baseSize[1] > 0 ? item.size[1] / item.baseSize[1] : 1;
@@ -136,9 +130,6 @@ const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
  * 真ん中から左右に振れる形なら、「どちらへどれだけ動かしたか」が一目で分かる
  */
 const ANGLE_LIMITS = { min: -180, max: 180 };
-
-/** 角度のバーの目盛り。真ん中の 0°（置いたときの姿勢）だけに付ける */
-const ANGLE_MARKS: SliderMark[] = [{ value: 0, label: '0°', main: true }];
 
 export function createBottomSheet(container: HTMLElement): void {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
@@ -446,7 +437,6 @@ export function createBottomSheet(container: HTMLElement): void {
       min: 0,
       max: SCALE_STEPS,
       ends: ['50%', '200%'],
-      marks: SCALE_MARKS,
       // 真ん中（100% = 実寸）で吸い付く
       snapTo: scaleToSlider(1),
       ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
