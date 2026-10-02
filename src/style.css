@@ -824,6 +824,13 @@ body {
   text-align: right;
 }
 
+/* 目盛りを付けたバーの両端の文字・右の数字・見出し。目盛りの分だけ下に場所を取るので、文字もその分上げてバーの線にそろえる */
+.slider-row__bar:has(.slider-row__track) .slider-row__end,
+.slider-row__bar:has(.slider-row__track) .slider-row__after,
+.slider-row:has(.slider-row__track) > .slider-row__label {
+  padding-bottom: 16px;
+}
+
 /* 目盛りを付けたバー。目盛りの線と数字の分だけ下に場所を取る */
 .slider-row__track {
   position: relative;

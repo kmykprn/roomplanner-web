@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 操作タブのバーには目盛りがあり、指で動かして真ん中（向きの 0°・大きさの 100%）の近くに来ると吸い付く。
+ * 操作タブのバーの真ん中（向きの 0°・大きさの 100%）に目盛りがあり、指で動かして真ん中の近くに来ると吸い付く。
  * 真ん中から離れた所では吸い付かず、指の位置どおりの値になる
  */
 test.describe('操作タブのバーの目盛りと吸い付き', () => {
@@ -36,10 +36,10 @@ test.describe('操作タブのバーの目盛りと吸い付き', () => {
     });
   }
 
-  test('目盛りを出し、真ん中を目立たせる', async ({ page }) => {
+  test('真ん中にだけ目盛りを出し、両端に動かせる幅を出す', async ({ page }) => {
     const row = page.locator('.slider-row', { hasText: '向き' });
-    await expect(row.locator('.slider-row__tick')).toHaveCount(9);
-    await expect(row.locator('.slider-row__tick.is-main')).toHaveCount(1);
+    await expect(row.locator('.slider-row__tick')).toHaveCount(1);
+    await expect(row.locator('.slider-row__end')).toHaveText(['-180°', '+180°']);
     await expect(row.locator('.slider-row__mark-label.is-main')).toHaveText('0°');
     const scale = page.locator('.slider-row', { hasText: '大きさ' });
     await expect(scale.locator('.slider-row__mark-label.is-main')).toHaveText('100%');

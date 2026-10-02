@@ -38,7 +38,9 @@ type TabId = 'interior' | 'background' | 'models' | 'manage';
 interface ManageSlider {
   min: number;
   max: number;
-  /** バーの下の目盛り。動かせる幅と、いまどのあたりかが見て分かるように */
+  /** バーの両端に添える文字。動かせる幅が見て分かるように */
+  ends: [from: string, to: string];
+  /** バーの下の目盛り。真ん中（置いたときの姿）だけに付ける */
   marks: SliderMark[];
   /** 指で動かしていて、この値の近くに来たら吸い付く（置いたときの姿に戻しやすいように） */
   snapTo: number;
@@ -59,6 +61,7 @@ function angleSlider(
   return {
     min: ANGLE_LIMITS.min,
     max: ANGLE_LIMITS.max,
+    ends: [`${ANGLE_LIMITS.min}°`, `+${ANGLE_LIMITS.max}°`],
     marks: ANGLE_MARKS,
     snapTo: 0,
     valueOf: (item) => signedDegrees(radiansOf(item)),
@@ -98,12 +101,8 @@ function sliderToScale(value: number): number {
   return min * (max / min) ** (value / SCALE_STEPS);
 }
 
-/** 大きさのバーの目盛り。バーは対数なので、目盛りの間隔は等しくない。真ん中の 100%（実寸）だけ目立たせる */
-const SCALE_MARKS: SliderMark[] = [0.5, 0.75, 1, 1.5, 2].map((scale) => ({
-  value: scaleToSlider(scale),
-  label: `${Math.round(scale * 100)}%`,
-  main: scale === 1,
-}));
+/** 大きさのバーの目盛り。真ん中の 100%（実寸）だけに付ける */
+const SCALE_MARKS: SliderMark[] = [{ value: scaleToSlider(1), label: '100%', main: true }];
 
 /** 置いた家具の、実寸（置いたときの大きさ）に対する割合。実寸を覚えていない古い記録は 100% とみなす */
 function scaleOf(item: PlacedFurniture): number {
@@ -138,14 +137,8 @@ const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
  */
 const ANGLE_LIMITS = { min: -180, max: 180 };
 
-/**
- * 角度のバーの目盛り。45° ごとに線、90° ごとに数字。真ん中の 0°（置いたときの姿勢）だけ目立たせる
- */
-const ANGLE_MARKS: SliderMark[] = [-180, -135, -90, -45, 0, 45, 90, 135, 180].map((degrees) => ({
-  value: degrees,
-  label: degrees % 90 === 0 ? `${degrees > 0 ? '+' : ''}${degrees}°` : undefined,
-  main: degrees === 0,
-}));
+/** 角度のバーの目盛り。真ん中の 0°（置いたときの姿勢）だけに付ける */
+const ANGLE_MARKS: SliderMark[] = [{ value: 0, label: '0°', main: true }];
 
 export function createBottomSheet(container: HTMLElement): void {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
@@ -452,6 +445,7 @@ export function createBottomSheet(container: HTMLElement): void {
       label: '大きさ',
       min: 0,
       max: SCALE_STEPS,
+      ends: ['50%', '200%'],
       marks: SCALE_MARKS,
       // 真ん中（100% = 実寸）で吸い付く
       snapTo: scaleToSlider(1),

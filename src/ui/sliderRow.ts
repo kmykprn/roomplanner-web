@@ -8,7 +8,7 @@
  * **いまの値の数字は原則出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
  * 画面の中の家具や板そのものが答えなので、そちらを見ていればよい。
  * ただし「大きさ」は、実寸どおり（100%）かどうかが見た目では分からないので、割合を右に出す（after）。
- * 動かせる幅は両端に添えるか（ends）、バーの下に目盛りを付けて示す（marks）。
+ * 動かせる幅は両端に添える（ends）。真ん中など目印にしたい値には、バーの下に目盛りを付ける（marks）。
  *
  * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
  * 止めるのは難しい。つまみを指で動かしていて中心の近く（SNAP_PX 以内）に来たら、中心の値に吸い付かせる。
@@ -34,7 +34,7 @@ export interface SliderRowOptions {
   label: string;
   min: number;
   max: number;
-  /** バーの両端に添える文字。動かせる幅が見て分かるように。目盛り（marks）を付けるときは要らない */
+  /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends?: [from: string, to: string];
   /** バーの下に付ける目盛り */
   marks?: SliderMark[];
@@ -116,17 +116,19 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
     input.addEventListener('change', () => onChange(Number(input.value)));
   }
 
+  // 目盛りがあれば、バーと目盛りを 1 つの枠に入れて、目盛りをバーの真下に並べる
+  let range: HTMLElement = input;
   if (options.marks) {
-    // 目盛りはバーの真下に並べる。目盛りの数字があるので、両端の文字は付けない
     const track = document.createElement('div');
     track.className = 'slider-row__track';
     track.append(input, createMarks(options.marks, options.min, options.max));
-    bar.append(track);
-  } else if (options.ends) {
+    range = track;
+  }
+  if (options.ends) {
     const [from, to] = options.ends;
-    bar.append(createEndLabel(from), input, createEndLabel(to));
+    bar.append(createEndLabel(from), range, createEndLabel(to));
   } else {
-    bar.append(input);
+    bar.append(range);
   }
   if (options.after) bar.append(options.after);
   if (options.hideLabel) element.classList.add('slider-row--bare');
