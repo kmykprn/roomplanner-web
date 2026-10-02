@@ -35,6 +35,7 @@ import {
 } from '@/core/scaleLine';
 import {
   estimateCameraHeight,
+  findFloorPlane,
   fitDepthScale,
   levelPointAt,
   photoPointOf,
@@ -583,24 +584,28 @@ export async function measureRoom(): Promise<boolean> {
  */
 async function computeDepth(backgroundUrl: string, backgroundAspect: number, lensFocal35: number | null): Promise<void> {
   const isCurrent = (): boolean => photoState.get().backgroundUrl === backgroundUrl;
-  const [{ calibratePhoto }, { estimateDepth }] = await Promise.all([
+  const [{ calibratePhoto }, { runDepthNetwork, estimateVfov, depthFromOutput }] = await Promise.all([
     import('@/core/photoCalibModel'),
     import('@/core/depthModel'),
   ]);
 
-  // EXIF に焦点距離があれば画角はそれで決まっている。解析には傾きだけを出させる
-  const exifVfov = lensFocal35 ? vfovFromFocal35(lensFocal35, backgroundAspect) : undefined;
-  const calibration = await calibratePhoto(backgroundUrl, exifVfov);
+  // 1. 奥行きの AI を先に動かす（画角を推定するのに、その出力を使う）
+  const network = await runDepthNetwork(backgroundUrl);
   if (!isCurrent()) return;
-  // 見下ろし角はそのまま。ロールはカメラの回す向きが逆なので符号を返す
-  const floorFit = clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg });
-  keepOnPhoto(() => photoState.set({ vfovDeg: calibration.vfovDeg, floorFit }));
-
-  const depthMap = await estimateDepth(backgroundUrl, calibration.vfovDeg);
+  // 2. 画角: EXIF に焦点距離があればそれ、無ければ奥行きの AI に推定させる（傾きの AI より合う）
+  const vfovDeg = lensFocal35 ? vfovFromFocal35(lensFocal35, backgroundAspect) : estimateVfov(network);
+  // 3. 傾きの AI には、その画角を渡して見下ろし角・傾きだけを出させる。ロールはカメラの回す向きが逆なので符号を返す
+  const calibration = await calibratePhoto(backgroundUrl, vfovDeg);
   if (!isCurrent()) return;
-  // 奥行きから撮った高さを出す。寸法を合わせていなくても、家具の大きさが写真に合う
-  const cameraHeight = estimateCameraHeight(depthMap, { vfovDeg: calibration.vfovDeg, aspect: backgroundAspect }, floorFit);
-  keepOnPhoto(() => photoState.set({ depthMap, cameraHeight }));
+  const prior = clampFloorFit({ pitchDeg: calibration.pitchDeg, rollDeg: -calibration.rollDeg });
+  const depthMap = depthFromOutput(network.output, network.photoWidth, network.photoHeight, vfovDeg);
+  // 4. 床の面から、見下ろし角・傾きと撮った高さを決める。見つからない・怪しいときは、傾きの AI の値と、
+  //    奥行きの点から見積もった高さにする
+  const lens = { vfovDeg, aspect: backgroundAspect };
+  const floor = findFloorPlane(depthMap, lens, prior);
+  const floorFit = floor ? clampFloorFit(floor.fit) : prior;
+  const cameraHeight = floor ? floor.cameraHeight : estimateCameraHeight(depthMap, lens, floorFit);
+  keepOnPhoto(() => photoState.set({ vfovDeg, floorFit, depthMap, cameraHeight }));
   // 次に開いたときに計算し直さなくて済むように残す。残せなくても、いまの結果は使える
   saveDepth(depthMap).catch(() => {});
 }

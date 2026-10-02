@@ -286,3 +286,172 @@ export function estimateCameraHeight(map: DepthMap, lens: Lens, fit: FloorFit): 
   const height = lowest[Math.floor(lowest.length / 2)];
   return height >= CAMERA_HEIGHT_RANGE[0] && height <= CAMERA_HEIGHT_RANGE[1] ? height : null;
 }
+
+/** 床の面を探すときの決まり */
+const FLOOR_PLANE = {
+  /** 写真のこの高さ（縦の割合）より下の点を使う。床はたいてい写真の下のほうに写る */
+  top: 0.4,
+  /** 点を間引く間隔（奥行きの地図の画素） */
+  step: 2,
+  /** 見つける面の数の上限（床・天板・ベッドの上など） */
+  maxPlanes: 4,
+  /** 1 枚の面を探すときに試す回数 */
+  trials: 400,
+  /** 面から 3 cm 以内の点を、その面の点とみなす */
+  tolerance: 0.03,
+  /**
+   * 面の点がこの割合より少なければ、面とみなさない。小さな面は、奥行きの誤差でできた見かけの面のことがあり、
+   * 試すたびに選ばれる面が変わった（5% では、本当の床より 0.7 m 下に面ができた画像があった）
+   */
+  minShare: 0.15,
+  /** 仮の上向きと 15° 以内の面だけを、水平な面とみなす */
+  levelDeg: 15,
+  /** 選んだ床の向きが仮の上向きと 5° 以上違えば、床の面は使わない */
+  agreeDeg: 5,
+  /** 撮った高さがこれより低ければ、床の面は使わない（天板などを取り違えている） */
+  minHeight: 0.6,
+};
+
+/** 決まった並びの乱数（同じ写真なら毎回同じ床の面になるように） */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+/** 見下ろし角・傾きのときの、カメラの座標（x 右・y 上・−z 前）での上向き */
+function upInCamera(fit: FloorFit): Vec {
+  // toWorld はカメラ → 3D の回転。カメラの各軸が 3D で上（y）にどれだけ向くかが、カメラの座標での上向き
+  return [toWorld([1, 0, 0], fit)[1], toWorld([0, 1, 0], fit)[1], toWorld([0, 0, 1], fit)[1]];
+}
+
+/** 3 次の対称行列のいちばん小さい固有値の固有ベクトル（ヤコビ法）。面の向きを点の散らばりから決めるのに使う */
+function smallestEigenvector(m: number[][]): Vec {
+  const a = m.map((row) => [...row]);
+  const v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let sweep = 0; sweep < 30; sweep += 1) {
+    for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+      if (Math.abs(a[p][q]) < 1e-12) continue;
+      const theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+      const t = Math.sign(theta || 1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+      const c = 1 / Math.sqrt(t * t + 1);
+      const s = t * c;
+      for (let k = 0; k < 3; k += 1) {
+        const akp = a[k][p];
+        const akq = a[k][q];
+        a[k][p] = c * akp - s * akq;
+        a[k][q] = s * akp + c * akq;
+      }
+      for (let k = 0; k < 3; k += 1) {
+        const apk = a[p][k];
+        const aqk = a[q][k];
+        a[p][k] = c * apk - s * aqk;
+        a[q][k] = s * apk + c * aqk;
+      }
+      for (let k = 0; k < 3; k += 1) {
+        const vkp = v[k][p];
+        const vkq = v[k][q];
+        v[k][p] = c * vkp - s * vkq;
+        v[k][q] = s * vkp + c * vkq;
+      }
+    }
+  }
+  const i = [0, 1, 2].reduce((best, k) => (a[k][k] < a[best][best] ? k : best), 0);
+  return [v[0][i], v[1][i], v[2][i]];
+}
+
+/**
+ * 写真の床の面から、カメラの見下ろし角・傾きと、撮った高さを出す。見つからない・怪しいときは null。
+ *
+ * **床と天板を取り違えないように選ぶ。** 奥行きの点からほぼ水平な面を何枚か見つけ、いちばん下の面を床とする。
+ * 「水平」「下」の向きは、傾きの AI が出した見下ろし角・傾き（prior）を仮の基準にする。基準が数度ずれていても、
+ * 床と天板の高さの差（0.4〜0.7 m）の方がずっと大きいので、上下の順番は入れ替わらない。
+ * 選んだ床の向きが基準と大きく違う、または撮った高さが低すぎるときは、取り違えとみなして使わない。
+ *
+ * CG の部屋の画像 30 枚で、撮った高さの大外れ（悪い方から 1 割）が 60% から 30% に減り、
+ * 家具の置き場所の大外れも減った（取り違えを見抜かないと、天板を床にして逆に悪くなった）
+ */
+export function findFloorPlane(map: DepthMap, lens: Lens, prior: FloorFit): { fit: FloorFit; cameraHeight: number } | null {
+  const up0 = upInCamera(prior);
+  // 写真の下 6 割の点を、カメラの座標の 3D の点にする
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const zs: number[] = [];
+  for (let row = Math.floor(map.height * FLOOR_PLANE.top); row < map.height; row += FLOOR_PLANE.step) {
+    for (let column = 0; column < map.width; column += FLOOR_PLANE.step) {
+      const depth = map.data[row * map.width + column];
+      if (!Number.isFinite(depth)) continue;
+      const ray = rayOf({ x: (column + 0.5) / map.width, y: (row + 0.5) / map.height }, lens);
+      xs.push(ray[0] * depth);
+      ys.push(ray[1] * depth);
+      zs.push(ray[2] * depth);
+    }
+  }
+  const total = xs.length;
+  if (total < 300) return null;
+  const random = seededRandom(20261002);
+  const remaining = new Uint8Array(total).fill(1);
+  const cosLevel = Math.cos(toRad(FLOOR_PLANE.levelDeg));
+  const planes: { normal: Vec; center: Vec }[] = [];
+
+  for (let found = 0; found < FLOOR_PLANE.maxPlanes; found += 1) {
+    const candidates: number[] = [];
+    for (let i = 0; i < total; i += 1) if (remaining[i]) candidates.push(i);
+    if (candidates.length < 200) break;
+    const pick = (): number => candidates[Math.floor(random() * candidates.length)];
+    let best: number[] | null = null;
+    for (let trial = 0; trial < FLOOR_PLANE.trials; trial += 1) {
+      const a = pick();
+      const b = pick();
+      const c = pick();
+      const ab: Vec = [xs[b] - xs[a], ys[b] - ys[a], zs[b] - zs[a]];
+      const ac: Vec = [xs[c] - xs[a], ys[c] - ys[a], zs[c] - zs[a]];
+      let n: Vec = [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
+      const length = Math.hypot(...n);
+      if (length < 1e-9) continue;
+      n = [n[0] / length, n[1] / length, n[2] / length];
+      let facing = n[0] * up0[0] + n[1] * up0[1] + n[2] * up0[2];
+      if (facing < 0) {
+        n = [-n[0], -n[1], -n[2]];
+        facing = -facing;
+      }
+      if (facing < cosLevel) continue;
+      const offset = n[0] * xs[a] + n[1] * ys[a] + n[2] * zs[a];
+      const inliers = candidates.filter((i) => Math.abs(n[0] * xs[i] + n[1] * ys[i] + n[2] * zs[i] - offset) < FLOOR_PLANE.tolerance);
+      if (!best || inliers.length > best.length) best = inliers;
+    }
+    if (!best || best.length < FLOOR_PLANE.minShare * total) break;
+    // 面の点の中心と、点の散らばりがいちばん小さい向き（＝面の向き）
+    const center: Vec = [0, 0, 0];
+    for (const i of best) {
+      center[0] += xs[i] / best.length;
+      center[1] += ys[i] / best.length;
+      center[2] += zs[i] / best.length;
+    }
+    const cov = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (const i of best) {
+      const d = [xs[i] - center[0], ys[i] - center[1], zs[i] - center[2]];
+      for (let r = 0; r < 3; r += 1) for (let k = 0; k < 3; k += 1) cov[r][k] += d[r] * d[k];
+    }
+    let normal = smallestEigenvector(cov);
+    if (normal[0] * up0[0] + normal[1] * up0[1] + normal[2] * up0[2] < 0) normal = [-normal[0], -normal[1], -normal[2]];
+    planes.push({ normal, center });
+    for (const i of best) remaining[i] = 0;
+  }
+  if (planes.length === 0) return null;
+
+  // 仮の上向きに沿って、いちばん下にある面を床とする
+  const below = (center: Vec): number => -(center[0] * up0[0] + center[1] * up0[1] + center[2] * up0[2]);
+  const floor = planes.reduce((lowest, plane) => (below(plane.center) > below(lowest.center) ? plane : lowest));
+  const { normal, center } = floor;
+  const cameraHeight = -(normal[0] * center[0] + normal[1] * center[1] + normal[2] * center[2]);
+  const agree = (Math.acos(Math.min(1, normal[0] * up0[0] + normal[1] * up0[1] + normal[2] * up0[2])) * 180) / Math.PI;
+  if (agree > FLOOR_PLANE.agreeDeg || cameraHeight < FLOOR_PLANE.minHeight) return null;
+  // 床の向きから見下ろし角・傾き（見下ろすと上向きは +z 側に、右に傾けると +x 側に傾く。toWorld で確かめた向き）
+  return {
+    fit: { pitchDeg: (Math.asin(Math.max(-1, Math.min(1, normal[2]))) * 180) / Math.PI, rollDeg: (Math.atan2(normal[0], normal[1]) * 180) / Math.PI },
+    cameraHeight,
+  };
+}
