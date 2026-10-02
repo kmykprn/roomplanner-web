@@ -19,6 +19,7 @@ import type { RoomSize } from '@/config/room';
 import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createPhotoShadow, groundsOf } from '@/scene/photoShadow';
+import { createDepthOccluder } from '@/scene/depthOccluder';
 import { createFurnitureLayer } from '@/scene/furniture';
 import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
@@ -39,6 +40,7 @@ import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
   photoCameraHeight,
+  occluderSource,
   photoState,
   photoScene,
   setLensSource,
@@ -88,13 +90,16 @@ const roomFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnSh
 const photoFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(photoScene, id, bounds) });
 // 写真の上に落ちる影。写真モードのときだけ出す
 const photoShadow = createPhotoShadow();
+// 写真の中で家具より手前にある物の、見えない面。写真モードのときだけ出す
+const depthOccluder = createDepthOccluder();
 const lighting = createLighting(room);
 viewer.scene.add(
   roomObjects.group,
   lighting.group,
   roomFurniture.group,
   photoFurniture.group,
-  photoShadow.group
+  photoShadow.group,
+  depthOccluder.group
 );
 
 // --- 操作を繋ぐ ---
@@ -180,6 +185,7 @@ function applyMode(): void {
   // 影を受ける面は写真モードだけ。部屋モードには本物の床があり、そちらが影を受ける。
   // 部屋の主光源は写真モードでは影を落とさない（向きの違う影が 2 つ重なるため）
   photoShadow.group.visible = photo;
+  depthOccluder.group.visible = photo;
   lighting.setCastShadow(!photo);
   applyScaling();
 
@@ -279,6 +285,9 @@ function applyPhotoView(): void {
   viewer.setPhotoFov(vfovDeg);
   applyPhotoCamera(viewer.camera, floorFit, photoCameraHeight());
   viewer.setPhotoView(view);
+  // 手前の物の面は、写真を描いているカメラと同じ所から、奥行きの地図を広げる
+  depthOccluder.followCamera(viewer.camera);
+  depthOccluder.setSource(occluderSource());
 }
 
 /**

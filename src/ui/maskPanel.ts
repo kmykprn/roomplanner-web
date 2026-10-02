@@ -5,11 +5,12 @@
  * 背景の画像が家具の上にかぶさるので、後ろへ動かした家具が隠れる。
  *
  *   上の段 … 「‹ 戻る」と見出し（ui/subScreen.ts）
+ *   自動   … 写真の奥行きから手前の物を自動で見つけるかの切り替え（奥行きがあるときだけ出す）
  *   案内   … いまなにをすればいいかを、道具と進み具合に合わせて 1 文で出す（消しゴムは出さない）
  *   部品   … 道具（なぞる・点で囲む・消しゴム）と、道具ごとの設定（細い・太い、囲みを閉じる）を 1 行に
  *   下の段 … 「ひとつ戻す」「すべて消す」と「保存」
  *
- * 「戻る」は入ったときの形に戻す（core/maskEditor.ts の cancelSession）。
+ * 「戻る」は入ったときの形と切り替えに戻す（形は core/maskEditor.ts の cancelSession）。
  * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
 
@@ -18,6 +19,7 @@ import { createQuietButton, createSubScreen } from '@/ui/subScreen';
 import {
   clearMask,
   photoState,
+  setDepthOcclusion,
   setMasking,
   setMaskTool,
   type MaskToolKind,
@@ -59,16 +61,31 @@ function guideFor(kind: MaskToolKind, corners: number): { text: string; done: bo
 }
 
 export function createMaskPanel(): HTMLElement {
+  /** 入ったときの、自動で見つけるかの切り替え。「戻る」で戻す */
+  let occlusionAtStart = photoState.get().depthOcclusion;
   const screen = createSubScreen({
     title: '家具より手前に表示する範囲',
     onBack: () => {
       maskEditor.cancelSession();
+      setDepthOcclusion(occlusionAtStart);
       setMasking(false);
     },
     onDone: () => setMasking(false),
   });
   const panel = screen.element;
   panel.classList.add('mask');
+
+  // 写真の奥行きから自動で見つけるか。手で塗った範囲は、これと別に足される
+  const auto = document.createElement('label');
+  auto.className = 'mask__auto';
+  const autoInput = document.createElement('input');
+  autoInput.type = 'checkbox';
+  autoInput.id = 'mask-auto';
+  autoInput.setAttribute('role', 'switch');
+  autoInput.addEventListener('change', () => setDepthOcclusion(autoInput.checked));
+  const autoLabel = document.createElement('span');
+  autoLabel.textContent = '家具より手前にある物を、自動で見つける';
+  auto.append(autoInput, autoLabel);
 
   const guide = document.createElement('p');
 
@@ -83,7 +100,7 @@ export function createMaskPanel(): HTMLElement {
   ]);
   const closeButton = createButton('囲みを閉じる', () => maskEditor.closePolygon(), 'button is-small');
   row.append(toolSwitch.element, widthSwitch.element, closeButton);
-  screen.body.append(guide, row);
+  screen.body.append(auto, guide, row);
 
   const undoButton = createQuietButton('ひとつ戻す', () => maskEditor.undo());
   const clearButton = createQuietButton('すべて消す', clearMask);
@@ -93,12 +110,19 @@ export function createMaskPanel(): HTMLElement {
   let wasMasking = false;
 
   function render(): void {
-    const { maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking } = photoState.get();
-    if (isMasking && !wasMasking) maskEditor.beginSession();
+    const { maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking, depthOcclusion, depthMap } = photoState.get();
+    if (isMasking && !wasMasking) {
+      maskEditor.beginSession();
+      occlusionAtStart = depthOcclusion;
+    }
     wasMasking = isMasking;
     panel.hidden = !isMasking;
     // この画面へは背景の画像があるときしか入れない（タイルが画像のあるときだけ出る）ので、画像の有無は見ない
     const { kind } = maskTool;
+
+    // 奥行きをまだ計算していなければ、切り替えても何も起きないので出さない
+    auto.hidden = !depthMap;
+    autoInput.checked = depthOcclusion;
 
     const next = guideFor(kind, maskPolygon.length);
     guide.hidden = next === null;

@@ -144,6 +144,11 @@ export interface PhotoState extends FurnitureSceneState {
    * その場所だけ写真が家具の手前に出る（3D 側は何も知らない）
    */
   maskUrl: string | null;
+  /**
+   * 写真の奥行きから、家具より手前にある物を自動で見つけて手前に出すか（scene/depthOccluder.ts）。
+   * 写真を選び直しても変えない（利用者の好み）。手で塗った範囲（maskUrl）は、これと別に足される
+   */
+  depthOcclusion: boolean;
   /** 手前にある物を指定している最中か。この間は 1 本指が道具になる */
   isMasking: boolean;
   maskTool: MaskTool;
@@ -171,6 +176,7 @@ export const photoState = createStore<PhotoState>({
   isScaling: false,
   isFramingPhoto: false,
   maskUrl: null,
+  depthOcclusion: true,
   isMasking: false,
   // 太い筆を既定にする（広い面を手早く塗る用途が多い）
   maskTool: { kind: 'brush', thick: true },
@@ -305,6 +311,11 @@ export function clearBackground(): void {
 /** 隠す場所を塗っている最中かを切り替える */
 export function setMasking(isMasking: boolean): void {
   if (photoState.get().isMasking !== isMasking) photoState.set({ isMasking });
+}
+
+/** 家具より手前にある物を、写真の奥行きから自動で見つけるかを切り替える */
+export function setDepthOcclusion(depthOcclusion: boolean): void {
+  if (photoState.get().depthOcclusion !== depthOcclusion) photoState.set({ depthOcclusion });
 }
 
 /** 表示する範囲を調整する姿に入る・出る */
@@ -444,6 +455,18 @@ export function depthPointAt(point: PhotoPoint): [number, number, number] | null
   if (!depthMap || !depthScale || !lens) return null;
   if (point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return null;
   return worldPointAt(point, depthMap, depthScale, lens, currentPose());
+}
+
+/**
+ * 家具より手前にある物の面（scene/depthOccluder.ts）を作る材料。自動で見つけない・奥行きがまだ無いなら null。
+ * 寸法を合わせていれば、家具を置くときと同じ直し方を当てる。合わせていなければ奥行きをそのまま使う
+ * （撮った高さも同じ奥行きから出しているので、家具と面の大きさがそろう）
+ */
+export function occluderSource(): { map: DepthMap; scale: DepthScale; lens: Lens } | null {
+  const { depthOcclusion, depthMap, depthScale } = photoState.get();
+  const lens = depthLens();
+  if (!depthOcclusion || !depthMap || !lens) return null;
+  return { map: depthMap, scale: depthScale ?? { a: 1, b: 0 }, lens };
 }
 
 /** 置いてある家具の足元が、いま写真のどこに写っているか。家具ごと */

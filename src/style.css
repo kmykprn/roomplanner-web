@@ -351,6 +351,27 @@ body {
   align-content: start;
 }
 
+/* 写真から自動で見つけるかの切り替え。チェックの枠と文を 1 行に */
+.mask__auto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.mask__auto[hidden] {
+  display: none;
+}
+.mask__auto input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
 /* 3 行目: 道具ごとの設定。中身が入れ替わっても高さを変えない（写真が伸び縮みしないように） */
 .mask__row {
   display: flex;
