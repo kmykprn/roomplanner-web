@@ -5,9 +5,9 @@
  * **触れるバーの見た目はアプリ内で 1 つに揃える。**
  * 同じ見た目で触れるものと触れないものがあると、押しても動かない場所ができる。
  *
- * **いまの値の数字は原則出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
+ * **いまの値の数字は出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
  * 画面の中の家具や板そのものが答えなので、そちらを見ていればよい。
- * ただし「大きさ」は、実寸どおり（100%）かどうかが見た目では分からないので、割合を右に出す（after）。
+ * 置いたときの姿（向きの 0°、大きさの 100% = 実寸）は、真ん中の目印と吸い付きで分かる。
  * 動かせる幅だけは両端に添える（どこまで行けるかは触る前に知りたいため）。
  *
  * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
@@ -34,8 +34,6 @@ export interface SliderRowOptions {
   onInput(value: number): void;
   /** つまみを離したとき（動かし終わりに 1 度だけしたいことがあれば） */
   onChange?(value: number): void;
-  /** バーの右端のさらに右に置くもの（数値の欄など） */
-  after?: HTMLElement;
   /** 見出しを画面に出さない（説明の文が何のバーかを言っているとき）。読み上げには使う */
   hideLabel?: boolean;
 }
@@ -108,7 +106,6 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
 
   const [from, to] = options.ends;
   bar.append(createEndLabel(from), withSnapMark(input, options), createEndLabel(to));
-  if (options.after) bar.append(options.after);
   if (options.hideLabel) element.classList.add('slider-row--bare');
   element.append(...(options.hideLabel ? [bar] : [heading, bar]));
 

@@ -426,12 +426,10 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 「大きさ」の行。置いたこの 1 つだけを、実寸の 50%〜200% で見せる。右に今の割合を出す
+   * 「大きさ」の行。置いたこの 1 つだけを、実寸の 50%〜200% で見せる。真ん中（100%）に目印を付けて吸い付かせる
    * （バーの真ん中が 100% = 実寸。背景の写真で縮尺がずれて見えるときの調整用）
    */
   function createScaleRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const percent = document.createElement('span');
-    percent.className = 'slider-row__after manage__percent';
     const row = createSliderRow({
       label: '大きさ',
       min: 0,
@@ -440,14 +438,10 @@ export function createBottomSheet(container: HTMLElement): void {
       // 真ん中（100% = 実寸）で吸い付く
       snapTo: scaleToSlider(1),
       ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
-      after: percent,
     });
     return {
       element: row.element,
-      refresh: (item) => {
-        row.setValue(scaleToSlider(scaleOf(item)));
-        percent.textContent = `${Math.round(scaleOf(item) * 100)}%`;
-      },
+      refresh: (item) => row.setValue(scaleToSlider(scaleOf(item))),
     };
   }
 

@@ -57,4 +57,11 @@ test.describe('操作タブのバーの吸い付き', () => {
     const thumbCenter = range.x + 11 + 0.5 * (range.width - 22);
     expect(Math.abs(mark.x + mark.width / 2 - thumbCenter)).toBeLessThan(1);
   });
+
+  test('どのバーにも、いまの値の数字を出さない', async ({ page }) => {
+    // 大きさの右に出していた割合（100% など）も出さない。両端の 50% / 200% はある
+    const scale = page.locator('.slider-row', { hasText: '大きさ' });
+    await expect(scale.locator('.slider-row__end')).toHaveText(['50%', '200%']);
+    await expect(scale.getByText('100%')).toHaveCount(0);
+  });
 });
