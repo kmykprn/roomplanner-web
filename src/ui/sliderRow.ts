@@ -5,14 +5,15 @@
  * **触れるバーの見た目はアプリ内で 1 つに揃える。**
  * 同じ見た目で触れるものと触れないものがあると、押しても動かない場所ができる。
  *
- * **いまの値の数字は原則出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
+ * **いまの値の数字は出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
  * 画面の中の家具や板そのものが答えなので、そちらを見ていればよい。
- * ただし「大きさ」は、実寸どおり（100%）かどうかが見た目では分からないので、割合を右に出す（after）。
+ * 置いたときの姿（向きの 0°、大きさの 100% = 実寸）は、真ん中の目印と吸い付きで分かる。
  * 動かせる幅だけは両端に添える（どこまで行けるかは触る前に知りたいため）。
  *
  * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
  * 止めるのは難しい。つまみを指で動かしていて中心の近く（SNAP_PX 以内）に来たら、中心の値に吸い付かせる。
  * キーボードの矢印では吸い付かせない（1 ずつ動かしたいのに中心から出られなくなるため）。
+ * 吸い付く所には、線を横切る短い縦線の目印を付ける（つまみが中心に来るとつまみの下に隠れる）。
  */
 
 /** つまみの幅（px）。つまみの中心が動ける範囲は、バーの幅からこれを引いた分（style.css と同じ値） */
@@ -27,14 +28,12 @@ export interface SliderRowOptions {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
-  /** 指で動かしていて、この値の近くに来たら吸い付く */
+  /** 指で動かしていて、この値の近くに来たら吸い付く。その位置に目印も付ける */
   snapTo?: number;
   /** つまみが動いたとき */
   onInput(value: number): void;
   /** つまみを離したとき（動かし終わりに 1 度だけしたいことがあれば） */
   onChange?(value: number): void;
-  /** バーの右端のさらに右に置くもの（数値の欄など） */
-  after?: HTMLElement;
   /** 見出しを画面に出さない（説明の文が何のバーかを言っているとき）。読み上げには使う */
   hideLabel?: boolean;
 }
@@ -106,8 +105,7 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   }
 
   const [from, to] = options.ends;
-  bar.append(createEndLabel(from), input, createEndLabel(to));
-  if (options.after) bar.append(options.after);
+  bar.append(createEndLabel(from), withSnapMark(input, options), createEndLabel(to));
   if (options.hideLabel) element.classList.add('slider-row--bare');
   element.append(...(options.hideLabel ? [bar] : [heading, bar]));
 
@@ -121,6 +119,23 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
       }
     },
   };
+}
+
+/**
+ * 吸い付く所の目印を、バーに重ねる。吸い付かないバーはそのまま返す。
+ * 目印は、つまみの中心が通る位置（両端からつまみの半分ずつ内側）に置く。CSS の calc なので、幅が変わっても合う
+ */
+function withSnapMark(input: HTMLInputElement, options: SliderRowOptions): HTMLElement {
+  if (options.snapTo === undefined) return input;
+  const track = document.createElement('div');
+  track.className = 'slider-row__track';
+  const mark = document.createElement('span');
+  mark.className = 'slider-row__center';
+  mark.setAttribute('aria-hidden', 'true');
+  const ratio = (options.snapTo - options.min) / (options.max - options.min);
+  mark.style.left = `calc(${THUMB_PX / 2}px + ${ratio} * (100% - ${THUMB_PX}px))`;
+  track.append(mark, input);
+  return track;
 }
 
 function createEndLabel(text: string): HTMLElement {

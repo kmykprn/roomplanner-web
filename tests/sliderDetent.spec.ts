@@ -44,4 +44,24 @@ test.describe('操作タブのバーの吸い付き', () => {
     const degrees = await dragRotationTo(page, 30);
     expect(Math.abs(degrees - 30)).toBeLessThanOrEqual(2);
   });
+
+  test('吸い付く所に目印を出し、つまみが真ん中に来ると目印に重なる', async ({ page }) => {
+    for (const label of ['向き', '大きさ']) {
+      await expect(page.locator('.slider-row', { hasText: label }).locator('.slider-row__center')).toHaveCount(1);
+    }
+    // 向きを 0° にしたとき、つまみの真ん中と目印の真ん中が同じ位置に来る
+    expect(await dragRotationTo(page, 2)).toBe(0);
+    const row = page.locator('.slider-row', { hasText: '向き' });
+    const mark = (await row.locator('.slider-row__center').boundingBox())!;
+    const range = (await row.locator('input[type=range]').boundingBox())!;
+    const thumbCenter = range.x + 11 + 0.5 * (range.width - 22);
+    expect(Math.abs(mark.x + mark.width / 2 - thumbCenter)).toBeLessThan(1);
+  });
+
+  test('どのバーにも、いまの値の数字を出さない', async ({ page }) => {
+    // 大きさの右に出していた割合（100% など）も出さない。両端の 50% / 200% はある
+    const scale = page.locator('.slider-row', { hasText: '大きさ' });
+    await expect(scale.locator('.slider-row__end')).toHaveText(['50%', '200%']);
+    await expect(scale.getByText('100%')).toHaveCount(0);
+  });
 });
