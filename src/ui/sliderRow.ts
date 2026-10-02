@@ -13,6 +13,7 @@
  * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
  * 止めるのは難しい。つまみを指で動かしていて中心の近く（SNAP_PX 以内）に来たら、中心の値に吸い付かせる。
  * キーボードの矢印では吸い付かせない（1 ずつ動かしたいのに中心から出られなくなるため）。
+ * 吸い付く所には、線を横切る短い縦線の目印を付ける（つまみが中心に来るとつまみの下に隠れる）。
  */
 
 /** つまみの幅（px）。つまみの中心が動ける範囲は、バーの幅からこれを引いた分（style.css と同じ値） */
@@ -27,7 +28,7 @@ export interface SliderRowOptions {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
-  /** 指で動かしていて、この値の近くに来たら吸い付く */
+  /** 指で動かしていて、この値の近くに来たら吸い付く。その位置に目印も付ける */
   snapTo?: number;
   /** つまみが動いたとき */
   onInput(value: number): void;
@@ -106,7 +107,7 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   }
 
   const [from, to] = options.ends;
-  bar.append(createEndLabel(from), input, createEndLabel(to));
+  bar.append(createEndLabel(from), withSnapMark(input, options), createEndLabel(to));
   if (options.after) bar.append(options.after);
   if (options.hideLabel) element.classList.add('slider-row--bare');
   element.append(...(options.hideLabel ? [bar] : [heading, bar]));
@@ -121,6 +122,23 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
       }
     },
   };
+}
+
+/**
+ * 吸い付く所の目印を、バーに重ねる。吸い付かないバーはそのまま返す。
+ * 目印は、つまみの中心が通る位置（両端からつまみの半分ずつ内側）に置く。CSS の calc なので、幅が変わっても合う
+ */
+function withSnapMark(input: HTMLInputElement, options: SliderRowOptions): HTMLElement {
+  if (options.snapTo === undefined) return input;
+  const track = document.createElement('div');
+  track.className = 'slider-row__track';
+  const mark = document.createElement('span');
+  mark.className = 'slider-row__center';
+  mark.setAttribute('aria-hidden', 'true');
+  const ratio = (options.snapTo - options.min) / (options.max - options.min);
+  mark.style.left = `calc(${THUMB_PX / 2}px + ${ratio} * (100% - ${THUMB_PX}px))`;
+  track.append(mark, input);
+  return track;
 }
 
 function createEndLabel(text: string): HTMLElement {

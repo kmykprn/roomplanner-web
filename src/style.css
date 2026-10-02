@@ -824,6 +824,31 @@ body {
   text-align: right;
 }
 
+/* 吸い付く所の目印を重ねたバー */
+.slider-row__track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.slider-row__track .slider-row__range {
+  display: block;
+  position: relative;
+}
+
+/* 吸い付く所（向きの 0°、大きさの 100%）の目印。線を横切る短い縦線。つまみが来ると、つまみの下に隠れる */
+.slider-row__center {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 1px;
+  background: #8f9aa0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
 /*
  * つまみは指で掴める大きさ（22px）にする。
  * 見た目はブラウザ既定に任せず、線もつまみも自分で描く（既定は端末ごとに差が大きい）
