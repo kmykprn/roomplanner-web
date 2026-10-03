@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と［✎ 編集］のメニューが出る。
+ * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と、見出しの右に［✎ 編集］のメニューが出る。
  * 追加で置くとページを閉じて「操作」タブを出し、「×」で閉じると元のタブに戻る
  */
 test.describe('家具のページ', () => {
@@ -28,12 +28,12 @@ test.describe('家具のページ', () => {
   test('家具を押すとメニューが出て、まだ置かれない。外側を押すと閉じる', async ({ page }) => {
     await openFirstModel(page);
     await expect(page.locator('.tile-actions__button', { hasText: '背景に追加' })).toBeVisible();
-    // 下の段に、文字の付いた［編集］と［背景に追加］が並ぶ
+    // 主な操作は［背景に追加］1 つ。文字の付いた［編集］は見出しの右にあり、［背景に追加］より上
     await expect(page.locator('.tile-actions__button')).toHaveCount(1);
     await expect(page.getByRole('button', { name: '編集' })).toHaveText('編集');
     const edit = (await page.getByRole('button', { name: '編集' }).boundingBox())!;
     const place = (await page.locator('.tile-actions__button').boundingBox())!;
-    expect(Math.abs(edit.y - place.y)).toBeLessThan(2);
+    expect(edit.y + edit.height).toBeLessThan(place.y);
     expect(place.width).toBeGreaterThan(edit.width);
     const placed = await page.evaluate(async () => (await import('/src/core/mode.ts')).activeScene().state().furniture.length);
     expect(placed).toBe(0);

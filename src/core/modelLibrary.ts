@@ -260,30 +260,8 @@ export function removeModel(id: string): void {
   void releaseAssets(model);
 }
 
-/** 家具の片面。2D（切り抜き）と 3D モデルは、一覧では別々のタイルとして並ぶ */
+/** 家具の形。2D（切り抜き）と 3D モデル。1 つの家具が両方を持つことがある（一覧では 1 枚のタイル） */
 export type ModelFacet = 'flat' | 'solid';
-
-/**
- * 2D か 3D を、片方だけ消す。
- *
- * **記録は 1 件のまま 2 つの面を持っている。** 片方を消すときは、そのキーだけ外して
- * 記録は残す（残った面のタイルが消えてしまわないように）。両方無くなるなら記録ごと消す。
- * 置いてある家具はここでは触らない（画面からは消えない）
- */
-export function removeModelFacet(id: string, facet: ModelFacet): void {
-  const model = modelLibrary.get().models.find((item) => item.id === id);
-  if (!model) return;
-  const other = facet === 'flat' ? model.modelKey : model.imageKey;
-  if (other === null) {
-    removeModel(id);
-    return;
-  }
-  const dropped = facet === 'flat' ? { imageKey: model.imageKey } : { modelKey: model.modelKey };
-  setModels(
-    modelLibrary.get().models.map((item) => (item.id === id ? { ...item, ...(facet === 'flat' ? { imageKey: null } : { modelKey: null }) } : item))
-  );
-  void releaseAssets(dropped);
-}
 
 /**
  * 置いた生成家具を消したあとに呼ぶ。

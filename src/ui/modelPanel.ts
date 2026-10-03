@@ -1,5 +1,5 @@
 /**
- * 「家具」タブ。置ける家具をタイルの格子に並べ、押すといまのモード（部屋／写真）に置く。
+ * 家具のページ。置ける家具をタイルの格子に並べ、押すと出るメニューから、いまのモード（部屋／写真）に置く。
  *
  *   格子の先頭 … 「＋ 追加」。押すと一覧と入れ替わりに「家具を追加」の姿が出る。
  *                入口は 2 つで、2D（切り抜き）を作る（数秒）／3D モデルを作る（数分）。
@@ -7,12 +7,14 @@
  *                3D は 2D から作るので、作る前に元の 2D を選ばせる
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
- *                押すと出るメニューの［編集］で、編集の姿（アイコン・名前・サイズ・削除）に切り替わる。
+ *                押すと出るメニュー（createTileActions）で、置く形（2D / 3D）を選んで置く。
+ *                メニューの［✎ 編集］で、編集の姿（アイコン・名前・サイズ・3D の作成・削除）に切り替わる。
  *
- * 格子の上の「すべて / 2D / 3D」で絞れる。最初から入っている椅子・ソファ（サンプル）も作った家具と同じ扱い。2D は切り抜きの板、3D は向きを変えられるモデル。
+ * 最初から入っている椅子・ソファ（サンプル）も作った家具と同じ扱い。2D は切り抜きの板、3D は向きを変えられるモデル。
  *
- * **2D と 3D は別々のタイルとして並ぶ。** 同じ家具でも 2 つ出るので、それぞれ選んで
- * 編集・削除する。どちらを触っているのかが分かるよう、左上に 2D / 3D の印を付ける。
+ * **1 つの家具は、2D と 3D を両方持っていても 1 枚のタイルにする。** アイコン・名前・大きさは 2D と 3D で同じなので、
+ * 別々に並べると同じ家具が 2 回出て、一覧が散らかり、目当ての家具も探しにくくなる（通販の一覧の色違いと同じ考え方）。
+ * 3D も持つ家具にだけ、タイルの右下に小さな立方体の印を付ける（2D はほぼすべての家具が持っているので印は付けない）。
  *
  * 3D 生成は約 3 分かかるので、**待たせる画面ではなく、待たせない画面**にする。
  * ここは進み具合を映すだけで、進行そのものは core/generation.ts と core/cutout.ts が持っている。
@@ -39,7 +41,7 @@ import { createProductLink } from '@/ui/productLink';
 import {
   PLACEHOLDER_COLOR,
   modelLibrary,
-  removeModelFacet,
+  removeModel,
   renamePlacedCopies,
   updateModel,
   type GeneratedModel,
@@ -56,32 +58,15 @@ import { createIcon, type IconName } from '@/ui/icons';
 import { createLoginPanel } from '@/ui/loginPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProgressRing } from '@/ui/progressRing';
+import { createFurniturePreview } from '@/ui/furniturePreview';
 
 export interface ModelPanelOptions {
   /** モデルを置いた直後に呼ぶ。タブの移動を抑える判断に使う */
   onPlaced(id: string): void;
 }
 
-/** 格子の絞り込み */
-/**
- * 格子の絞り込み。作ったものは「できたものが何か」で分ける。
- * 2D は写真や商品ページから切り抜いた板（正面からしか見えない）、3D は向きを変えて置けるモデル
- */
-type Filter = 'all' | 'flat' | 'solid';
-const FILTERS: Record<Filter, string> = { all: 'すべて', flat: '2D', solid: '3D' };
-
 /** 家具の作り方。「家具を追加」の 2 行 */
 type Way = 'cutout' | 'model';
-
-/**
- * 一覧に並べる 1 タイル。**同じ家具でも 2D と 3D で別のタイル**になるので、
- * どちらの面を指しているかを持つ。id はタイルを使い回すための鍵
- */
-interface ModelTile {
-  id: string;
-  model: GeneratedModel;
-  facet: ModelFacet;
-}
 
 /** 失敗した作成（切り抜きも 3D も同じ姿）。タイルにするための共通の形 */
 interface FailedItem {
@@ -99,25 +84,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   const normal = document.createElement('div');
   normal.className = 'lib__normal';
 
-  let filter: Filter = 'all';
-  const filterBar = document.createElement('div');
-  filterBar.className = 'seg';
-  filterBar.setAttribute('role', 'group');
-  filterBar.setAttribute('aria-label', '家具の絞り込み');
-  const filterButtons = new Map<Filter, HTMLButtonElement>();
-  for (const [value, label] of Object.entries(FILTERS) as [Filter, string][]) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'seg__item';
-    button.textContent = label;
-    button.addEventListener('click', () => {
-      filter = value;
-      render();
-    });
-    filterButtons.set(value, button);
-    filterBar.append(button);
-  }
-
   const grid = document.createElement('div');
   grid.className = 'tiles';
 
@@ -127,15 +93,9 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   failureDetail.hidden = true;
   let openFailureId: string | null = null;
 
-  normal.append(filterBar, grid, failureDetail);
+  normal.append(grid, failureDetail);
 
   // --- 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る ---
-  /** 作り始めたものが絞り込みで隠れないように、「すべて」に戻す */
-  function showAll(): void {
-    filter = 'all';
-    render();
-  }
-
   const chooser = createChooser({
     cutout: () => void pickAndStart(),
     model: () => {
@@ -166,7 +126,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     normal.hidden = false;
     if (!heights) return;
     void startCutout(files, heights);
-    showAll();
   }
 
   /** 切り抜く前に実際の高さを聞く姿。作り方を選ぶ姿と入れ替わりに出る */
@@ -186,7 +145,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
         return;
       }
       void startGenerationForModel(model);
-      showAll();
       editor.close();
     },
   });
@@ -202,7 +160,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
         return;
       }
       void startGenerationForModel(model);
-      showAll();
       maker.close();
     },
     onAddFlat: () => void pickAndStartFromMaker(),
@@ -225,7 +182,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     void startCutout(files, heights);
   }
 
-  // 家具を押したときに下から出すメニュー。「部屋に追加」（写真なら「背景に追加」）と、名前の右の鉛筆で編集
+  // 家具を押したときに下から出すメニュー。大きな見本・置く形（2D / 3D）・「部屋に追加」（写真なら「背景に追加」）、見出しの右に［✎ 編集］
   const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
@@ -241,9 +198,9 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     maker.open();
   }
 
-  function openEditor(tile: ModelTile): void {
+  function openEditor(model: GeneratedModel): void {
     normal.hidden = true;
-    editor.open(tile.model, tile.facet);
+    editor.open(model);
   }
 
   /** 押したモデルをいまのモードの空いている場所に置く。置いた直後は選択状態にする */
@@ -265,8 +222,8 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     scene.select(id);
   }
 
-  /** 押したタイルを置く。2D のタイルからは板を、3D のタイルからはモデルを置く */
-  function placeGenerated({ model, facet }: ModelTile): void {
+  /** 家具を、メニューで選んだ形で置く。2D なら切り抜きの板を、3D ならモデルを置く */
+  function placeGenerated(model: GeneratedModel, facet: ModelFacet): void {
     place({
       typeId: 'generated',
       name: model.name,
@@ -290,44 +247,34 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     const { jobs } = generationState.get();
     const { models } = modelLibrary.get();
 
-    for (const [value, button] of filterButtons) {
-      button.setAttribute('aria-pressed', String(value === filter));
-    }
-
     // 並び: ＋、切り抜き中（数秒で終わる）、3D の作成中、失敗、できあがったものを新しい順、基本の家具。
     //
     // **タイルは作り直さず、id で使い回す。** 作成中は状態更新のたびにここが呼ばれる。
     // 毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの一覧が
     // ちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
-    const showFlat = filter === 'all' || filter === 'flat';
-    const showSolid = filter === 'all' || filter === 'solid';
     const cutouts = cutoutState.get().jobs;
-    const running = showSolid ? jobs.filter((job) => job.phase !== 'failed') : [];
-    const cutting = showFlat ? cutouts.filter((job) => job.phase !== 'failed') : [];
+    const running = jobs.filter((job) => job.phase !== 'failed');
+    const cutting = cutouts.filter((job) => job.phase !== 'failed');
     const failures: FailedItem[] = [
-      ...(showFlat ? cutouts : [])
+      ...cutouts
         .filter((job) => job.phase === 'failed')
         .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissCutoutError(job.id) })),
-      ...(showSolid ? jobs : [])
+      ...jobs
         .filter((job) => job.phase === 'failed')
         .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissError(job.id) })),
     ];
-    // 1 件の記録が 2D と 3D の両方を持つことがある。その場合はタイルを 2 つ並べる
-    const shown: ModelTile[] = [];
-    for (const model of [...models].reverse()) {
-      if (showFlat && model.imageKey) shown.push({ id: `${model.id}:flat`, model, facet: 'flat' });
-      if (showSolid && model.modelKey) shown.push({ id: `${model.id}:solid`, model, facet: 'solid' });
-    }
+    // 2D と 3D を両方持つ家具も 1 枚。新しい順
+    const shown = [...models].reverse();
 
     const ordered: HTMLElement[] = [];
     ordered.push(addTile);
     ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
-    ordered.push(...syncThumbs(modelNodes, shown, (tile) => createModelThumb(tile, tileActions.open)));
+    ordered.push(...syncThumbs(modelNodes, shown, (model) => createModelThumb(model, tileActions.open)));
     grid.replaceChildren(...ordered);
 
-    // 押した失敗がまだあれば理由を出す。とじる・絞り込みで見えなくなったら畳む
+    // 押した失敗がまだあれば理由を出す。とじるで見えなくなったら畳む
     const opened = failures.find((item) => item.id === openFailureId);
     failureDetail.hidden = !opened;
     if (opened) failureDetail.replaceChildren(...failureDetailContent(opened));
@@ -339,7 +286,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   const cutoutNodes = new Map<string, ThumbNode<CutoutJob>>();
   const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
   const failedNodes = new Map<string, ThumbNode<FailedItem>>();
-  const modelNodes = new Map<string, ThumbNode<ModelTile>>();
+  const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
   const addTile = createAddTile(openChooser);
 
   render();
@@ -756,17 +703,26 @@ function syncThumbs<T extends { id: string }>(
 }
 
 /**
- * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、［✎ 編集］と［部屋に追加］を出す。
- * よく使う「追加」を大きく、「編集」を控えめにして並べる。前は名前の右の鉛筆だけで、文字が無く、編集だと気づきにくかった。
- * 置く先の呼び名は、画面右上の切り替え（部屋 / 背景）に合わせる（写真のときは「背景に追加」）。
+ * 家具のタイルを押したときに、画面の下から出すメニュー。
  *
- * **押しただけでは置かない。** 前は押すとすぐ置き、編集は右上の小さな「⋯」からだった。
- * 小さな印は狙いにくく、編集したいのに置いてしまうことがあった。下に大きなボタンを並べれば、親指で選べる。
+ *   見出し   … 家具の名前と、右に控えめな［✎ 編集］
+ *   見本     … 大きな見本（ui/furniturePreview.ts）。3D はゆっくり回り、2D は上下にゆっくり揺れる
+ *   置く形   … 2D と 3D を両方持つ家具だけ、見本の付いた 2 つの選択肢を出す。最初は 3D。選ぶと見本も切り替わる
+ *              2D だけの家具には、代わりに「3D モデルを作る」を出す（押すと編集の姿の、3D を作る欄へ）
+ *   追加     … 親指で押しやすい大きな［部屋に追加］（写真のときは［背景に追加］）。主な操作はこれ 1 つ
+ *
+ * 選択肢を文字だけの切り替えにしないのは、どちらを選ぶと何が置かれるのかが見て分からないため。
+ * 選んだ形の姿を大きな見本で見せる（通販の色違いの選び方と同じ考え方）。
+ *
+ * **押しただけでは置かない。** 編集したいのに置いてしまわないよう、メニューの［追加］で置く。
  * 外側（暗くした所）を押すと閉じる
  */
-function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(tile: ModelTile): void }): {
+function createTileActions(actions: {
+  onPlace(model: GeneratedModel, facet: ModelFacet): void;
+  onEdit(model: GeneratedModel): void;
+}): {
   element: HTMLElement;
-  open(tile: ModelTile): void;
+  open(model: GeneratedModel): void;
   close(): void;
 } {
   const element = document.createElement('div');
@@ -782,68 +738,132 @@ function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(til
 
   const head = document.createElement('div');
   head.className = 'tile-actions__head';
-  const image = document.createElement('span');
-  image.className = 'tile-actions__img';
-  const preview = createPreviewImage(image);
-  const text = document.createElement('div');
   const name = document.createElement('div');
   name.className = 'tile-actions__name';
-  const kind = document.createElement('div');
-  kind.className = 'tile-actions__kind';
-  text.append(name, kind);
-  head.append(image, text);
-
-  // 下の段: 控えめな［✎ 編集］と、大きな［部屋に追加］（写真のときは［背景に追加］）
-  const buttons = document.createElement('div');
-  buttons.className = 'tile-actions__buttons';
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'tile-actions__edit';
   const editLabel = document.createElement('span');
   editLabel.textContent = '編集';
   edit.append(createPencilIcon(), editLabel);
+  head.append(name, edit);
+
+  const preview = createFurniturePreview();
+
+  // 置く形の選択肢。見本の画像と「2D 切り抜き」「3D 立体」
+  const options = document.createElement('div');
+  options.className = 'tile-actions__options';
+  options.setAttribute('role', 'group');
+  options.setAttribute('aria-label', '置く形');
+  const flatOption = createFacetOption('2D', '切り抜き', false);
+  const solidOption = createFacetOption('3D', '立体', true);
+  options.append(flatOption.button, solidOption.button);
+
+  // 2D だけの家具に出す。押すと編集の姿の、3D を作る欄へ（回数を使うので、ここでは作り始めない）
+  const makeModel = document.createElement('button');
+  makeModel.type = 'button';
+  makeModel.className = 'tile-actions__make';
+  const makeLabel = document.createElement('span');
+  makeLabel.textContent = '3D モデルを作る';
+  makeModel.append(createIcon('cube'), makeLabel);
+
   const place = document.createElement('button');
   place.type = 'button';
   place.className = 'button tile-actions__button';
-  buttons.append(edit, place);
 
-  sheet.append(head, buttons);
+  sheet.append(head, preview.element, options, makeModel, place);
   element.append(dim, sheet);
 
-  let current: ModelTile | null = null;
+  let current: GeneratedModel | null = null;
+  let facet: ModelFacet = 'solid';
+
+  /** 置く形を選ぶ。選択肢と見本を合わせて変える */
+  function choose(next: ModelFacet): void {
+    if (!current) return;
+    facet = next;
+    flatOption.setPressed(next === 'flat');
+    solidOption.setPressed(next === 'solid');
+    preview.show(current, next);
+  }
+
   function close(): void {
     element.hidden = true;
     current = null;
+    preview.stop();
   }
   /** 閉じてから選んだことをする（置く・編集を開く）。先に閉じないと、編集の姿の上にメニューが残る */
-  function choose(action: (tile: ModelTile) => void): void {
-    const tile = current;
+  function closeThen(action: (model: GeneratedModel) => void): void {
+    const model = current;
     close();
-    if (tile) action(tile);
+    if (model) action(model);
   }
   dim.addEventListener('click', close);
-  place.addEventListener('click', () => choose(actions.onPlace));
-  edit.addEventListener('click', () => choose(actions.onEdit));
+  flatOption.button.addEventListener('click', () => choose('flat'));
+  solidOption.button.addEventListener('click', () => choose('solid'));
+  place.addEventListener('click', () => {
+    const chosen = facet;
+    closeThen((model) => actions.onPlace(model, chosen));
+  });
+  edit.addEventListener('click', () => closeThen(actions.onEdit));
+  makeModel.addEventListener('click', () => closeThen(actions.onEdit));
 
   return {
     element,
-    open(tile) {
-      current = tile;
-      name.textContent = tile.model.name;
-      kind.textContent = facetLabel(tile.facet);
+    open(model) {
+      current = model;
+      name.textContent = model.name;
+      sheet.setAttribute('aria-label', model.name);
       // 開くたびに、いまの置き先の呼び名にする
       place.textContent = isPhotoMode() ? '背景に追加' : '部屋に追加';
-      sheet.setAttribute('aria-label', `${tile.model.name} の${facetLabel(tile.facet)}`);
-      preview.show({ cutoutKey: tile.model.imageKey, previewKey: tile.model.previewKey });
+      const hasFlat = model.imageKey !== null;
+      const hasSolid = model.modelKey !== null;
+      // 選ぶものがあるときだけ選択肢を出す。片方しか無ければ、その形で置く
+      options.hidden = !(hasFlat && hasSolid);
+      makeModel.hidden = hasSolid;
+      flatOption.showIcon(model);
+      solidOption.showIcon(model);
       element.hidden = false;
+      choose(hasSolid ? 'solid' : 'flat');
     },
     close,
   };
 }
 
-/** タイルの種類の呼び名。メニューと読み上げで使う */
-function facetLabel(facet: ModelFacet): string {
-  return facet === 'solid' ? '3D モデル' : '2D（切り抜き）';
+/** 置く形の選択肢 1 つ。小さな見本と、形の名前・ひとこと */
+function createFacetOption(
+  label: string,
+  note: string,
+  solid: boolean
+): { button: HTMLButtonElement; setPressed(pressed: boolean): void; showIcon(model: GeneratedModel): void } {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'facet-option';
+  const mini = document.createElement('span');
+  mini.className = 'facet-option__mini';
+  const icon = createPreviewImage(mini);
+  // 3D の小さな見本は 2D と同じ画像なので、一覧のタイルと同じ立方体の印で見分ける
+  if (solid) mini.append(createSolidMark());
+  const text = document.createElement('span');
+  const title = document.createElement('b');
+  title.textContent = label;
+  const small = document.createElement('small');
+  small.textContent = note;
+  text.append(title, small);
+  button.append(mini, text);
+  return {
+    button,
+    setPressed: (pressed) => button.setAttribute('aria-pressed', String(pressed)),
+    showIcon: (model) => icon.show({ cutoutKey: model.imageKey, previewKey: model.previewKey }),
+  };
+}
+
+/** 3D も持つ家具の印。タイルの右下の、白い丸の中の小さな立方体 */
+function createSolidMark(): HTMLElement {
+  const mark = document.createElement('span');
+  mark.className = 'solid-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.append(createIcon('cube'));
+  return mark;
 }
 
 /** 鉛筆の記号（編集）。線の太さと端の丸みを、ほかの線のアイコンにそろえる */
@@ -863,34 +883,35 @@ function createPencilIcon(): SVGSVGElement {
   return svg;
 }
 
-/** 家具のタイル。押すと「部屋に追加」（または「背景に追加」）と編集のメニューを開く（置くのはメニューから） */
-function createModelThumb(tile: ModelTile, open: (tile: ModelTile) => void): ThumbNode<ModelTile> {
-  const thumb = createThumb(tile.model.name);
-  let current = tile;
+/** 家具のタイル。押すとメニューを開く（置くのはメニューから）。3D も持つなら右下に立方体の印 */
+function createModelThumb(model: GeneratedModel, open: (model: GeneratedModel) => void): ThumbNode<GeneratedModel> {
+  const thumb = createThumb(model.name);
+  let current = model;
   thumb.button.addEventListener('click', () => open(current));
   const preview = createPreviewImage(thumb.image);
-  // アイコンは 2D と 3D で同じものを使うので、左上の印だけが見分けになる
-  thumb.image.append(createTag(tile.facet === 'solid' ? '3D' : '2D'));
+  const solidMark = createSolidMark();
+  thumb.image.append(solidMark);
 
-  function update(next: ModelTile): void {
+  function update(next: GeneratedModel): void {
     current = next;
-    thumb.name.textContent = next.model.name;
-    thumb.button.setAttribute('aria-label', `${next.model.name} の${facetLabel(next.facet)}`);
-    preview.show({ cutoutKey: next.model.imageKey, previewKey: next.model.previewKey });
+    thumb.name.textContent = next.name;
+    solidMark.hidden = next.modelKey === null;
+    thumb.button.setAttribute('aria-label', next.modelKey ? `${next.name}（3D あり）` : next.name);
+    preview.show({ cutoutKey: next.imageKey, previewKey: next.previewKey });
   }
-  update(tile);
+  update(model);
   return { element: thumb.element, update, dispose: preview.dispose };
 }
 
 /**
- * 作った家具の編集の姿。名前とサイズを変え、削除もここから。いちばん上にアイコンを出す。
+ * 作った家具の編集の姿。名前とサイズを変え、3D がまだ無ければ作り、削除もここから。いちばん上にアイコンを出す。
  *
- * **2D と 3D は別々に開く。** 開いている面だけが消せる（2D を消しても 3D は残る）ので、
- * 見出しも削除の文言も、いまどちらを触っているかを名指しする。
+ * **2D と 3D をまとめて 1 つの家具として編集する。** アイコン・名前・大きさは 2D と 3D で同じ。
+ * 削除も家具ごと（2D と 3D の両方）消す。一覧でも 1 枚のタイルなので、片方だけ消す操作は置かない。
  *
  * 削除は「この…を完全に削除」→ 確認 → 「削除する」の二段階。確認にはアイコンも出し、
  * 同じ名前の家具があっても取り違えないようにする。
- * 一覧から外すだけで、置いてある家具はそのまま残る（removeModelFacet の挙動）
+ * 一覧から外すだけで、置いてある家具はそのまま残る（removeModel の挙動）
  */
 interface ModelEditorActions {
   onClose(): void;
@@ -898,19 +919,19 @@ interface ModelEditorActions {
   onMakeModel(model: GeneratedModel): void;
 }
 
-/** 面ごとの呼び名。見出し・ボタン・確認で同じ言い方を使う */
-const FACET_NAME: Record<ModelFacet, string> = { flat: '2D（切り抜き）', solid: '3D モデル' };
-
 function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   element: HTMLElement;
-  open(model: GeneratedModel, facet: ModelFacet): void;
+  open(model: GeneratedModel): void;
   close(): void;
 } {
   const element = document.createElement('div');
   element.className = 'lib__edit';
   element.hidden = true;
   let current: GeneratedModel | null = null;
-  /** いま開いている面。削除の対象もこれ */
+  /**
+   * サイズの欄に出す形。3D があれば 3D の形（奥行きも出す）、無ければ 2D の形。
+   * 高さは 2D と 3D で同じ値を使うので、どちらの形で出しても保存される高さは同じ
+   */
   let facet: ModelFacet = 'flat';
 
   const head = document.createElement('div');
@@ -965,7 +986,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   const productLinkSlot = document.createElement('div');
   productField.append(productLabel, productNote, productLinkSlot);
 
-  // 2D を開いているときだけ出す。3D にすると向きを変えて置ける
+  // 3D がまだ無い家具にだけ出す。3D にすると向きを変えて置ける
   const modelField = document.createElement('div');
   modelField.className = 'edit__make';
   const makeModel = document.createElement('button');
@@ -1049,7 +1070,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   doRemove.textContent = '削除する';
   doRemove.addEventListener('click', () => {
     if (!current) return;
-    removeModelFacet(current.id, facet);
+    removeModel(current.id);
     close();
   });
   confirmButtons.append(cancel, doRemove);
@@ -1097,20 +1118,19 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     if (!element.hidden) renderModelField();
   });
 
-  function open(model: GeneratedModel, openedFacet: ModelFacet): void {
+  function open(model: GeneratedModel): void {
     current = model;
-    facet = openedFacet;
-    const kind = FACET_NAME[facet];
-    title.textContent = `${kind}の編集`;
+    facet = model.modelKey ? 'solid' : 'flat';
+    title.textContent = '家具の編集';
     nameInput.value = model.name;
     sizeField.show(placementSize(model, facet), facet === 'flat');
     iconPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
     confirmIconPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
-    confirmTitle.textContent = `この ${kind}を削除します`;
+    confirmTitle.textContent = 'この家具を削除します';
     confirmText.textContent = model.name;
-    remove.textContent = `この ${kind}を完全に削除`;
-    // 3D 化は 2D を開いているときだけ。すでに 3D があるなら出さない
-    modelField.hidden = facet !== 'flat' || model.modelKey !== null;
+    remove.textContent = 'この家具を完全に削除';
+    // 3D 化は 3D がまだ無い家具だけ（3D は 2D から作るので、2D も要る）
+    modelField.hidden = model.modelKey !== null || model.imageKey === null;
     renderModelField();
     productField.hidden = !model.product;
     if (model.product) {
