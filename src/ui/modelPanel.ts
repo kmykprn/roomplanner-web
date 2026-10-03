@@ -7,7 +7,7 @@
  *                3D は 2D から作るので、作る前に元の 2D を選ばせる
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
- *                右上の「⋯」で編集の姿（名前・アイコン・削除）に切り替わる。
+ *                押すと出るメニューの［編集］で、編集の姿（アイコン・名前・サイズ・削除）に切り替わる。
  *
  * 格子の上の「すべて / 2D / 3D」で絞れる。最初から入っている椅子・ソファ（サンプル）も作った家具と同じ扱い。2D は切り抜きの板、3D は向きを変えられるモデル。
  *
@@ -756,8 +756,8 @@ function syncThumbs<T extends { id: string }>(
 }
 
 /**
- * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、「部屋に追加」を出す。
- * 編集は、名前の右の鉛筆のアイコンから開く（よく使う「追加」だけを大きなボタンにする）。
+ * 家具のタイルを押したときに、画面の下から出すメニュー。家具の画像と名前、［✎ 編集］と［部屋に追加］を出す。
+ * よく使う「追加」を大きく、「編集」を控えめにして並べる。前は名前の右の鉛筆だけで、文字が無く、編集だと気づきにくかった。
  * 置く先の呼び名は、画面右上の切り替え（部屋 / 背景）に合わせる（写真のときは「背景に追加」）。
  *
  * **押しただけでは置かない。** 前は押すとすぐ置き、編集は右上の小さな「⋯」からだった。
@@ -791,18 +791,23 @@ function createTileActions(actions: { onPlace(tile: ModelTile): void; onEdit(til
   const kind = document.createElement('div');
   kind.className = 'tile-actions__kind';
   text.append(name, kind);
+  head.append(image, text);
+
+  // 下の段: 控えめな［✎ 編集］と、大きな［部屋に追加］（写真のときは［背景に追加］）
+  const buttons = document.createElement('div');
+  buttons.className = 'tile-actions__buttons';
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'tile-actions__edit';
-  edit.setAttribute('aria-label', '編集');
-  edit.append(createPencilIcon());
-  head.append(image, text, edit);
-
+  const editLabel = document.createElement('span');
+  editLabel.textContent = '編集';
+  edit.append(createPencilIcon(), editLabel);
   const place = document.createElement('button');
   place.type = 'button';
-  place.className = 'button is-block tile-actions__button';
+  place.className = 'button tile-actions__button';
+  buttons.append(edit, place);
 
-  sheet.append(head, place);
+  sheet.append(head, buttons);
   element.append(dim, sheet);
 
   let current: ModelTile | null = null;
@@ -878,7 +883,7 @@ function createModelThumb(tile: ModelTile, open: (tile: ModelTile) => void): Thu
 }
 
 /**
- * 作った家具の編集の姿。名前とアイコンを変え、削除もここから。
+ * 作った家具の編集の姿。名前とサイズを変え、削除もここから。いちばん上にアイコンを出す。
  *
  * **2D と 3D は別々に開く。** 開いている面だけが消せる（2D を消しても 3D は残る）ので、
  * 見出しも削除の文言も、いまどちらを触っているかを名指しする。

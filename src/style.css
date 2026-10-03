@@ -1801,23 +1801,32 @@ body {
 }
 
 /* 名前の右の鉛筆（編集）。押しやすいよう 44px の丸にする */
+/* 下の段: 控えめな［✎ 編集］（決まった幅）と、残りの幅いっぱいの［部屋に追加］ */
+.tile-actions__buttons {
+  display: flex;
+  gap: 10px;
+}
+
 .tile-actions__edit {
-  flex: none;
-  margin-left: auto;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  flex: 0 0 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 48px;
   border: 1px solid var(--border);
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
-  display: grid;
-  place-items: center;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  touch-action: manipulation;
 }
 
 .tile-actions__edit svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .tile-actions__name {
@@ -1830,8 +1839,9 @@ body {
   color: #687076;
 }
 
-/* 親指で押しやすい高さにする */
+/* 親指で押しやすい高さにする。下の段の［編集］の残りの幅いっぱい */
 .tile-actions__button {
+  flex: 1;
   min-height: 48px;
   font-size: 16px;
   font-weight: 700;
