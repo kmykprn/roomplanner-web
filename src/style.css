@@ -377,6 +377,8 @@ body {
   color: var(--text);
   font-size: 14px;
   line-height: 1.4;
+  /* 1 文ごとに行を分ける（案内の文の中の改行をそのまま出す） */
+  white-space: pre-line;
 }
 .mask__guide.is-done {
   background: #e6f2ea;

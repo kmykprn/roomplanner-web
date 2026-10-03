@@ -47,7 +47,7 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } | null {
   switch (kind) {
     case 'brush':
-      return { text: '家具を隠す範囲を、なぞって設定してください。', done: false };
+      return { text: '家具を隠す範囲を、なぞって設定してください。\nなぞった部分では、家具が隠れます。', done: false };
     case 'eraser':
       // 「消しゴム」の名前で何が起きるか分かるので、案内は出さない
       return null;
