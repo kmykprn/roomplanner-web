@@ -7,19 +7,13 @@
  *
  * **いまの値の数字は出さない。** 出すとバーと数字の 2 か所を見比べることになるうえ、
  * 画面の中の家具や板そのものが答えなので、そちらを見ていればよい。
- * 置いたときの姿（向きの 0°、大きさの 100% = 実寸）は、真ん中の目印と吸い付きで分かる。
  * 動かせる幅だけは両端に添える（どこまで行けるかは触る前に知りたいため）。
  *
- * **中心で引っかかる（snapTo）。** 向きを 0° に、大きさを 100% に戻したいとき、指でちょうどの所に
- * 止めるのは難しい。つまみを指で動かしていて中心の近く（SNAP_PX 以内）に来たら、中心の値に吸い付かせる。
- * キーボードの矢印では吸い付かせない（1 ずつ動かしたいのに中心から出られなくなるため）。
- * 吸い付く所には、線を横切る短い縦線の目印を付ける（つまみが中心に来るとつまみの下に隠れる）。
+ * **置いたときの姿へは、バーの右のボタンで戻す（reset）。** 向きを 0° に、大きさを 100% に戻したいとき、
+ * 指でちょうどの所に止めるのは難しい。ボタンには戻す先の値（「0°」「100%」）を書き、押すとどうなるかを文字で示す。
+ * すでにその値なら押しても何も起きないので、見えなくする（場所は空けたままにし、バーの長さを変えない）。
+ * 以前は真ん中で吸い付かせていたが、真ん中の近くの値に合わせにくく、使いにくかった
  */
-
-/** つまみの幅（px）。つまみの中心が動ける範囲は、バーの幅からこれを引いた分（style.css と同じ値） */
-const THUMB_PX = 22;
-/** 中心からこの距離（px）以内に来たら吸い付く */
-const SNAP_PX = 8;
 
 export interface SliderRowOptions {
   /** 行の左に出す見出し */
@@ -28,8 +22,8 @@ export interface SliderRowOptions {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
-  /** 指で動かしていて、この値の近くに来たら吸い付く。その位置に目印も付ける */
-  snapTo?: number;
+  /** バーの右に置く「戻す」ボタン。value に戻し、label（戻す先の値）をボタンに書く */
+  reset?: { value: number; label: string };
   /** つまみが動いたとき */
   onInput(value: number): void;
   /** つまみを離したとき（動かし終わりに 1 度だけしたいことがあれば） */
@@ -73,25 +67,10 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   input.addEventListener('pointerdown', () => {
     holding = true;
   });
-  /** 吸い付いている間か。吸い付いた瞬間にだけ振動させる */
-  let snapped = false;
   input.addEventListener('input', () => {
-    let value = Number(input.value);
-    const { snapTo } = options;
-    if (snapTo !== undefined && holding) {
-      // 値の差を、つまみが動く長さの上の距離（px）に直して比べる
-      const travel = input.getBoundingClientRect().width - THUMB_PX;
-      const distance = (Math.abs(value - snapTo) / (options.max - options.min)) * travel;
-      const near = distance <= SNAP_PX;
-      if (near) {
-        value = snapTo;
-        input.value = String(snapTo);
-        // 対応している端末（Android など）では軽く振動させる。iPhone のブラウザは振動に対応していない
-        if (!snapped) navigator.vibrate?.(8);
-      }
-      snapped = near;
-    }
+    const value = Number(input.value);
     options.onInput(value);
+    showReset(value);
   });
   for (const type of ['pointerup', 'pointercancel', 'blur'] as const) {
     input.addEventListener(type, () => {
@@ -105,7 +84,15 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   }
 
   const [from, to] = options.ends;
-  bar.append(createEndLabel(from), withSnapMark(input, options), createEndLabel(to));
+  bar.append(createEndLabel(from), input, createEndLabel(to));
+
+  const resetButton = options.reset ? createResetButton(options, input) : null;
+  if (resetButton) bar.append(resetButton);
+  /** 戻す先の値にあるときは、ボタンを見えなくする（押しても何も起きないため） */
+  function showReset(value: number): void {
+    resetButton?.classList.toggle('is-idle', value === options.reset?.value);
+  }
+
   if (options.hideLabel) element.classList.add('slider-row--bare');
   element.append(...(options.hideLabel ? [bar] : [heading, bar]));
 
@@ -117,25 +104,28 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
       if (!holding || Math.abs(value - Number(input.value)) > 1) {
         input.value = String(value);
       }
+      showReset(Number(input.value));
     },
   };
 }
 
 /**
- * 吸い付く所の目印を、バーに重ねる。吸い付かないバーはそのまま返す。
- * 目印は、つまみの中心が通る位置（両端からつまみの半分ずつ内側）に置く。CSS の calc なので、幅が変わっても合う
+ * 戻すボタン。押すと、つまみを動かして離したときと同じ順に知らせる（onInput のあと onChange）。
+ * 操作の履歴には、動かしたときと同じく 1 回の操作として積まれる
  */
-function withSnapMark(input: HTMLInputElement, options: SliderRowOptions): HTMLElement {
-  if (options.snapTo === undefined) return input;
-  const track = document.createElement('div');
-  track.className = 'slider-row__track';
-  const mark = document.createElement('span');
-  mark.className = 'slider-row__center';
-  mark.setAttribute('aria-hidden', 'true');
-  const ratio = (options.snapTo - options.min) / (options.max - options.min);
-  mark.style.left = `calc(${THUMB_PX / 2}px + ${ratio} * (100% - ${THUMB_PX}px))`;
-  track.append(mark, input);
-  return track;
+function createResetButton(options: SliderRowOptions, input: HTMLInputElement): HTMLButtonElement {
+  const { value, label } = options.reset!;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'slider-row__reset';
+  button.textContent = label;
+  button.setAttribute('aria-label', `${options.label}を${label}に戻す`);
+  button.addEventListener('click', () => {
+    input.value = String(value);
+    input.dispatchEvent(new Event('input'));
+    options.onChange?.(value);
+  });
+  return button;
 }
 
 function createEndLabel(text: string): HTMLElement {
