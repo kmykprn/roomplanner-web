@@ -40,8 +40,8 @@ interface ManageSlider {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
-  /** 指で動かしていて、この値の近くに来たら吸い付く（置いたときの姿に戻しやすいように） */
-  snapTo: number;
+  /** バーの右の「戻す」ボタン。置いたときの姿（0°）に戻しやすいように */
+  reset: { value: number; label: string };
   valueOf(item: PlacedFurniture): number;
   onInput(value: number): void;
 }
@@ -60,7 +60,7 @@ function angleSlider(
     min: ANGLE_LIMITS.min,
     max: ANGLE_LIMITS.max,
     ends: [`${ANGLE_LIMITS.min}°`, `+${ANGLE_LIMITS.max}°`],
-    snapTo: 0,
+    reset: { value: 0, label: '0°' },
     valueOf: (item) => signedDegrees(radiansOf(item)),
     onInput: (degrees) => apply(toRadians(degrees)),
   };
@@ -426,7 +426,7 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 「大きさ」の行。置いたこの 1 つだけを、実寸の 50%〜200% で見せる。真ん中（100%）に目印を付けて吸い付かせる
+   * 「大きさ」の行。置いたこの 1 つだけを、実寸の 50%〜200% で見せる。右のボタンで 100% に戻せる
    * （バーの真ん中が 100% = 実寸。背景の写真で縮尺がずれて見えるときの調整用）
    */
   function createScaleRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
@@ -435,8 +435,8 @@ export function createBottomSheet(container: HTMLElement): void {
       min: 0,
       max: SCALE_STEPS,
       ends: ['50%', '200%'],
-      // 真ん中（100% = 実寸）で吸い付く
-      snapTo: scaleToSlider(1),
+      // 100% = 実寸に戻すボタン
+      reset: { value: scaleToSlider(1), label: '100%' },
       ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
     });
     return {
