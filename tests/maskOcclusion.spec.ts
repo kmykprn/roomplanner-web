@@ -122,7 +122,7 @@ test('家具を隠す範囲の画面の見出しと案内は短く、道具と�
   await expect(page.locator('.mask .edit__title')).toHaveText('家具を隠す範囲');
   const guide = page.locator('.mask__guide');
   await page.locator('.mask__tools').getByRole('button', { name: 'なぞる' }).click();
-  await expect(guide).toHaveText('家具を隠す範囲を、なぞって設定してください。');
+  await expect(guide).toHaveText('家具を隠す範囲を、なぞって設定してください。\nなぞった部分では、家具が隠れます。');
   await page.locator('.mask__tools').getByRole('button', { name: '点で囲む' }).click();
   await expect(guide).toHaveText('家具を隠す範囲を、点で囲んで設定してください。');
   const setCorners = (count: number) =>
