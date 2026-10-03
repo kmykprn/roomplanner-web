@@ -1,13 +1,17 @@
 /**
  * 写真モードの「背景」タブ。
  *
- *   背景の画像のカード … 小さな画像、読み込み中・未選択のときだけの一言、「選ぶ／変更」「外す」
- *   背景の調整         … 3 つのタイル。押すとその場で調整する姿に切り替わり、「完了」で戻る
+ *   1 行だけ … ［背景の画像を選ぶ／変更］と［⋯］。読み込みに失敗したときだけ、下に一言
+ *   ［⋯］    … 下から出るメニュー。背景の画像があるときだけ出す
  *       拡大・縮小                     … ui/framePanel.ts
  *       寸法                           … ui/scalePanel.ts
  *       家具より手前に表示する範囲       … ui/maskPanel.ts
+ *       背景の画像を外す
  *
- * 室内の寸法を計算したかどうかは、カードにもタイルにも出さない（利用者の次の行動に関係しない）。
+ * **パネルを低く保つため、ふだん使わない操作はメニューにしまう。** 拡大・縮小・寸法・手前に表示する範囲は、
+ * 写真を選んだ直後か、自動の推定がうまく合わないときにだけ使う。常に並べておくとパネルが高くなり、写真が狭くなる。
+ * 背景の画像の小さな見本も出さない（写真そのものが上に大きく出ている）。
+ * 室内の寸法を計算したかどうかも出さない（利用者の次の行動に関係しない）。
  *
  * 画像の取得は platform/picker.ts 越しに行う。
  * Capacitor で iOS アプリにするとき、差し替えるのはあちらの中身だけで済む。
@@ -27,7 +31,7 @@ import {
   setScaling,
 } from '@/core/photoState';
 
-/** 背景の画像がまだ無いときの案内。キャンバスの案内（ui/photoEmpty.ts）も使う */
+/** 背景の画像がまだ無いときの案内。キャンバスの案内（ui/photoEmpty.ts）が使う */
 export const IDLE_MESSAGE = '選択した画像の上に家具を置くことができます';
 /** 形式と大きさのどちらでも起こる。利用者にできることを先に出す。キャンバスの案内も使う */
 export const FAILED_MESSAGE = '背景の画像を読み込めませんでした。別の画像をお試しください';
@@ -36,7 +40,7 @@ export function createPhotoPanel(): HTMLElement {
   const panel = document.createElement('div');
   panel.className = 'photo';
 
-  /** 通常の姿。カード・タイル・一言 */
+  /** 通常の姿。1 行と一言 */
   const normal = document.createElement('div');
   normal.className = 'photo__normal';
   /** 家具より手前に表示する範囲を指定する姿 */
@@ -46,69 +50,50 @@ export function createPhotoPanel(): HTMLElement {
   /** 拡大・縮小する姿 */
   const frame = createFramePanel();
 
-  // --- 背景の画像のカード ---
-  const card = document.createElement('div');
-  card.className = 'bg-card';
-  const thumb = document.createElement('span');
-  thumb.className = 'bg-card__thumb';
-  const text = document.createElement('div');
-  text.className = 'bg-card__text';
-  const cardTitle = document.createElement('span');
-  cardTitle.className = 'bg-card__title';
-  cardTitle.textContent = '背景の画像';
-  const cardNote = document.createElement('span');
-  cardNote.className = 'bg-card__note';
-  text.append(cardTitle, cardNote);
-  const pickButton = createSmallButton('選ぶ', async () => {
+  // --- 1 行: 選ぶ／変更 と ⋯ ---
+  const row = document.createElement('div');
+  row.className = 'bg-row';
+  const pickButton = document.createElement('button');
+  pickButton.type = 'button';
+  pickButton.className = 'button bg-row__pick';
+  pickButton.addEventListener('click', async () => {
     const file = await pickImage();
     if (file) await setBackground(file);
   });
-  const clearButton = createSmallButton('外す', clearBackground);
-  const cardButtons = document.createElement('span');
-  cardButtons.className = 'setting__buttons';
-  cardButtons.append(pickButton, clearButton);
-  card.append(thumb, text, cardButtons);
+  const menu = createBackgroundMenu([
+    { icon: 'frame', label: '拡大・縮小', run: () => setFramingPhoto(true) },
+    { icon: 'ruler', label: '寸法', run: () => setScaling(true) },
+    { icon: 'layers', label: '家具より手前に表示する範囲', run: () => setMasking(true) },
+    { icon: 'trash', label: '背景の画像を外す', run: clearBackground, danger: true },
+  ]);
+  const moreButton = document.createElement('button');
+  moreButton.type = 'button';
+  moreButton.className = 'bg-row__more';
+  moreButton.textContent = '⋯';
+  moreButton.setAttribute('aria-label', '背景のほかの操作');
+  moreButton.addEventListener('click', menu.open);
+  row.append(pickButton, moreButton);
 
-  // --- 背景の調整: 3 つのタイル ---
-  const heading = document.createElement('p');
-  heading.className = 'bg-heading';
-  heading.textContent = '背景の調整';
-  const tiles = document.createElement('div');
-  tiles.className = 'bg-tiles';
-  const frameTile = createTile('frame', '拡大・縮小', () => setFramingPhoto(true));
-  const scaleTile = createTile('ruler', '寸法', () => setScaling(true));
-  const maskTile = createTile('layers', '家具より手前に\n表示する範囲', () => setMasking(true));
-  tiles.append(frameTile, scaleTile, maskTile);
-
-  /** 下の一言。案内・読み込みの失敗を、状況に応じて 1 つだけ出す */
+  /** 読み込みに失敗したときの一言 */
   const note = document.createElement('p');
-  note.className = 'hint photo__note';
+  note.className = 'hint photo__note is-error';
+  note.textContent = FAILED_MESSAGE;
 
-  normal.append(card, heading, tiles, note);
-  panel.append(normal, frame, scale, mask);
+  normal.append(row, note);
+  panel.append(normal, frame, scale, mask, menu.element);
 
   function render(): void {
-    const { backgroundUrl, backgroundStatus, isMasking, isScaling, isFramingPhoto } =
-      photoState.get();
+    const { backgroundStatus, isMasking, isScaling, isFramingPhoto } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
-    const failed = backgroundStatus === 'failed';
 
-    thumb.style.backgroundImage = ready && backgroundUrl ? `url("${backgroundUrl}")` : '';
-    thumb.classList.toggle('is-empty', !ready);
-    cardNote.textContent = loading ? '読み込み中…' : ready ? '' : '未選択';
-    cardNote.hidden = cardNote.textContent === '';
-    pickButton.textContent = ready ? '変更' : '選ぶ';
+    pickButton.textContent = loading ? '読み込み中…' : ready ? '背景の画像を変更' : '背景の画像を選ぶ';
     // 読み込み中に押させると、どちらが背景になるのか分からなくなる
     pickButton.disabled = loading;
-    clearButton.hidden = !ready;
-
-    heading.hidden = !ready;
-    tiles.hidden = !ready;
-
-    note.classList.toggle('is-error', failed);
-    note.textContent = failed ? FAILED_MESSAGE : !ready ? IDLE_MESSAGE : '';
-    note.hidden = note.textContent === '';
+    // 背景の画像が無いと、メニューの操作はどれも使えない
+    moreButton.hidden = !ready;
+    if (!ready) menu.close();
+    note.hidden = backgroundStatus !== 'failed';
 
     // どれかの姿に入っている間は、通常の姿を引っ込める
     normal.hidden = isMasking || isScaling || isFramingPhoto;
@@ -121,30 +106,49 @@ export function createPhotoPanel(): HTMLElement {
   return panel;
 }
 
-/** 「背景の調整」のタイル。アイコン・見出し・いまの設定。押すと調整する姿に入る */
-function createTile(
-  icon: IconName,
-  label: string,
-  onClick: () => void
-): HTMLButtonElement {
-  const element = document.createElement('button');
-  element.type = 'button';
-  element.className = 'bg-tile';
-  element.addEventListener('click', onClick);
-  const iconBox = document.createElement('span');
-  iconBox.className = 'bg-tile__icon';
-  iconBox.append(createIcon(icon));
-  const title = document.createElement('span');
-  title.className = 'bg-tile__label';
-  title.textContent = label;
-  element.append(iconBox, title);
-  return element;
+interface MenuItem {
+  icon: IconName;
+  label: string;
+  run(): void;
+  /** 取り消せない操作。赤い文字にする */
+  danger?: boolean;
 }
 
-function createSmallButton(label: string, onClick: () => void): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.className = 'button is-quiet is-small';
-  button.textContent = label;
-  button.addEventListener('click', onClick);
-  return button;
+/** ［⋯］で下から出るメニュー。外側を押すか、項目を選ぶと閉じる */
+function createBackgroundMenu(items: MenuItem[]): { element: HTMLElement; open(): void; close(): void } {
+  const element = document.createElement('div');
+  element.className = 'bg-menu';
+  element.hidden = true;
+  const dim = document.createElement('div');
+  dim.className = 'bg-menu__dim';
+  const sheet = document.createElement('div');
+  sheet.className = 'bg-menu__sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-label', '背景のほかの操作');
+  const close = (): void => {
+    element.hidden = true;
+  };
+  for (const item of items) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = item.danger ? 'bg-menu__item is-danger' : 'bg-menu__item';
+    const label = document.createElement('span');
+    label.textContent = item.label;
+    button.append(createIcon(item.icon), label);
+    // 閉じてから選んだことをする。先に閉じないと、調整する姿の上にメニューが残る
+    button.addEventListener('click', () => {
+      close();
+      item.run();
+    });
+    sheet.append(button);
+  }
+  dim.addEventListener('click', close);
+  element.append(dim, sheet);
+  return {
+    element,
+    open: () => {
+      element.hidden = false;
+    },
+    close,
+  };
 }

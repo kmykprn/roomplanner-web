@@ -84,7 +84,8 @@ test('自動で見つける切り替えを外すと、家具は隠れない', as
 test('切り替えは、家具より手前に表示する範囲の画面に出て、押すと切り替わる', async ({ page }) => {
   await setUp(page);
   await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  await page.locator('.bg-tile', { hasText: '家具より手前に' }).click();
+  await page.getByRole('button', { name: '背景のほかの操作' }).click();
+  await page.getByRole('button', { name: '家具より手前に表示する範囲' }).click();
   const toggle = page.locator('#mask-auto');
   await expect(toggle).toBeVisible();
   await expect(toggle).toBeChecked();

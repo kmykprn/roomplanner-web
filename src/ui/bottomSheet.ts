@@ -4,11 +4,11 @@
  *
  * UI は DOM。3D の上に重ねるだけなので three.js とは完全に切り離せる。
  *
- * **タブの並びはモードで変わる。** 写真モードには背景の選択がある。
- * 家具（置く・写真から作る）と操作は両方にある。
+ * **タブの並びはモードで変わる。** 部屋モードは内装と操作、写真モードは背景と操作。
  *
- * **「家具」はタブの中身ではなく、別のページを開く。** 押すと家具のページ（ui/furniturePage.ts）が
- * 画面全体に開き、「×」で閉じると元のタブに戻る。家具を置いたときは、閉じて「操作」タブを出す
+ * **家具を置くページはタブにしない。** 操作タブの［＋ 家具を追加］（家具を選んでいる間は名前の右の［＋］）を
+ * 押すと家具のページ（ui/furniturePage.ts）が画面全体に開き、「×」で閉じると元のタブに戻る。
+ * 家具を置いたときは、閉じて「操作」タブを出す
  */
 
 import { isBillboard, type PlacedFurniture } from '@/config/furniture';
@@ -27,7 +27,7 @@ import { releaseFurnitureAssets } from '@/core/modelLibrary';
 import { beginEdit, canUndo, discardLater, editHistory, endEdit, recordEdit, undo } from '@/core/editHistory';
 import { photoState, setFramingPhoto, setMasking, setScaling } from '@/core/photoState';
 
-type TabId = 'interior' | 'background' | 'models' | 'manage';
+type TabId = 'interior' | 'background' | 'manage';
 
 /**
  * 「操作」の行に敷くバーの決まりごと。
@@ -114,13 +114,15 @@ function toDegrees(radians: number): number {
 const TABS: Record<TabId, string> = {
   interior: '内装',
   background: '背景',
-  models: '家具',
   manage: '操作',
 };
 
-/** モードごとのタブの並び。部屋は内装（壁と床）、写真は背景（部屋の写真）から始まる */
-const ROOM_TABS: TabId[] = ['interior', 'models', 'manage'];
-const PHOTO_TABS: TabId[] = ['background', 'models', 'manage'];
+/**
+ * モードごとのタブの並び。部屋は内装（壁と床）、写真は背景（部屋の写真）から始まる。
+ * 家具を置くページは、タブではなく操作タブの［＋ 家具を追加］から開く（タブが減ると下のパネルを低くしやすい）
+ */
+const ROOM_TABS: TabId[] = ['interior', 'manage'];
+const PHOTO_TABS: TabId[] = ['background', 'manage'];
 
 
 /**
@@ -201,11 +203,6 @@ export function createBottomSheet(container: HTMLElement): void {
         button.classList.toggle('is-active', tab === activeTab);
         button.textContent = TABS[tab];
         button.addEventListener('click', () => {
-          // 「家具」は別のページを開く。下のタブはそのまま
-          if (tab === 'models') {
-            furniturePage.open();
-            return;
-          }
           activeTab = tab;
           render();
         });
@@ -215,7 +212,34 @@ export function createBottomSheet(container: HTMLElement): void {
 
     disposeList();
     body.replaceChildren(renderActiveTab());
+    fitSheetHeight();
   }
+
+  /**
+   * 写真の背景タブの、ふだんの姿（1 行だけ）のときは、下のパネルを中身の高さまで低くし、写真を広く見せる。
+   * 背景の調整の画面（拡大・縮小・寸法・手前に表示する範囲）や、ほかのタブは、今までの高さ（style.css の .sheet）。
+   * 高さは数で入れる（CSS の transition で、切り替えのときに滑らかに伸び縮みさせるため）
+   */
+  function fitSheetHeight(): void {
+    const { isMasking, isScaling, isFramingPhoto } = photoState.get();
+    const compact = isPhotoMode() && activeTab === 'background' && !isMasking && !isScaling && !isFramingPhoto;
+    if (!compact) {
+      sheet.style.height = '';
+      return;
+    }
+    const sheetStyle = getComputedStyle(sheet);
+    const bodyStyle = getComputedStyle(body);
+    const height =
+      tabBar.offsetHeight +
+      photoPanel.offsetHeight +
+      parseFloat(bodyStyle.paddingTop) +
+      parseFloat(bodyStyle.paddingBottom) +
+      parseFloat(sheetStyle.paddingBottom) +
+      parseFloat(sheetStyle.borderTopWidth);
+    sheet.style.height = `${Math.ceil(height)}px`;
+  }
+  // 背景の調整の画面に入る・出る、読み込みに失敗した一言が出る、などで中身の高さが変わる
+  photoState.subscribe(fitSheetHeight);
 
   function renderActiveTab(): HTMLElement {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
@@ -273,7 +297,7 @@ export function createBottomSheet(container: HTMLElement): void {
       const item = furniture.find((entry) => entry.id === selectedId);
       if (!item) return;
       // 消すと同時に一覧が描かれるので、一言は消す前に用意する
-      removedNote = `「${item.name ?? '家具'}」を画面から削除しました。「家具」タブには残っています`;
+      removedNote = `「${item.name ?? '家具'}」を画面から削除しました。「家具を追加」の中には残っています`;
       removeFromScreen(scene, item);
     }, 'is-small manage__delete manage__bar-end');
     element.append(undoButton, resetButton, removeButton);
@@ -328,10 +352,11 @@ export function createBottomSheet(container: HTMLElement): void {
     const name = document.createElement('span');
     name.className = 'manage__name';
     name.textContent = selected.name ?? '家具';
-    head.append(name);
+    // 家具を選んでいる間も、続けて家具を置けるように、名前の右に小さな［＋］を置く
+    head.append(name, createAddButton('small'));
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
-    // 実寸は「家具」タブの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
+    // 実寸は「家具を追加」のページの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
     const rows: ReturnType<typeof createManageRow>[] = [];
     // 切り抜きの板はカメラの方を向くので、向きも前後の傾きも効かない。
     // 板に効くのは画面の中で回す「傾き」だけ
@@ -455,6 +480,26 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
+   * 家具を置くページを開くボタン。
+   * row: 一覧の先頭に置く横長の行（＋と「家具を追加」）。small: 選んでいる家具の名前の右に置く小さな丸（＋だけ）
+   */
+  function createAddButton(kind: 'row' | 'small'): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = kind === 'row' ? 'manage__add' : 'manage__add-small';
+    button.append(createIcon('plus'));
+    if (kind === 'row') {
+      const label = document.createElement('span');
+      label.textContent = '家具を追加';
+      button.append(label);
+    } else {
+      button.setAttribute('aria-label', '家具を追加');
+    }
+    button.addEventListener('click', () => furniturePage.open());
+    return button;
+  }
+
+  /**
    * 置いてある家具の一覧。何も選んでいないときに出す。
    *
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
@@ -463,10 +508,12 @@ export function createBottomSheet(container: HTMLElement): void {
   function createFurnitureList(furniture: PlacedFurniture[], icons: ReturnType<typeof createPreviewImage>[]): HTMLElement {
     const list = document.createElement('div');
     list.className = 'manage__list';
+    // 先頭はいつも［＋ 家具を追加］。家具を置くページはここから開く
+    list.append(createAddButton('row'));
     if (furniture.length === 0) {
       const hint = document.createElement('p');
       hint.className = 'hint';
-      hint.textContent = '「家具」タブで置いた家具が、ここに並びます';
+      hint.textContent = '「家具を追加」から置いた家具が、ここに並びます';
       list.append(hint);
       appendRemovedNote(list);
       return list;
@@ -618,7 +665,7 @@ export function createBottomSheet(container: HTMLElement): void {
   photoState.subscribe(followSelection);
 
   // モードが変わったら、そのモードの最初のタブへ戻す。
-  // 家具タブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
+  // 操作タブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
   // 先にやるべき「背景の写真を選ぶ」に辿り着けない
   modeState.subscribe(() => {
     activeTab = visibleTabs()[0];
