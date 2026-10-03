@@ -22,34 +22,45 @@ async function pickPhoto(page: Page): Promise<void> {
     setFramingPhoto(false);
   });
   await expect(page.locator('.bg-row__pick')).toHaveText('背景の画像を変更');
-  // 端末に残すのを待つ
-  await page.waitForTimeout(1000);
+  // 端末に残し終えるのを待つ（残す途中で消すと、あとから残って消えない）
+  await expect
+    .poll(() => page.evaluate(async () => (await (await import('/src/platform/backgroundStore.ts')).readBackground()) !== null), { timeout: 20000 })
+    .toBe(true);
 }
 
-/** 開き直し、開いてから 3 秒の間に出た、タブのボタンの文言と、画面の真ん中のボタンの文言を順に集める */
+/**
+ * 開き直し、タブのボタンの文言と、画面の真ん中のボタンの文言を、変わるたびに順に集める。
+ * 写真の読み戻しが終わる（状態が「読み戻し中」でなくなる）まで待ってから返す。
+ * 決まった時間だけ集めると、遅い端末（GitHub の CI）では読み戻しが終わる前に集め終わってしまう
+ */
 async function reloadAndRecord(page: Page): Promise<string[]> {
   await page.addInitScript(() => {
     const seen: string[] = [];
     (window as unknown as { seen: string[] }).seen = seen;
-    const start = performance.now();
     const record = (): void => {
       const pick = document.querySelector('.bg-row__pick')?.textContent;
       const empty = document.querySelector<HTMLElement>('.viewport__empty');
       const emptyShown = empty !== null && !empty.hidden && getComputedStyle(empty).display !== 'none';
       const line = `タブ:${pick ?? '-'} 真ん中:${emptyShown ? empty.querySelector('button')?.textContent : '-'}`;
       if (pick !== undefined && seen[seen.length - 1] !== line) seen.push(line);
-      if (performance.now() - start < 3000) requestAnimationFrame(record);
+      requestAnimationFrame(record);
     };
     requestAnimationFrame(record);
   });
   await page.reload();
-  await page.waitForTimeout(3500);
+  await page.locator('.sheet__tab').first().waitFor();
+  await expect
+    .poll(() => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().backgroundStatus), { timeout: 20000 })
+    .not.toBe('restoring');
+  // 状態が変わったあとの画面を、最後に 1 度集める
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   return page.evaluate(() => (window as unknown as { seen: string[] }).seen);
 }
 
 test('写真を選んだあとに開き直すと、最初から「背景の画像を変更」が出て、文言が変わらない', async ({ page }) => {
   await pickPhoto(page);
   expect(await reloadAndRecord(page)).toEqual(['タブ:背景の画像を変更 真ん中:-']);
+  expect(await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().backgroundStatus)).toBe('ready');
   await expect(page.locator('.bg-row__edit')).toBeVisible();
 });
 
