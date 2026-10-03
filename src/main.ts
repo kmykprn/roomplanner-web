@@ -19,7 +19,8 @@ import type { RoomSize } from '@/config/room';
 import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createPhotoShadow, groundsOf } from '@/scene/photoShadow';
-import { createDepthOccluder } from '@/scene/depthOccluder';
+import { createDepthOccluder, type FrontBox } from '@/scene/depthOccluder';
+import { isBillboard } from '@/config/furniture';
 import { createFurnitureLayer } from '@/scene/furniture';
 import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
@@ -99,7 +100,8 @@ viewer.scene.add(
   roomFurniture.group,
   photoFurniture.group,
   photoShadow.group,
-  depthOccluder.group
+  depthOccluder.group,
+  depthOccluder.frontGroup
 );
 
 // --- 操作を繋ぐ ---
@@ -186,6 +188,7 @@ function applyMode(): void {
   // 部屋の主光源は写真モードでは影を落とさない（向きの違う影が 2 つ重なるため）
   photoShadow.group.visible = photo;
   depthOccluder.group.visible = photo;
+  depthOccluder.frontGroup.visible = photo;
   lighting.setCastShadow(!photo);
   applyScaling();
 
@@ -288,12 +291,24 @@ function applyPhotoView(): void {
   // 手前の物の面は、写真を描いているカメラと同じ所から、奥行きの地図を広げる
   depthOccluder.followCamera(viewer.camera);
   depthOccluder.setSource(occluderSource());
+  depthOccluder.setFrontBoxes(frontBoxes());
 }
 
 /**
- * 新しい家具を置く場所（画面の NDC）。中央・下から 3 割の高さ。
+ * 写真の物に隠さず手前に描く家具（新しく置いて、まだ動かしていないもの）の箱。
+ * 切り抜きの板はカメラの方を向き、傾けることもあるので、どの向きでも板が収まる大きさにする
  */
-const PLACEMENT_SCREEN_POINT = { x: 0, y: -0.4 };
+function frontBoxes(): FrontBox[] {
+  return photoState.get().furniture.filter((item) => item.inFront).map((item) => {
+    const [w, h, d] = item.size;
+    const reach = Math.hypot(w, h);
+    const size: [number, number, number] = isBillboard(item) ? [reach, reach, reach] : [w, h, d];
+    return { position: item.position, size, rotationY: item.rotationY };
+  });
+}
+
+/** 新しい家具を置く場所の、画面の横の位置（NDC）。真ん中。縦の位置は photoState が決める（隠れなければ下から 3 割） */
+const PLACEMENT_SCREEN_X = 0;
 
 /** 画面の点（3D を描いている範囲の NDC、-1〜1）に写っている、写真の点 */
 function photoPointOfNdc(x: number, y: number): PhotoPoint {
@@ -303,8 +318,8 @@ function photoPointOfNdc(x: number, y: number): PhotoPoint {
 // 奥行きから家具の位置を出すときの画角。いま写真を描いているカメラのものを使う
 setLensSource(() => ({ vfovDeg: viewer.camera.fov, aspect: viewer.camera.aspect }));
 // 室内の寸法を計算してあれば、その点の奥行きに置く。まだなら、立って撮った前提の床に置く
-setPhotoPlacement(() => {
-  const { x, y } = PLACEMENT_SCREEN_POINT;
+setPhotoPlacement((y) => {
+  const x = PLACEMENT_SCREEN_X;
   const onDepth = depthPointAt(photoPointOfNdc(x, y));
   if (onDepth) return onDepth;
   const hit = floorPointOnScreen(viewer.camera, x, y);

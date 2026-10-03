@@ -24,6 +24,10 @@ export interface FurnitureSceneState {
 export interface SceneRules {
   /** 新しい家具を置く床の座標を決める */
   placementFor(size: [number, number, number]): [number, number, number];
+  /**
+   * 新しく置いた家具を、動かすまで背景（写真の物）に隠さず手前に描くか。隠す仕組みのある写真モードだけ true
+   */
+  newInFront?: boolean;
   /** ドラッグの移動先を、そのモードの制限に丸める */
   constrain(
     position: [number, number, number],

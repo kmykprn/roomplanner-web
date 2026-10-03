@@ -205,6 +205,8 @@ export function createFurnitureDrag(
           : [next.x, next.y, z];
     scene.update(draggingId, {
       position: scene.constrain(moved, item.size, item.rotationY),
+      // 置いた直後に手前に描いていた家具も、動かしたら奥行きで隠す判断に戻す
+      inFront: undefined,
     });
   }
 

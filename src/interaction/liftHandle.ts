@@ -139,6 +139,8 @@ export function createLiftHandle(options: LiftHandleOptions): void {
     const next = Math.max(options.lowest(), drag.startY + (y - drag.startHitY));
     drag.scene.update(item.id, {
       position: drag.scene.constrain([item.position[0], next, item.position[2]], item.size, item.rotationY),
+      // 置いた直後に手前に描いていた家具も、動かしたら奥行きで隠す判断に戻す
+      inFront: undefined,
     });
   });
 
