@@ -216,7 +216,8 @@ function applyBackground(): void {
   const image = backgroundUrl ? `url("${backgroundUrl}")` : '';
   viewer.photoLayer.style.backgroundImage = image;
 
-  // 隠す層は同じ写真を、塗った形で切り抜いて重ねる
+  // 指定している間だけ、同じ写真を塗った形で切り抜いて重ね、色を被せて見せる
+  // （家具を隠すのは、物ごとの見えない板。core/maskRegions.ts）
   const { maskLayer } = viewer;
   maskLayer.style.backgroundImage = image;
   applyMaskImage(maskUrl);
@@ -288,7 +289,7 @@ function applyPhotoView(): void {
   viewer.setPhotoFov(vfovDeg);
   applyPhotoCamera(viewer.camera, floorFit, photoCameraHeight());
   viewer.setPhotoView(view);
-  // 手前の物の面は、写真を描いているカメラと同じ所から、奥行きの地図を広げる
+  // 手前の物の面は、写真を描いているカメラと同じ所から、手前に表示する範囲の板の奥行きを広げる
   depthOccluder.followCamera(viewer.camera);
   depthOccluder.setSource(occluderSource());
   depthOccluder.setFrontBoxes(frontBoxes());

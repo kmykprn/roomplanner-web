@@ -46,6 +46,8 @@ import {
 } from '@/core/depthPlacement';
 import { EYE_DISTANCE } from '@/interaction/photoCamera';
 import { createHiddenShare } from '@/core/placementVisibility';
+import { loadMaskRegions, regionDepthMap, type MaskRegions } from '@/core/maskRegions';
+import type { OccluderSource } from '@/scene/depthOccluder';
 import { clearHistory } from '@/core/editHistory';
 
 /**
@@ -139,17 +141,15 @@ export interface PhotoState extends FurnitureSceneState {
   isFramingPhoto: boolean;
 
   /**
-   * 隠す場所（家具の手前にある物）のマスク画像の URL。無ければ null。
-   *
-   * 塗った形をそのまま画像で持つ。写真をこの形で切り抜いて 3D の上に重ねると、
-   * その場所だけ写真が家具の手前に出る（3D 側は何も知らない）
+   * 家具より手前に表示する範囲（手前にある物）のマスク画像の URL。無ければ null。
+   * 塗った形をそのまま画像で持つ。家具を隠すのは、この画像から作った maskRegions
    */
   maskUrl: string | null;
   /**
-   * 写真の奥行きから、家具より手前にある物を自動で見つけて手前に出すか（scene/depthOccluder.ts）。
-   * 写真を選び直しても変えない（利用者の好み）。手で塗った範囲（maskUrl）は、これと別に足される
+   * マスクを物ごとの塊に分けたもの（core/maskRegions.ts）。塊ごとに見えない板を立て、
+   * 家具がその物より奥にあるときだけ隠す。マスクが無い・まだ読み込み中なら null。保存しない（マスクから作り直せる）
    */
-  depthOcclusion: boolean;
+  maskRegions: MaskRegions | null;
   /** 手前にある物を指定している最中か。この間は 1 本指が道具になる */
   isMasking: boolean;
   maskTool: MaskTool;
@@ -177,7 +177,7 @@ export const photoState = createStore<PhotoState>({
   isScaling: false,
   isFramingPhoto: false,
   maskUrl: null,
-  depthOcclusion: true,
+  maskRegions: null,
   isMasking: false,
   // 太い筆を既定にする（広い面を手早く塗る用途が多い）
   maskTool: { kind: 'brush', thick: true },
@@ -226,7 +226,7 @@ export const photoScene = createFurnitureScene(photoState, {
 });
 
 /**
- * 家具が写真の物に隠れる割合を見積もる関数。家具より手前に表示する範囲を自動で見つけていない（隠す面が無い）なら null
+ * 家具が写真の物に隠れる割合を見積もる関数。家具より手前に表示する範囲が無い（隠す面が無い）なら null
  */
 function hiddenShareChecker(): ((position: [number, number, number], size: [number, number, number], rotationY: number) => number) | null {
   const source = occluderSource();
@@ -372,11 +372,6 @@ export function setMasking(isMasking: boolean): void {
   if (photoState.get().isMasking !== isMasking) photoState.set({ isMasking });
 }
 
-/** 家具より手前にある物を、写真の奥行きから自動で見つけるかを切り替える */
-export function setDepthOcclusion(depthOcclusion: boolean): void {
-  if (photoState.get().depthOcclusion !== depthOcclusion) photoState.set({ depthOcclusion });
-}
-
 /** 表示する範囲を調整する姿に入る・出る */
 export function setFramingPhoto(isFramingPhoto: boolean): void {
   if (photoState.get().isFramingPhoto !== isFramingPhoto) photoState.set({ isFramingPhoto });
@@ -517,15 +512,33 @@ export function depthPointAt(point: PhotoPoint): [number, number, number] | null
 }
 
 /**
- * 家具より手前にある物の面（scene/depthOccluder.ts）を作る材料。自動で見つけない・奥行きがまだ無いなら null。
- * 寸法を合わせていれば、家具を置くときと同じ直し方を当てる。合わせていなければ奥行きをそのまま使う
- * （撮った高さも同じ奥行きから出しているので、家具と面の大きさがそろう）
+ * 写真の点に写っている床の 3D の位置。家具を置くときと同じやり方（寸法を計算してあればその点の奥行き、
+ * まだなら立って撮った前提の床）で出す。地平線より上の点（床が写らない）なら null
  */
-export function occluderSource(): { map: DepthMap; scale: DepthScale; lens: Lens } | null {
-  const { depthOcclusion, depthMap, depthScale } = photoState.get();
-  const lens = depthLens();
-  if (!depthOcclusion || !depthMap || !lens) return null;
-  return { map: depthMap, scale: depthScale ?? { a: 1, b: 0 }, lens };
+function floorPointAt(point: PhotoPoint, lens: Lens, pose: PhotoPose): [number, number, number] | null {
+  const level = levelPointAt(point, 0, lens, pose);
+  if (!level) return null;
+  return depthPointAt(point) ?? level;
+}
+
+/** 隠す面の材料の控え。カメラやマスクが変わらない間は同じものを返し、面を作り直させない */
+let occluderCache: { key: unknown[]; source: OccluderSource } | null = null;
+
+/**
+ * 家具より手前にある物の面（scene/depthOccluder.ts）を作る材料。家具より手前に表示する範囲が無いなら null。
+ * 範囲の塊ごとの板までの奥行き（core/maskRegions.ts）を、写真の奥行きと同じ形の地図にして渡す
+ */
+export function occluderSource(): OccluderSource | null {
+  const { maskRegions, depthMap, depthScale, floorFit, cameraHeight } = photoState.get();
+  const lens = depthLens() ?? lensSource?.();
+  if (!maskRegions || !lens) return null;
+  // 板の位置は、マスク・カメラ・寸法の合わせ方（家具を置く位置の出し方）で決まる
+  const key = [maskRegions, depthMap, depthScale, floorFit, cameraHeight, lens.vfovDeg, lens.aspect];
+  if (occluderCache && occluderCache.key.every((value, i) => value === key[i])) return occluderCache.source;
+  const pose = currentPose();
+  const map = regionDepthMap(maskRegions, lens, pose, (point) => floorPointAt(point, lens, pose));
+  occluderCache = { key, source: { map, lens } };
+  return occluderCache.source;
 }
 
 /** 置いてある家具の足元が、いま写真のどこに写っているか。家具ごと */
@@ -739,8 +752,24 @@ export function setMaskUndoDepth(maskUndoDepth: number): void {
  * **前の URL はここでは解放しない。** 表示側（main.ts）が新しい画像を読み込んでから
  * 差し替えるので、その間は前の画像がまだ画面に出ている。解放は差し替えたあとに向こうでやる
  */
-export function setMaskUrl(url: string | null): void {
+export function setMaskUrl(url: string | null, drawing = false): void {
   photoState.set({ maskUrl: url });
+  // 描いている途中の見た目（囲う途中の線や角の印も入る）からは板を作らない。描き終えたときに作る
+  if (!drawing) loadRegions(url);
+}
+
+/**
+ * マスクを塊に分けて maskRegions に入れる。画像の読み込みを待つ間にまた差し替わったら、古いほうは入れない。
+ * 読み込むまでは前の塊のまま（塗っている間に、隠れ方がちらつかないように）
+ */
+function loadRegions(url: string | null): void {
+  if (!url) {
+    photoState.set({ maskRegions: null });
+    return;
+  }
+  loadMaskRegions(url).then((maskRegions) => {
+    if (photoState.get().maskUrl === url) photoState.set({ maskRegions });
+  });
 }
 
 /** 隠す場所をすべて消す。端末に残した分も捨てる */

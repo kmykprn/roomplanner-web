@@ -26,7 +26,7 @@ const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 type SavedPhoto = Pick<
   PhotoState,
   | 'furniture' | 'view' | 'backgroundName' | 'floorFit' | 'vfovDeg' | 'lensFocal35'
-  | 'cameraHeight' | 'scaleLines' | 'depthScale' | 'depthOcclusion'
+  | 'cameraHeight' | 'scaleLines' | 'depthScale'
 >;
 
 /**
@@ -87,8 +87,6 @@ export function restorePhoto(): void {
     // 寸法の線と、線に合わせた奥行きの直し方。壊れていれば「まだ合わせていない」に戻す
     scaleLines: restoredScaleLines(saved),
     depthScale: normalizeFittedScale(saved.depthScale),
-    // 以前の版の保存には無い。そのときは既定（自動で見つける）にする
-    depthOcclusion: saved.depthOcclusion !== false,
     backgroundName: saved.backgroundName ?? null,
     selectedId: null,
   });
@@ -196,7 +194,6 @@ export function persistPhotoOnChange(): void {
       cameraHeight: state.cameraHeight,
       scaleLines: state.scaleLines,
       depthScale: state.depthScale,
-      depthOcclusion: state.depthOcclusion,
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {

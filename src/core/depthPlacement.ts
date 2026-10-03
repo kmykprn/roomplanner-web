@@ -248,6 +248,11 @@ export function fitDepthScale(
   return fitted.a > 0 && fitted.a * nearest + fitted.b > 0 ? fitted : scaleOnly;
 }
 
+/** 写真の点を通る視線の、3D の座標での向き（カメラの正面方向の奥行きが 1 になる長さ） */
+export function worldRayOf(point: PhotoPoint, lens: Lens, fit: FloorFit): Vec {
+  return toWorld(rayOf(point, lens), fit);
+}
+
 /** 写真の点を通る視線が、高さ y の水平な面と交わる 3D の位置。交わらなければ（面の向こうを向いている）null */
 export function levelPointAt(point: PhotoPoint, y: number, lens: Lens, pose: PhotoPose): Vec | null {
   const direction = toWorld(rayOf(point, lens), pose.fit);

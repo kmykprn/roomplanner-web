@@ -1,14 +1,14 @@
 /**
  * 家具が、写真に写っている物の奥に入って隠れる割合を見積もる（新しく置く場所を決めるときに使う）。
  *
- * 隠す仕組み（scene/depthOccluder.ts）と同じ奥行き（直し方・縁の寄せ方・10 cm の余裕）で判定する。
+ * 隠す仕組み（scene/depthOccluder.ts）と同じ奥行き（10 cm の余裕も同じ）で判定する。
  * 家具の箱の、カメラから見える面（底以外で、カメラの方を向いている面）に点を並べ、
  * その点が写る写真の画素の、写真の物までの距離より遠い点を「隠れる」と数える
  */
 
 import type { DepthMap } from '@/core/depthModel';
-import { photoPointOf, type DepthScale, type Lens, type PhotoPose } from '@/core/depthPlacement';
-import { PUSH_BACK, occluderDepths } from '@/scene/depthOccluder';
+import { photoPointOf, type Lens, type PhotoPose } from '@/core/depthPlacement';
+import { PUSH_BACK } from '@/scene/depthOccluder';
 
 type Vec = [number, number, number];
 
@@ -16,21 +16,20 @@ type Vec = [number, number, number];
 const SAMPLES_PER_SIDE = 8;
 
 export interface VisibilitySource {
+  /** 正面方向の奥行き（m）。隠さない所は NaN */
   map: DepthMap;
-  scale: DepthScale;
   lens: Lens;
 }
 
 /**
- * 隠れる割合（0〜1）を返す関数を作る。奥行きの準備（縁の寄せ方など）は 1 回だけ行い、
- * 置く場所の候補を何度も試せるようにする。写真の外に写る点は数えない
+ * 隠れる割合（0〜1）を返す関数を作る。置く場所の候補を何度も試せるようにする。写真の外に写る点は数えない
  */
 export function createHiddenShare(
   source: VisibilitySource,
   pose: PhotoPose
 ): (position: Vec, size: Vec, rotationY: number) => number {
   const { map, lens } = source;
-  const depths = occluderDepths(map, source.scale);
+  const depths = map.data;
   const t = Math.tan((lens.vfovDeg * Math.PI) / 360);
   const [cx, cy, cz] = pose.position;
 
