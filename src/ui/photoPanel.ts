@@ -1,14 +1,16 @@
 /**
  * 写真モードの「背景」タブ。
  *
- *   1 行だけ … ［背景の画像を選ぶ／変更］と［⋯］。読み込みに失敗したときだけ、下に一言
- *   ［⋯］    … 下から出るメニュー。背景の画像があるときだけ出す
+ *   1 行目   … ［背景の画像を選ぶ／変更］
+ *   2 行目   … ［✎ 編集］。背景の画像があるときだけ出す。読み込みに失敗したときだけ、その下に一言
+ *   ［✎ 編集］… 押すと下から出るメニュー
  *       拡大・縮小                     … ui/framePanel.ts
  *       寸法                           … ui/scalePanel.ts
  *       家具より手前に表示する範囲       … ui/maskPanel.ts
  *       背景の画像を外す
  *
- * **ふだん使わない操作はメニューにしまう。** 拡大・縮小・寸法・手前に表示する範囲は、
+ * **ふだん使わない操作は［✎ 編集］のメニューにしまう。** 前は［⋯］だったが、文字が無く、何ができるか分からなかった。
+ * 拡大・縮小・寸法・手前に表示する範囲は、
  * 写真を選んだ直後か、自動の推定がうまく合わないときにだけ使う。常に並べておくと、いちばん使う「変更」が埋もれる。
  * 背景の画像の小さな見本も出さない（写真そのものが上に大きく出ている）。
  * 室内の寸法を計算したかどうかも出さない（利用者の次の行動に関係しない）。
@@ -50,7 +52,7 @@ export function createPhotoPanel(): HTMLElement {
   /** 拡大・縮小する姿 */
   const frame = createFramePanel();
 
-  // --- 1 行: 選ぶ／変更 と ⋯ ---
+  // --- 1 行目に［選ぶ／変更］、2 行目に［✎ 編集］ ---
   const row = document.createElement('div');
   row.className = 'bg-row';
   const pickButton = document.createElement('button');
@@ -66,13 +68,14 @@ export function createPhotoPanel(): HTMLElement {
     { icon: 'layers', label: '家具より手前に表示する範囲', run: () => setMasking(true) },
     { icon: 'trash', label: '背景の画像を外す', run: clearBackground, danger: true },
   ]);
-  const moreButton = document.createElement('button');
-  moreButton.type = 'button';
-  moreButton.className = 'bg-row__more';
-  moreButton.textContent = '⋯';
-  moreButton.setAttribute('aria-label', '背景のほかの操作');
-  moreButton.addEventListener('click', menu.open);
-  row.append(pickButton, moreButton);
+  const editButton = document.createElement('button');
+  editButton.type = 'button';
+  editButton.className = 'bg-row__edit';
+  const editLabel = document.createElement('span');
+  editLabel.textContent = '編集';
+  editButton.append(createIcon('pencil'), editLabel);
+  editButton.addEventListener('click', menu.open);
+  row.append(pickButton, editButton);
 
   /** 読み込みに失敗したときの一言 */
   const note = document.createElement('p');
@@ -91,7 +94,7 @@ export function createPhotoPanel(): HTMLElement {
     // 読み込み中に押させると、どちらが背景になるのか分からなくなる
     pickButton.disabled = loading;
     // 背景の画像が無いと、メニューの操作はどれも使えない
-    moreButton.hidden = !ready;
+    editButton.hidden = !ready;
     if (!ready) menu.close();
     note.hidden = backgroundStatus !== 'failed';
 
@@ -114,7 +117,7 @@ interface MenuItem {
   danger?: boolean;
 }
 
-/** ［⋯］で下から出るメニュー。外側を押すか、項目を選ぶと閉じる */
+/** ［✎ 編集］で下から出るメニュー。外側を押すか、項目を選ぶと閉じる */
 function createBackgroundMenu(items: MenuItem[]): { element: HTMLElement; open(): void; close(): void } {
   const element = document.createElement('div');
   element.className = 'bg-menu';
@@ -124,7 +127,7 @@ function createBackgroundMenu(items: MenuItem[]): { element: HTMLElement; open()
   const sheet = document.createElement('div');
   sheet.className = 'bg-menu__sheet';
   sheet.setAttribute('role', 'dialog');
-  sheet.setAttribute('aria-label', '背景のほかの操作');
+  sheet.setAttribute('aria-label', '背景の編集');
   const close = (): void => {
     element.hidden = true;
   };

@@ -1847,36 +1847,41 @@ body {
   font-weight: 700;
 }
 
-/* 背景タブの 1 行: 選ぶ／変更（横いっぱい）と ⋯（丸）。親指で押しやすい高さにそろえる */
+/* 背景タブ: 1 行目に［選ぶ／変更］、2 行目に［✎ 編集］。どちらも横いっぱいで、親指で押しやすい高さにそろえる */
 .bg-row {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
 }
 .bg-row__pick {
-  flex: 1;
-  min-height: 44px;
+  min-height: 46px;
   font-size: 15px;
 }
-.bg-row__more {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+/* 控えめな［✎ 編集］。枠だけで、主の［背景の画像を変更］より弱く見せる */
+.bg-row__edit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 46px;
   border: 1px solid var(--border);
-  border-radius: 50%;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
-  font-size: 20px;
-  line-height: 1;
-  letter-spacing: 1px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
   touch-action: manipulation;
 }
-.bg-row__more[hidden] {
+.bg-row__edit .ic {
+  width: 18px;
+  height: 18px;
+}
+.bg-row__edit[hidden] {
   display: none;
 }
 
-/* ⋯ で下から出るメニュー。家具のメニュー（tile-actions）と同じく、画面の下に重ねる */
+/* ［✎ 編集］で下から出るメニュー。家具のメニュー（tile-actions）と同じく、画面の下に重ねる */
 .bg-menu {
   position: fixed;
   inset: 0;

@@ -57,7 +57,7 @@ test('背景タブと操作タブ、背景の調整の画面で、パネルの�
   await page.locator('.sheet__tab', { hasText: '操作' }).click();
   expect(await sheetHeight(page)).toBeCloseTo(background, 0);
   await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  await page.getByRole('button', { name: '背景のほかの操作' }).click();
+  await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
   await page.getByRole('button', { name: '拡大・縮小' }).click();
   expect(await sheetHeight(page)).toBeCloseTo(background, 0);
   // 低くしていたころの高さ（約 110px）ではなく、今までの高さ（画面の 42%、最低 280px）
