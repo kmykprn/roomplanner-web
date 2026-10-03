@@ -254,8 +254,10 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     scene.add({
       ...item,
       id,
-      // 底面基準なので y = 0 が床置き。既存の家具に埋まらない場所を選ぶ
+      // 底面基準なので y = 0 が床置き。写真では、背景の物に隠れない場所を手前へ探す
       position: scene.placementFor(item.size),
+      // 写真では、動かすまでは背景の物に隠さずに手前に描く（新しい家具は必ず見えるように）
+      ...(scene.newInFront ? { inFront: true } : {}),
       rotationY: 0,
       // 「初期値に戻す」で戻す先。あとから大きさを変えても、ここは書き替えない
       baseSize: [...item.size],

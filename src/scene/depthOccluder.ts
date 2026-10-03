@@ -22,7 +22,7 @@ import type { DepthScale, Lens } from '@/core/depthPlacement';
  * 下げないと、床に置いた家具の足元が床の面に埋もれて欠ける（奥行きの誤差で、床の面が手前に来る所がある）。
  * 10 cm と 15 cm を比べ、取り違えの少なかった 10 cm にした
  */
-const PUSH_BACK = 0.1;
+export const PUSH_BACK = 0.1;
 
 /**
  * 隣どうしの奥行きがこの比より離れている所は、物の縁とみなし、手前の奥行きに寄せる。
@@ -39,8 +39,24 @@ export interface OccluderSource {
   lens: Lens;
 }
 
+/** 隠さずに手前に描く家具の箱（3D の位置・大きさ・向き） */
+export interface FrontBox {
+  position: [number, number, number];
+  size: [number, number, number];
+  rotationY: number;
+}
+
+/** ステンシルに書く印。手前に描く家具の箱が写る画素に付け、隠す面はそこに奥行きを書かない */
+const FRONT_STENCIL = 1;
+/** 手前に描く家具の箱を、家具より少しだけ大きくする割合（縁が隠れて見えないように） */
+const FRONT_MARGIN = 1.05;
+
 export interface DepthOccluder {
   group: THREE.Group;
+  /** 手前に描く家具の箱の入れ物（3D の座標に置く。カメラには付いて行かない） */
+  frontGroup: THREE.Group;
+  /** 隠さずに手前に描く家具の箱を入れ替える */
+  setFrontBoxes(boxes: FrontBox[]): void;
   /** 面を作り直す。null なら面を外す。同じ中身なら何もしない */
   setSource(source: OccluderSource | null): void;
   /** 写真を描いているカメラと同じ位置・向きに置く */
@@ -50,8 +66,16 @@ export interface DepthOccluder {
 export function createDepthOccluder(): DepthOccluder {
   const group = new THREE.Group();
   group.name = 'depthOccluder';
-  // 色を書かず、奥行きだけを書く。家具より先に描く
-  const material = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+  // 色を書かず、奥行きだけを書く。家具より先に描く。
+  // 手前に描く家具の箱が写る画素（ステンシルの印がある所）には書かない。そこでは家具が写真の物に隠れない
+  const material = new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    side: THREE.DoubleSide,
+    stencilWrite: true,
+    stencilRef: FRONT_STENCIL,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilWriteMask: 0,
+  });
   let mesh: THREE.Mesh | null = null;
   let current: OccluderSource | null = null;
 
@@ -69,13 +93,49 @@ export function createDepthOccluder(): DepthOccluder {
     group.add(mesh);
   }
 
+  /**
+   * 手前に描く家具の箱。色も奥行きも書かず、写る画素にステンシルの印だけを付ける。隠す面より先に描く。
+   * 奥行きを見ないので、写真の物の奥にあっても印が付く
+   */
+  const frontGroup = new THREE.Group();
+  frontGroup.name = 'frontBoxes';
+  const frontMaterial = new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+    stencilWrite: true,
+    stencilRef: FRONT_STENCIL,
+    stencilFunc: THREE.AlwaysStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
+  });
+  const frontGeometry = new THREE.BoxGeometry(1, 1, 1);
+  let frontKey = '';
+
+  function setFrontBoxes(boxes: FrontBox[]): void {
+    const key = JSON.stringify(boxes);
+    if (key === frontKey) return;
+    frontKey = key;
+    frontGroup.clear();
+    for (const box of boxes) {
+      const mesh = new THREE.Mesh(frontGeometry, frontMaterial);
+      const [w, h, d] = box.size;
+      mesh.scale.set(w * FRONT_MARGIN, h * FRONT_MARGIN, d * FRONT_MARGIN);
+      // 箱は底面の中心が原点（家具と同じ）
+      mesh.position.set(box.position[0], box.position[1] + h / 2, box.position[2]);
+      mesh.rotation.y = box.rotationY;
+      mesh.renderOrder = -20;
+      frontGroup.add(mesh);
+    }
+  }
+
   function followCamera(camera: THREE.Camera): void {
     camera.updateMatrixWorld();
     group.position.copy(camera.position);
     group.quaternion.copy(camera.quaternion);
   }
 
-  return { group, setSource, followCamera };
+  return { group, frontGroup, setFrontBoxes, setSource, followCamera };
 }
 
 function sameSource(a: OccluderSource | null, b: OccluderSource | null): boolean {

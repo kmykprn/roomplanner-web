@@ -92,7 +92,8 @@ function fovForDrawHeight(drawHeight: number, containerHeight: number): number {
 export function createViewer(container: HTMLElement): Viewer {
   // alpha: true は写真モードのため。背景を CSS で敷いた写真に透かす。
   // 部屋モードは scene.background を色で塗るので、見た目は変わらない
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  // stencil: 新しく置いた家具を写真の物に隠さず手前に描くのに使う（scene/depthOccluder.ts）。three.js の既定は持たない
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // モバイルで 3x は重いので上限を 2 に
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;

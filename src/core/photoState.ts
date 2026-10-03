@@ -45,6 +45,7 @@ import {
   type PhotoPose,
 } from '@/core/depthPlacement';
 import { EYE_DISTANCE } from '@/interaction/photoCamera';
+import { createHiddenShare } from '@/core/placementVisibility';
 import { clearHistory } from '@/core/editHistory';
 
 /**
@@ -193,11 +194,20 @@ export const photoState = createStore<PhotoState>({
  * 同じ座標でも「画面のどこに、どの大きさで出るか」が写真ごとに変わる。
  * 広角の写真では 4 m 先が画面の真ん中に小さく出ていた
  */
-let placementFromCamera: (() => [number, number, number] | null) | null = null;
+let placementFromCamera: ((screenY: number) => [number, number, number] | null) | null = null;
 
-export function setPhotoPlacement(resolve: () => [number, number, number] | null): void {
+/**
+ * 画面の縦の位置（3D を描いている範囲の NDC、-1〜1）を渡すと、画面の横の真ん中のその高さに見えている床
+ * （寸法を合わせていれば、その点の奥行き）の位置を返す関数を入れる
+ */
+export function setPhotoPlacement(resolve: (screenY: number) => [number, number, number] | null): void {
   placementFromCamera = resolve;
 }
+
+/** 新しい家具の足元をまず置く、画面の縦の位置。下から 3 割 */
+const PLACEMENT_SCREEN_Y = -0.4;
+/** 写真の物に隠れるとき、足元を手前（画面の下）へずらす幅（NDC） */
+const PLACEMENT_STEP = 0.05;
 
 /** カメラで決められないとき（床より上を向いているなど）の置き場。カメラの 2 m 先 */
 const FALLBACK_PLACEMENT: [number, number, number] = [0, 0, 2];
@@ -206,11 +216,56 @@ const FALLBACK_PLACEMENT: [number, number, number] = [0, 0, 2];
 export const photoScene = createFurnitureScene(photoState, {
   // 画面の下寄りに見えている床に置く。空きを探して端に置くと画面の外に出て見失う。
   // 重なっても、置いた直後は選択されているので動かせばよい
-  placementFor: () => placementFromCamera?.() ?? FALLBACK_PLACEMENT,
+  placementFor: (size) => placementInFront(size),
+  // 手前へずらしても隠れる場合や、置いたあとに中身の形が読めて大きさが変わり隠れる場合があるので、
+  // 新しい家具は動かすまで必ず手前に描く（隠れる所が無ければ、見た目は変わらない）
+  newInFront: true,
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
   constrain: (position) => position,
 });
+
+/**
+ * 家具が写真の物に隠れる割合を見積もる関数。家具より手前に表示する範囲を自動で見つけていない（隠す面が無い）なら null
+ */
+function hiddenShareChecker(): ((position: [number, number, number], size: [number, number, number], rotationY: number) => number) | null {
+  const source = occluderSource();
+  return source ? createHiddenShare(source, currentPose()) : null;
+}
+
+/**
+ * 新しい家具を置く場所。画面の真ん中・下から 3 割に見えている床から始め、写真の物の奥に入って隠れるなら、
+ * 隠れなくなるまで足元を手前（画面の下）へずらす。家具の手前の下の角が画面の下から出る所までで止め、
+ * それでも隠れるなら、試した中でいちばん隠れない場所にする（隠れが残っても、動かすまでは手前に描く。newInFront）
+ */
+function placementInFront(size: [number, number, number]): [number, number, number] {
+  const first = placementFromCamera?.(PLACEMENT_SCREEN_Y) ?? FALLBACK_PLACEMENT;
+  const hiddenShare = hiddenShareChecker();
+  if (!hiddenShare || !placementFromCamera) return first;
+  const lens = depthLens() ?? lensSource?.();
+  const pose = currentPose();
+  const region = visibleRegion();
+  const bottom = region.y + region.height;
+  /** 家具の手前の下の 2 つの角が、写真の見えている範囲の下の端より上に写るか */
+  const aboveBottom = (position: [number, number, number]): boolean =>
+    !lens ||
+    [-1, 1].every((side) => {
+      const point = photoPointOf([position[0] + (side * size[0]) / 2, position[1], position[2] + size[2] / 2], lens, pose);
+      return point !== null && point.y <= bottom;
+    });
+  let best = first;
+  let bestShare = hiddenShare(first, size, 0);
+  for (let y = PLACEMENT_SCREEN_Y - PLACEMENT_STEP; bestShare > 0 && y > -1; y -= PLACEMENT_STEP) {
+    const position = placementFromCamera(y);
+    if (!position || !aboveBottom(position)) break;
+    const share = hiddenShare(position, size, 0);
+    if (share < bestShare) {
+      best = position;
+      bestShare = share;
+    }
+  }
+  return best;
+}
 
 /**
  * 背景の写真を差し替える。
@@ -524,7 +579,7 @@ function placeOnPhoto(points: Map<string, PhotoPoint>): void {
   const lens = depthLens() ?? lensSource?.();
   if (!lens || points.size === 0) return;
   const pose = currentPose();
-  const fallback = (): [number, number, number] => placementFromCamera?.() ?? FALLBACK_PLACEMENT;
+  const fallback = (): [number, number, number] => placementFromCamera?.(PLACEMENT_SCREEN_Y) ?? FALLBACK_PLACEMENT;
   const furniture = photoState.get().furniture.map((item) => {
     const point = points.get(item.id);
     if (!point) return item;
