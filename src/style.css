@@ -446,7 +446,6 @@ body {
 }
 
 /* 設定画面のような「見出し・いまの値・右端」の 1 行。行ごとボタンにもなる */
-/* 背景タブ: 背景の画像のカード */
 /* 背景の調整の各画面（ui/subScreen.ts）: 上に「戻る」と見出し、下に「完了」 */
 .sub {
   display: grid;
@@ -636,84 +635,7 @@ body {
   padding: 6px 8px;
   font-size: 13px;
 }
-.bg-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-}
-.bg-card__thumb {
-  flex: none;
-  width: 64px;
-  height: 52px;
-  border-radius: 8px;
-  background: #e6e2dc center / cover no-repeat;
-}
-.bg-card__text {
-  display: grid;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-.bg-card__title {
-  font-size: 14px;
-}
-.bg-card__note {
-  color: #7a8388;
-  font-size: 12px;
-}
-/* 背景の調整の見出し */
-.bg-heading {
-  margin: 4px 0 0;
-  color: #7a8388;
-  font-size: 12px;
-  letter-spacing: 0.04em;
-}
-/* 背景の調整: 3 つのタイル。同じ幅・同じ高さにそろえる */
-.bg-tiles {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-/* タイルはアイコンと名前だけ。3 つの高さはそろうので、中身を縦にも真ん中へ寄せる */
-.bg-tile {
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 6px;
-  min-height: 96px;
-  padding: 12px 6px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #f7f9fa;
-  color: var(--text);
-  font: inherit;
-  text-align: center;
-  touch-action: manipulation;
-}
-.bg-tile:active {
-  background: #eef3f6;
-}
-.bg-tile__icon {
-  color: var(--primary);
-}
-.bg-tile__icon .ic {
-  width: 30px;
-  height: 30px;
-}
-/* 名前の欄は 2 行分の高さにそろえ、その中で縦に真ん中へ置く（1 行の名前でもアイコンの高さがそろう） */
-.bg-tile__label {
-  display: flex;
-  align-items: center;
-  min-height: calc(14px * 1.35 * 2);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.35;
-  white-space: pre-line;
-}
+
 .setting {
   display: flex;
   align-items: center;
@@ -1853,4 +1775,85 @@ body {
   min-height: 48px;
   font-size: 16px;
   font-weight: 700;
+}
+
+/* 背景タブの 1 行: 選ぶ／変更（横いっぱい）と ⋯（丸）。親指で押しやすい高さにそろえる */
+.bg-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bg-row__pick {
+  flex: 1;
+  min-height: 44px;
+  font-size: 15px;
+}
+.bg-row__more {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 1px;
+  touch-action: manipulation;
+}
+.bg-row__more[hidden] {
+  display: none;
+}
+
+/* ⋯ で下から出るメニュー。家具のメニュー（tile-actions）と同じく、画面の下に重ねる */
+.bg-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.bg-menu[hidden] {
+  display: none;
+}
+.bg-menu__dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 28, 0.38);
+}
+.bg-menu__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  padding: 8px 0 calc(12px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+}
+.bg-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  padding: 0 20px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  touch-action: manipulation;
+}
+.bg-menu__item:active {
+  background: #eef3f6;
+}
+.bg-menu__item .ic {
+  width: 22px;
+  height: 22px;
+  color: var(--primary);
+}
+.bg-menu__item.is-danger,
+.bg-menu__item.is-danger .ic {
+  color: var(--danger);
 }

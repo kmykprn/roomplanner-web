@@ -102,7 +102,8 @@ test('拡大・縮小のバーの「1倍」で、倍率 1 に戻る', async ({ p
     photoState.set({ backgroundStatus: 'ready', backgroundUrl: canvas.toDataURL(), backgroundAspect: 4 / 3 });
   });
   await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  await page.locator('.bg-tile', { hasText: '拡大・縮小' }).click();
+  await page.getByRole('button', { name: '背景のほかの操作' }).click();
+  await page.getByRole('button', { name: '拡大・縮小' }).click();
   const scaleOf = () => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().view.scale);
   const reset = page.getByRole('button', { name: '倍率を1倍に戻す' });
   expect(await scaleOf()).toBe(1);
