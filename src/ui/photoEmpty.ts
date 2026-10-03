@@ -39,8 +39,8 @@ export function createPhotoEmpty(): HTMLElement {
   function render(): void {
     const { backgroundStatus } = photoState.get();
     const failed = backgroundStatus === 'failed';
-    // 写真が無いときだけ。読み込み中と、写真がある間は出さない
-    element.hidden = !isPhotoMode() || backgroundStatus === 'ready' || backgroundStatus === 'loading';
+    // 写真が無いときだけ。読み込み中・端末に残した写真を読み戻している間・写真がある間は出さない
+    element.hidden = !isPhotoMode() || ['ready', 'loading', 'restoring'].includes(backgroundStatus);
     note.classList.toggle('is-error', failed);
     note.textContent = failed ? FAILED_MESSAGE : IDLE_MESSAGE;
   }

@@ -74,7 +74,10 @@ export function createPhotoPanel(): HTMLElement {
   const editLabel = document.createElement('span');
   editLabel.textContent = '編集';
   editButton.append(createIcon('pencil'), editLabel);
-  editButton.addEventListener('click', menu.open);
+  // 読み戻している間は出しておくが、開かない（メニューの操作はどれも写真が要る）
+  editButton.addEventListener('click', () => {
+    if (photoState.get().backgroundStatus === 'ready') menu.open();
+  });
   row.append(pickButton, editButton);
 
   /** 読み込みに失敗したときの一言 */
@@ -89,12 +92,14 @@ export function createPhotoPanel(): HTMLElement {
     const { backgroundStatus, isMasking, isScaling, isFramingPhoto } = photoState.get();
     const ready = backgroundStatus === 'ready';
     const loading = backgroundStatus === 'loading';
+    // 端末に残した写真を読み戻している間も、写真があるときと同じ見た目にする（文言がちらつかないように）
+    const hasPhoto = ready || backgroundStatus === 'restoring';
 
-    pickButton.textContent = loading ? '読み込み中…' : ready ? '背景の画像を変更' : '背景の画像を選ぶ';
+    pickButton.textContent = loading ? '読み込み中…' : hasPhoto ? '背景の画像を変更' : '背景の画像を選ぶ';
     // 読み込み中に押させると、どちらが背景になるのか分からなくなる
     pickButton.disabled = loading;
     // 背景の画像が無いと、メニューの操作はどれも使えない
-    editButton.hidden = !ready;
+    editButton.hidden = !hasPhoto;
     if (!ready) menu.close();
     note.hidden = backgroundStatus !== 'failed';
 

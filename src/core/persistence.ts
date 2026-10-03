@@ -88,14 +88,23 @@ export function restorePhoto(): void {
     scaleLines: restoredScaleLines(saved),
     depthScale: normalizeFittedScale(saved.depthScale),
     backgroundName: saved.backgroundName ?? null,
+    // 写真の名前が残っていれば、前に写真を選んでいた。読み戻す間も写真があるときと同じ画面にする
+    backgroundStatus: saved.backgroundName ? 'restoring' : 'idle',
     selectedId: null,
   });
 
+  /** 読み戻しをやめて「写真が無い」に戻す。読み戻す間に別の写真を選んでいたら何もしない */
+  const giveUp = (): void => {
+    if (photoState.get().backgroundStatus === 'restoring') photoState.set({ backgroundStatus: 'idle', backgroundName: null });
+  };
+
   readBackground()
     .then(async (blob) => {
+      // 読み戻す間に別の写真を選んでいたら、古い写真で上書きしない
+      if (!['restoring', 'idle'].includes(photoState.get().backgroundStatus)) return;
       if (!blob) {
         // 名前だけ残って写真が無い状態にしない
-        photoState.set({ backgroundName: null });
+        giveUp();
         return;
       }
       if (!(await showBackground(blob))) return;
@@ -110,6 +119,7 @@ export function restorePhoto(): void {
     })
     .catch(() => {
       // 読めなくても起動は続ける。写真を選び直せばよい
+      giveUp();
     });
 }
 
@@ -182,8 +192,9 @@ export function persistRoomOnChange(): void {
 export function persistPhotoOnChange(): void {
   const request = saveAfterEdit(() => {
     const state = photoState.get();
-    // 読み込みの途中は残さない。名前だけ先に入って写真が無い、という中途半端を防ぐ
-    if (state.backgroundStatus === 'loading') return;
+    // 読み込みと読み戻しの途中は残さない。名前だけ先に入って写真が無い、という中途半端を防ぐ
+    // （読み戻しの途中に残すと、写真の名前が消え、次に開いたときに読み戻す間の画面が「写真が無い」になる）
+    if (state.backgroundStatus === 'loading' || state.backgroundStatus === 'restoring') return;
     const saved: SavedPhoto = {
       furniture: state.furniture,
       // 寸法の画面で一時的に寄っている間は、入る前の見え方を残す
