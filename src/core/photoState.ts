@@ -220,6 +220,9 @@ export const photoScene = createFurnitureScene(photoState, {
  * 端末の上限を超える大きさ）。確かめずに背景へ入れると、黙って黒いままになる。
  */
 export async function setBackground(file: File): Promise<void> {
+  // 置いてある家具が、いまの写真のどこに写っているか。写真を変えたあとも、新しい写真の同じ点に置く
+  // （画角・傾き・撮った高さは写真ごとに違うので、3D の位置のままにすると、画面の外や遠くへ行ってしまう）
+  const furniturePoints = furnitureOnPhoto();
   photoState.set({ backgroundStatus: 'loading', backgroundName: file.name });
 
   // 縮めると EXIF が消えるので、先に元のファイルからレンズの焦点距離を読んでおく
@@ -248,6 +251,7 @@ export async function setBackground(file: File): Promise<void> {
     ...FRESH_SCALE,
     ...FRESH_MEASURE,
   });
+  placeOnPhoto(furniturePoints);
   deleteDepth().catch(() => {});
   // 前の写真での家具の操作は、別の写真では戻せても意味がないので捨てる
   clearHistory(photoScene);
@@ -499,16 +503,36 @@ function placeFurnitureOnDepth(points: Map<string, PhotoPoint>): void {
  * そのままでは家具が画面の上で動いてしまう。変える前に写真のどこに写っていたかを控え、
  * 変えたあと、同じ点を通る視線と、その家具の足元の高さの水平な面との交点へ置き直す
  */
-function keepOnPhoto(change: () => void): void {
+export function keepOnPhoto(change: () => void): void {
   const points = furnitureOnPhoto();
   change();
+  placeOnPhoto(points);
+}
+
+/**
+ * 写真の点に写るように置き直すとき、カメラからこれより遠くなるなら、新しく置くときの場所に置く（m）。
+ * 写真の点が地平線のすぐ下だと、その点を通る視線は床とずっと遠くで交わり、家具が豆粒になって見失う
+ */
+const MAX_KEEP_DISTANCE = 12;
+
+/**
+ * 家具を、控えた写真の点に写るよう、いまのカメラで置き直す（足元の高さは変えない）。
+ * 写真の点を通る視線が足元の高さの面と交わらない（地平線より上）か、交わっても遠すぎる家具は、
+ * 新しく家具を置くときと同じ場所（画面の中央・下から 3 割）に置く。どちらでも画面の外には行かない
+ */
+function placeOnPhoto(points: Map<string, PhotoPoint>): void {
   const lens = depthLens() ?? lensSource?.();
   if (!lens || points.size === 0) return;
   const pose = currentPose();
+  const fallback = (): [number, number, number] => placementFromCamera?.() ?? FALLBACK_PLACEMENT;
   const furniture = photoState.get().furniture.map((item) => {
     const point = points.get(item.id);
-    const position = point ? levelPointAt(point, item.position[1], lens, pose) : null;
-    return position ? { ...item, position } : item;
+    if (!point) return item;
+    const kept = levelPointAt(point, item.position[1], lens, pose);
+    const near = kept && Math.hypot(kept[0] - pose.position[0], kept[2] - pose.position[2]) <= MAX_KEEP_DISTANCE;
+    if (kept && near) return { ...item, position: kept };
+    const [x, , z] = fallback();
+    return { ...item, position: [x, item.position[1], z] as [number, number, number] };
   });
   photoState.set({ furniture });
 }
