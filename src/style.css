@@ -850,45 +850,116 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* 置いてある家具の一覧（何も選んでいないとき） */
+/* 置いてある家具の一覧（何も選んでいないとき）。見出しの行・タイルの格子・削除のあとの一言 */
 .manage__list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
 }
 
-.manage__item {
+/* 見出しの行: 一言と、右端の「選択」／「キャンセル」 */
+.manage__top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  min-height: 30px;
+}
+.manage__top .hint {
+  font-size: 13px;
 }
 
-/* 行の大半を「選ぶ」ボタンにする。押しやすく、どこが押せるか迷わない */
-.manage__pick {
-  display: flex;
-  flex: 1;
-  align-items: center;
+/* 横 4 つのタイルの格子。名前が長くても、どのタイルも同じ大きさにする */
+.manage__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  min-width: 0;
-  padding: 6px 8px;
+}
+
+/* 1 つの家具のタイル（と、先頭の［＋ 家具を追加］）。正方形 */
+.manage__tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 6px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff;
   color: var(--text);
   font: inherit;
-  text-align: left;
   touch-action: manipulation;
 }
+.manage__tile.is-checked {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
 
-.manage__icon {
+/* 先頭の［＋ 家具を追加］。点線の枠とメインカラーで、ほかのタイルと見分ける */
+.manage__tile.manage__add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  border: 1px dashed var(--primary);
+  background: #f2f8fa;
+  color: var(--primary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.manage__tile.manage__add .ic {
+  width: 24px;
+  height: 24px;
+}
+.manage__tile.manage__add:disabled {
+  opacity: 0.35;
+}
+
+/* チェックを付けている間の、タイルの右上の丸。付いたらメインカラーで塗り、チェックの印を描く */
+.manage__check {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: rgba(17, 24, 28, 0.25);
+  box-shadow: 0 0 0 1px #b8c0c4;
+}
+.manage__tile.is-checked .manage__check {
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.manage__tile.is-checked .manage__check::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid #fff;
+  border-width: 0 2.4px 2.4px 0;
+  transform: rotate(45deg);
+}
+
+/* 見出しの行の「選択」／「キャンセル」。is-text の左寄せの余白は使わない */
+.manage__check-toggle {
+  margin-left: 0;
   flex: none;
-  width: 36px;
-  height: 36px;
-  padding: 3px;
-  border-radius: 6px;
+}
+
+
+
+
+
+/* タイルの中の家具の画像。枠を覆わず全体を収める */
+.manage__icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
   background: #fff center / contain no-repeat;
-  background-origin: content-box;
-  border: 1px solid var(--border);
 }
 
 .manage__name {
@@ -1863,26 +1934,6 @@ body {
   .sheet {
     transition: none;
   }
-}
-
-/* 操作タブの一覧の先頭の［＋ 家具を追加］。一覧の行と同じ大きさで、押すと家具のページが開く */
-.manage__add {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px dashed var(--primary);
-  border-radius: 8px;
-  background: #f2f8fa;
-  color: var(--primary);
-  font: inherit;
-  font-weight: 600;
-  text-align: left;
-  touch-action: manipulation;
-}
-.manage__add .ic {
-  width: 22px;
-  height: 22px;
 }
 
 /* 選んでいる家具の名前の右の小さな［＋］（家具を追加） */

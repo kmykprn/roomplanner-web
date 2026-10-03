@@ -203,6 +203,8 @@ export function createBottomSheet(container: HTMLElement): void {
         button.classList.toggle('is-active', tab === activeTab);
         button.textContent = TABS[tab];
         button.addEventListener('click', () => {
+          // タブを離れたら、一覧のチェックを付けている途中でも終える
+          if (tab !== activeTab) checked = null;
           activeTab = tab;
           render();
         });
@@ -267,7 +269,7 @@ export function createBottomSheet(container: HTMLElement): void {
   /** 一覧に出ている中身（並び・名前・アイコン・色と、削除の直後の一言）。位置や大きさは入れない */
   function listKey(furniture: PlacedFurniture[]): string {
     const items = furniture.map((item) => [item.id, item.name, item.typeId, item.imageUrl, item.sourceImageKey, item.color]);
-    return JSON.stringify([items, removedNote]);
+    return JSON.stringify([items, removedNote, checked !== null]);
   }
 
   /** 一覧のアイコンが読み込んだ画像を解放する。一覧を画面から外すときに呼ぶ */
@@ -297,16 +299,22 @@ export function createBottomSheet(container: HTMLElement): void {
       const item = furniture.find((entry) => entry.id === selectedId);
       if (!item) return;
       // 消すと同時に一覧が描かれるので、一言は消す前に用意する
-      removedNote = `「${item.name ?? '家具'}」を画面から削除しました。「家具を追加」の中には残っています`;
-      removeFromScreen(scene, item);
+      removedNote = removedNoteFor([item]);
+      removeFromScreen(scene, [item]);
     }, 'is-small manage__delete manage__bar-end');
-    element.append(undoButton, resetButton, removeButton);
+    // 一覧でチェックを付けた家具を、まとめて画面から外す（色は上と同じグレー。消えるのは置いた分だけ）
+    const removeCheckedButton = createButton('', removeChecked, 'is-small manage__delete manage__bar-end');
+    element.append(undoButton, resetButton, removeButton, removeCheckedButton);
     const refresh = (): void => {
       const scene = activeScene();
       const hasSelection = scene.state().furniture.some((item) => item.id === scene.state().selectedId);
       undoButton.disabled = !canUndo(scene);
+      // チェックを付けている間は、まとめて外すボタンだけを出す。1 つも付けていなければ出さない（押しても何も起きない）
+      undoButton.hidden = checked !== null;
       resetButton.hidden = !hasSelection;
       removeButton.hidden = !hasSelection;
+      removeCheckedButton.hidden = !checked || checked.size === 0;
+      if (checked) removeCheckedButton.textContent = `画面から削除（${checked.size} 個）`;
     };
     editHistory.subscribe(refresh);
     return { element, refresh };
@@ -316,6 +324,32 @@ export function createBottomSheet(container: HTMLElement): void {
   let moreOpen = false;
   /** 「画面から削除」の直後に一覧へ出す一言。次に家具を選ぶまで残す */
   let removedNote: string | null = null;
+  /**
+   * 一覧で、画面から外す家具にチェックを付けている最中なら、チェックを付けた家具の id。ふだんは null。
+   * 一覧の「選択」で始め、「キャンセル」か、外し終えたとき、家具を選んだときに終える
+   */
+  let checked: Set<string> | null = null;
+
+  /** 画面から外したあとに一覧へ出す一言 */
+  function removedNoteFor(items: PlacedFurniture[]): string {
+    const what = items.length === 1 ? `「${items[0].name ?? '家具'}」` : `${items.length} 個の家具`;
+    return `${what}を画面から削除しました。「家具を追加」の中には残っています`;
+  }
+
+  /** チェックを付けた家具を、まとめて画面から外す。ひとつ戻すでは、まとめて 1 回で戻る */
+  function removeChecked(): void {
+    const scene = activeScene();
+    const items = scene.state().furniture.filter((item) => checked?.has(item.id));
+    checked = null;
+    if (items.length === 0) {
+      render();
+      return;
+    }
+    // 消すと同時に一覧が描かれるので、一言は消す前に用意する
+    removedNote = removedNoteFor(items);
+    removeFromScreen(scene, items);
+    render();
+  }
 
   /** 削除の直後なら、その旨を一覧の下に出す */
   function appendRemovedNote(list: HTMLElement): void {
@@ -337,6 +371,8 @@ export function createBottomSheet(container: HTMLElement): void {
     const selected = furniture.find((f) => f.id === selectedId);
 
     if (!selected) {
+      // 消えた家具のチェックは外す
+      if (checked) checked = new Set([...checked].filter((id) => furniture.some((item) => item.id === id)));
       const icons: ReturnType<typeof createPreviewImage>[] = [];
       wrapper.append(createFurnitureList(furniture, icons), manageFoot.element);
       listView = { key: listKey(furniture), dispose: () => icons.forEach((icon) => icon.dispose()) };
@@ -344,6 +380,8 @@ export function createBottomSheet(container: HTMLElement): void {
       return wrapper;
     }
     removedNote = null;
+    // 家具を選んだら、チェックを付けている途中でも終える
+    checked = null;
 
     const { id } = selected;
     // 見出し: どの家具を触っているか（画面から削除は下の段の右端）
@@ -481,14 +519,14 @@ export function createBottomSheet(container: HTMLElement): void {
 
   /**
    * 家具を置くページを開くボタン。
-   * row: 一覧の先頭に置く横長の行（＋と「家具を追加」）。small: 選んでいる家具の名前の右に置く小さな丸（＋だけ）
+   * tile: 一覧の先頭のタイル（＋と「家具を追加」）。small: 選んでいる家具の名前の右に置く小さな丸（＋だけ）
    */
-  function createAddButton(kind: 'row' | 'small'): HTMLButtonElement {
+  function createAddButton(kind: 'tile' | 'small'): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = kind === 'row' ? 'manage__add' : 'manage__add-small';
+    button.className = kind === 'tile' ? 'manage__tile manage__add' : 'manage__add-small';
     button.append(createIcon('plus'));
-    if (kind === 'row') {
+    if (kind === 'tile') {
       const label = document.createElement('span');
       label.textContent = '家具を追加';
       button.append(label);
@@ -500,38 +538,51 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 置いてある家具の一覧。何も選んでいないときに出す。
+   * 置いてある家具の一覧。何も選んでいないときに出す。横 4 つのタイルの格子で、先頭は［＋ 家具を追加］。
    *
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
-   * 選べない。一覧からなら選べるし、消せる。行を押すと選択になり、操作の行に切り替わる
+   * 選べない。一覧からなら選べる。タイルを押すと選択になり、操作の行に切り替わる。
+   * 「選択」を押すと、タイルにチェックを付けて、まとめて画面から外せる（外すボタンは下の段）
    */
   function createFurnitureList(furniture: PlacedFurniture[], icons: ReturnType<typeof createPreviewImage>[]): HTMLElement {
     const list = document.createElement('div');
     list.className = 'manage__list';
-    // 先頭はいつも［＋ 家具を追加］。家具を置くページはここから開く
-    list.append(createAddButton('row'));
-    if (furniture.length === 0) {
-      const hint = document.createElement('p');
-      hint.className = 'hint';
-      hint.textContent = '「家具を追加」から置いた家具が、ここに並びます';
-      list.append(hint);
-      appendRemovedNote(list);
-      return list;
-    }
+    const scene = activeScene();
+
+    // 見出しの行: いまできることの一言と、「選択」／「キャンセル」
+    const top = document.createElement('div');
+    top.className = 'manage__top';
     const hint = document.createElement('p');
     hint.className = 'hint';
-    hint.textContent = '家具をタップすると選択できます。画面の外にある家具は、この一覧から選べます';
-    list.append(hint);
-    appendRemovedNote(list);
+    top.append(hint);
+    if (furniture.length > 0) {
+      const toggle = createButton(checked ? 'キャンセル' : '選択', () => {
+        checked = checked ? null : new Set();
+        render();
+      }, 'is-text is-small manage__check-toggle');
+      top.append(toggle);
+    }
+    const showHint = (): void => {
+      if (furniture.length === 0) hint.textContent = '「家具を追加」から置いた家具が、ここに並びます。';
+      else if (!checked) hint.textContent = '家具を押すと、選んで操作できます。';
+      else if (checked.size === 0) hint.textContent = '画面から削除する家具を押してください。';
+      else hint.textContent = `${checked.size} 個選んでいます。`;
+    };
+    showHint();
 
-    const scene = activeScene();
+    const grid = document.createElement('div');
+    grid.className = 'manage__grid';
+    const add = createAddButton('tile');
+    // チェックを付けている間は押せない（押すと家具のページが開いて、付けたチェックの意味が分からなくなる）
+    add.disabled = checked !== null;
+    grid.append(add);
     for (const item of furniture) {
-      const row = document.createElement('div');
-      row.className = 'manage__item';
-
-      const pick = document.createElement('button');
-      pick.type = 'button';
-      pick.className = 'manage__pick';
+      const name = item.name ?? item.typeId;
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'manage__tile';
+      tile.title = name;
+      tile.setAttribute('aria-label', name);
       const icon = document.createElement('span');
       icon.className = 'manage__icon';
       if (item.imageUrl || item.sourceImageKey) {
@@ -541,19 +592,32 @@ export function createBottomSheet(container: HTMLElement): void {
       } else {
         icon.style.background = item.color;
       }
-      const name = document.createElement('span');
-      name.className = 'manage__name';
-      name.textContent = item.name ?? item.typeId;
-      pick.append(icon, name);
-      pick.addEventListener('click', () => scene.select(item.id));
-
-      const remove = createButton('', () => removeFromScreen(scene, item), 'is-small manage__delete');
-      remove.setAttribute('aria-label', `${name.textContent} を画面から削除`);
-      remove.append(createIcon('trash'));
-
-      row.append(pick, remove);
-      list.append(row);
+      tile.append(icon);
+      if (checked) {
+        const mark = document.createElement('span');
+        mark.className = 'manage__check';
+        mark.setAttribute('aria-hidden', 'true');
+        tile.append(mark);
+        tile.setAttribute('aria-pressed', String(checked.has(item.id)));
+        tile.classList.toggle('is-checked', checked.has(item.id));
+      }
+      tile.addEventListener('click', () => {
+        if (!checked) {
+          scene.select(item.id);
+          return;
+        }
+        // チェックを付け外しする。一覧は作り直さず、このタイルと見出し・下の段だけを書き替える（アイコンがチラつかない）
+        if (checked.has(item.id)) checked.delete(item.id);
+        else checked.add(item.id);
+        tile.classList.toggle('is-checked', checked.has(item.id));
+        tile.setAttribute('aria-pressed', String(checked.has(item.id)));
+        showHint();
+        manageFoot.refresh();
+      });
+      grid.append(tile);
     }
+    list.append(top, grid);
+    appendRemovedNote(list);
     return list;
   }
 
@@ -585,10 +649,12 @@ export function createBottomSheet(container: HTMLElement): void {
    * 置いた家具を画面から消す。ひとつ戻すで戻せるよう、中身（3D や切り抜き）は戻せなくなるまで捨てない
    * （保管庫にも他の家具にも使われていなければ、そのときに捨てる）
    */
-  function removeFromScreen(scene: EditableScene, item: PlacedFurniture): void {
+  function removeFromScreen(scene: EditableScene, items: PlacedFurniture[]): void {
     beginEdit(scene);
-    scene.remove(item.id);
-    discardLater(scene, () => releaseFurnitureAssets(item));
+    for (const item of items) {
+      scene.remove(item.id);
+      discardLater(scene, () => releaseFurnitureAssets(item));
+    }
     endEdit(scene);
   }
 
@@ -669,6 +735,7 @@ export function createBottomSheet(container: HTMLElement): void {
   // 先にやるべき「背景の写真を選ぶ」に辿り着けない
   modeState.subscribe(() => {
     activeTab = visibleTabs()[0];
+    checked = null;
     previousSelectedId = activeScene().state().selectedId;
     render();
   });
