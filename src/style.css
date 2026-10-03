@@ -857,16 +857,10 @@ body {
   width: 100%;
 }
 
-/* 見出しの行: 一言と、右端の「選択」／「キャンセル」 */
+/* 見出しの行: 右端の「選択」／「キャンセル」 */
 .manage__top {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 30px;
-}
-.manage__top .hint {
-  font-size: 13px;
+  justify-content: flex-end;
 }
 
 /* 横 4 つのタイルの格子。名前が長くても、どのタイルも同じ大きさにする */
@@ -1016,9 +1010,6 @@ body {
   display: grid;
   gap: 8px;
   padding-top: 4px;
-}
-.manage__removed {
-  font-size: 12px;
 }
 /* 下の段の右端に寄せる（画面から削除） */
 .manage__bar-end {

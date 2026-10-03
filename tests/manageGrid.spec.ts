@@ -42,20 +42,36 @@ test('「選択」でチェックを付け、「画面から削除（2 個）」
 
   await removeChecked.click();
   expect(await placedCount(page)).toBe(0);
-  await expect(page.getByText('2 個の家具を画面から削除しました。「家具を追加」の中には残っています')).toBeVisible();
+  // 外したあとの一言は出さない（タイルが消えて分かる。間違えてもひとつ戻すで戻せる）
+  await expect(page.locator('.manage .hint')).toHaveCount(0);
   await page.getByRole('button', { name: 'ひとつ戻す' }).click();
   expect(await placedCount(page)).toBe(2);
 });
 
-test('チェックを外すと数が減り、「キャンセル」でふだんの一覧に戻る', async ({ page }) => {
+test('チェックを外すと数が減り、「キャンセル」でふだんの一覧に戻る。説明の一言は出さない', async ({ page }) => {
+  await expect(page.locator('.manage .hint')).toHaveCount(0);
   await page.getByRole('button', { name: '選択' }).click();
+  await expect(page.locator('.manage .hint')).toHaveCount(0);
   const tile = page.getByRole('button', { name: 'テスト 1' });
+  const removeChecked = page.locator('.manage__bar').getByRole('button', { name: /^画面から削除（/ });
   await tile.click();
-  await expect(page.getByText('1 個選んでいます。')).toBeVisible();
+  await expect(removeChecked).toHaveText('画面から削除（1 個）');
+  await expect(page.locator('.manage .hint')).toHaveCount(0);
   await tile.click();
-  await expect(page.getByText('画面から削除する家具を押してください。')).toBeVisible();
+  await expect(removeChecked).toBeHidden();
   await page.getByRole('button', { name: 'キャンセル' }).click();
   await expect(page.locator('.manage__check')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'ひとつ戻す' })).toBeVisible();
   expect(await placedCount(page)).toBe(2);
+});
+
+test('家具が 1 つも無いときは、［＋ 家具を追加］だけを出す（「選択」も一言も出さない）', async ({ page }) => {
+  await page.evaluate(async () => {
+    const { activeScene } = await import('/src/core/mode.ts');
+    const scene = activeScene();
+    for (const item of scene.state().furniture) scene.remove(item.id);
+  });
+  await expect(page.locator('.manage__grid > .manage__tile')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '選択' })).toHaveCount(0);
+  await expect(page.locator('.manage .hint')).toHaveCount(0);
 });
