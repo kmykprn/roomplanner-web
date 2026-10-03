@@ -857,23 +857,33 @@ body {
   width: 100%;
 }
 
-/* 見出しの行: 右端の「選択」／「キャンセル」 */
+/*
+ * 見出しの行: 右端に「選択」／「キャンセル」、チェックを付けている間はその左に「画面から削除（N 個）」。
+ * ボタンが出ても消えても高さが変わらないよう、高さを決めておく（タイルの大きさの計算がずれない）
+ */
 .manage__top {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
+  min-height: 34px;
 }
 
 /* 横 4 つのタイルの格子。名前が長くても、どのタイルも同じ大きさにする */
 .manage__grid {
   display: grid;
+  /* 列の数と幅は ui/bottomSheet.ts の fitTiles が入れる（入るまでは横 4 つ） */
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-/* 1 つの家具のタイル（と、先頭の［＋ 家具を追加］）。正方形 */
+/* 1 つの家具のタイル（と、先頭の［＋ 家具を追加］）。正方形。大きさは --tile（fitTiles が入れる） */
 .manage__tile {
   position: relative;
+  width: var(--tile, auto);
+  height: var(--tile, auto);
   aspect-ratio: 1;
+  box-sizing: border-box;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -1019,6 +1029,9 @@ body {
   margin-top: 2px;
 }
 /* 操作タブの下の段（ひとつ戻す・初期値に戻す・画面から削除）。スクロールしても画面の下に残す */
+.manage__bar[hidden] {
+  display: none;
+}
 .manage__bar {
   position: sticky;
   bottom: -16px;

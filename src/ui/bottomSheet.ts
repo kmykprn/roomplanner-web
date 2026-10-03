@@ -24,7 +24,7 @@ import { createSliderRow } from '@/ui/sliderRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
-import { beginEdit, canUndo, discardLater, editHistory, endEdit, recordEdit, undo } from '@/core/editHistory';
+import { beginEdit, discardLater, endEdit, recordEdit } from '@/core/editHistory';
 import { photoState, setFramingPhoto, setMasking, setScaling } from '@/core/photoState';
 
 type TabId = 'interior' | 'background' | 'manage';
@@ -121,6 +121,11 @@ const TABS: Record<TabId, string> = {
  * モードごとのタブの並び。部屋は内装（壁と床）、写真は背景（部屋の写真）から始まる。
  * 家具を置くページは、タブではなく操作タブの［＋ 家具を追加］から開く（ページは画面全体に開くので、タブの中身が無い）
  */
+/** 操作タブの一覧で、横に並べるタイルの数（幅が足りる限り）。高さが足りないと、タイルが縮んで数が増える */
+const TILE_COLUMNS = 4;
+/** タイルの大きさの下限（px）。これより小さいと押しにくい */
+const TILE_MIN = 52;
+
 const ROOM_TABS: TabId[] = ['interior', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'manage'];
 
@@ -214,8 +219,35 @@ export function createBottomSheet(container: HTMLElement): void {
 
     disposeList();
     body.replaceChildren(renderActiveTab());
+    fitTiles();
   }
 
+
+  /**
+   * 操作タブの一覧のタイルの大きさを決める。**どの端末でも、タイルが 2 段そろって切れずに見えるようにする。**
+   *   幅から: 横に 4 つ並ぶ大きさ
+   *   高さから: パネルの中で 2 段が収まる大きさ（見出しの行の高さを引く）
+   * 小さい方にし、縮んだ分は横に並べる数を増やす。［＋ 家具を追加］も家具のタイルも、同じ大きさを数で入れる
+   * （CSS の正方形の指定と % の高さに任せると、ブラウザによって［＋］と家具のタイルの大きさがずれることがある）
+   */
+  function fitTiles(): void {
+    const grid = body.querySelector<HTMLElement>('.manage__grid');
+    if (!grid || body.clientHeight === 0) return;
+    const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+    const bodyStyle = getComputedStyle(body);
+    const inner = body.clientHeight - parseFloat(bodyStyle.paddingTop) - parseFloat(bodyStyle.paddingBottom);
+    // 格子より上にある物（見出しの行）の高さ
+    const above = grid.getBoundingClientRect().top - body.getBoundingClientRect().top - parseFloat(bodyStyle.paddingTop) + body.scrollTop;
+    const width = grid.clientWidth;
+    const byWidth = Math.floor((width - gap * (TILE_COLUMNS - 1)) / TILE_COLUMNS);
+    const byHeight = Math.floor((inner - above - gap) / 2);
+    const size = Math.max(TILE_MIN, Math.min(byWidth, byHeight));
+    const columns = Math.max(TILE_COLUMNS, Math.floor((width + gap) / (size + gap)));
+    grid.style.setProperty('--tile', `${size}px`);
+    grid.style.gridTemplateColumns = `repeat(${columns}, ${size}px)`;
+  }
+  // 画面の向きや大きさが変わったら、タイルの大きさを決め直す
+  new ResizeObserver(() => fitTiles()).observe(body);
 
   function renderActiveTab(): HTMLElement {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
@@ -252,15 +284,13 @@ export function createBottomSheet(container: HTMLElement): void {
     listView = null;
   }
   /**
-   * 操作タブの下の段。左に「ひとつ戻す」、その隣に「初期値に戻す」、右端に「画面から削除」
-   * （初期値に戻すと画面から削除は、家具を選んでいるときだけ）。
-   * スクロールしても下に残す（背景の調整の画面の下の段と同じ並び）。
-   * タブを描き直しても作り直さず使い回し、戻せるかどうかは履歴が変わるたびに書き替える
+   * 操作タブの下の段。家具を選んでいるときだけ出す。左に「初期値に戻す」、右端に「画面から削除」。
+   * スクロールしても下に残す。タブを描き直しても作り直さず使い回す。
+   * 「ひとつ戻す」は置かない（要らないと判断した）
    */
   const manageFoot = (() => {
     const element = document.createElement('div');
     element.className = 'manage__bar';
-    const undoButton = createButton('ひとつ戻す', () => undo(activeScene()), 'is-quiet is-small');
     const resetButton = createButton('初期値に戻す', () => {
       const { selectedId } = activeScene().state();
       if (selectedId) resetItem(selectedId);
@@ -274,21 +304,13 @@ export function createBottomSheet(container: HTMLElement): void {
       if (!item) return;
       removeFromScreen(scene, [item]);
     }, 'is-small manage__delete manage__bar-end');
-    // 一覧でチェックを付けた家具を、まとめて画面から外す（色は上と同じグレー。消えるのは置いた分だけ）
-    const removeCheckedButton = createButton('', removeChecked, 'is-small manage__delete manage__bar-end');
-    element.append(undoButton, resetButton, removeButton, removeCheckedButton);
+    element.append(resetButton, removeButton);
     const refresh = (): void => {
       const scene = activeScene();
       const hasSelection = scene.state().furniture.some((item) => item.id === scene.state().selectedId);
-      undoButton.disabled = !canUndo(scene);
-      // チェックを付けている間は、まとめて外すボタンだけを出す。1 つも付けていなければ出さない（押しても何も起きない）
-      undoButton.hidden = checked !== null;
-      resetButton.hidden = !hasSelection;
-      removeButton.hidden = !hasSelection;
-      removeCheckedButton.hidden = !checked || checked.size === 0;
-      if (checked) removeCheckedButton.textContent = `画面から削除（${checked.size} 個）`;
+      // 家具を選んでいないとき（一覧）は、下の段ごと出さない（押せるものが無い）
+      element.hidden = !hasSelection;
     };
-    editHistory.subscribe(refresh);
     return { element, refresh };
   })();
 
@@ -300,7 +322,7 @@ export function createBottomSheet(container: HTMLElement): void {
    */
   let checked: Set<string> | null = null;
 
-  /** チェックを付けた家具を、まとめて画面から外す。ひとつ戻すでは、まとめて 1 回で戻る */
+  /** チェックを付けた家具を、まとめて画面から外す（1 回の操作として履歴に積む） */
   function removeChecked(): void {
     const scene = activeScene();
     const items = scene.state().furniture.filter((item) => checked?.has(item.id));
@@ -494,17 +516,27 @@ export function createBottomSheet(container: HTMLElement): void {
    *
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
    * 選べない。一覧からなら選べる。タイルを押すと選択になり、操作の行に切り替わる。
-   * 「選択」を押すと、タイルにチェックを付けて、まとめて画面から外せる（外すボタンは下の段）。
+   * 「選択」を押すと、タイルにチェックを付けて、見出しの行の「画面から削除（N 個）」でまとめて外せる。
+   * そのボタンを下の段に置くと、出たり消えたりするたびにタイルに使える高さが変わり、タイルの大きさが変わってしまう。
    *
-   * **説明の一言は出さない。** タイルは押せる見た目で、チェックの丸と下の段の「画面から削除（N 個）」で
-   * 選んだ数も分かる。外したことはタイルが消えて分かり、間違えてもひとつ戻すで戻せる
+   * **説明の一言は出さない。** タイルは押せる見た目で、チェックの丸と「画面から削除（N 個）」で選んだ数も分かる。
+   * 外したことはタイルが消えて分かる（家具は「家具を追加」の中に残っていて、置き直せる）
+   *
+   * タイルの大きさは fitTiles で決める（どの端末でも 2 段がそろって見える大きさ）
    */
   function createFurnitureList(furniture: PlacedFurniture[], icons: ReturnType<typeof createPreviewImage>[]): HTMLElement {
     const list = document.createElement('div');
     list.className = 'manage__list';
     const scene = activeScene();
 
-    // 見出しの行: 右端に「選択」／「キャンセル」。家具が 1 つも無ければ、選ぶものが無いので行ごと出さない
+    // 見出しの行: 右端に「選択」／「キャンセル」。チェックを付けている間は、その左に「画面から削除（N 個）」
+    // （1 つも付けていなければ出さない）。家具が 1 つも無ければ、選ぶものが無いので行ごと出さない
+    const removeCheckedButton = createButton('', removeChecked, 'is-small manage__delete');
+    const showRemoveChecked = (): void => {
+      removeCheckedButton.hidden = !checked || checked.size === 0;
+      if (checked) removeCheckedButton.textContent = `画面から削除（${checked.size} 個）`;
+    };
+    showRemoveChecked();
     if (furniture.length > 0) {
       const top = document.createElement('div');
       top.className = 'manage__top';
@@ -512,7 +544,7 @@ export function createBottomSheet(container: HTMLElement): void {
         checked = checked ? null : new Set();
         render();
       }, 'is-text is-small manage__check-toggle');
-      top.append(toggle);
+      top.append(removeCheckedButton, toggle);
       list.append(top);
     }
 
@@ -552,12 +584,12 @@ export function createBottomSheet(container: HTMLElement): void {
           scene.select(item.id);
           return;
         }
-        // チェックを付け外しする。一覧は作り直さず、このタイルと下の段だけを書き替える（アイコンがチラつかない）
+        // チェックを付け外しする。一覧は作り直さず、このタイルと「画面から削除（N 個）」だけを書き替える（アイコンがチラつかない）
         if (checked.has(item.id)) checked.delete(item.id);
         else checked.add(item.id);
         tile.classList.toggle('is-checked', checked.has(item.id));
         tile.setAttribute('aria-pressed', String(checked.has(item.id)));
-        manageFoot.refresh();
+        showRemoveChecked();
       });
       grid.append(tile);
     }
@@ -590,7 +622,7 @@ export function createBottomSheet(container: HTMLElement): void {
   }
 
   /**
-   * 置いた家具を画面から消す。ひとつ戻すで戻せるよう、中身（3D や切り抜き）は戻せなくなるまで捨てない
+   * 置いた家具を画面から消す。履歴で戻せる間は、中身（3D や切り抜き）を捨てない
    * （保管庫にも他の家具にも使われていなければ、そのときに捨てる）
    */
   function removeFromScreen(scene: EditableScene, items: PlacedFurniture[]): void {
