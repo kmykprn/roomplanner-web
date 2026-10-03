@@ -1245,8 +1245,7 @@ body {
   text-align: center;
 }
 
-/* 画像の左上の小さな印（3D）。「すべて」で 2D と見分けるため。
-   位置の基準はタイル全体（.thumb）なので、下に置くと名前に重なる。上に置く */
+/* 画像の左上の小さな印（3D の作成中のタイル）。画像の枠の左上に置く */
 .thumb__tag {
   position: absolute;
   left: 4px;
@@ -1363,6 +1362,7 @@ body {
  * 切り抜きは背景が消えているので、白地の上に家具だけが真ん中に乗る
  */
 .thumb__img {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1802,67 +1802,203 @@ body {
 .tile-actions__head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 4px;
 }
 
-/* 家具の画像。一覧のアイコンと同じく、枠を覆わず全体を収める */
-.tile-actions__img {
-  flex: none;
-  width: 64px;
-  height: 64px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #fff center / contain no-repeat;
-  background-origin: content-box;
-  padding: 5px;
+.tile-actions__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 700;
 }
 
-/* 名前の右の鉛筆（編集）。押しやすいよう 44px の丸にする */
-/* 下の段: 控えめな［✎ 編集］（決まった幅）と、残りの幅いっぱいの［部屋に追加］ */
-.tile-actions__buttons {
-  display: flex;
-  gap: 10px;
-}
-
+/* 見出しの右の控えめな［✎ 編集］。主の［追加］より弱く、文字と鉛筆だけ。押しやすいよう高さは 44px */
 .tile-actions__edit {
-  flex: 0 0 112px;
-  display: flex;
+  flex: none;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 48px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--primary);
   font: inherit;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   touch-action: manipulation;
 }
 
 .tile-actions__edit svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* 大きな見本（ui/furniturePreview.ts）。3D が読み込めたら、切り抜きを隠して 3D を出す */
+.preview {
+  position: relative;
+  height: clamp(150px, 28dvh, 240px);
+  border-radius: 14px;
+  background: #f1f3f4;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.preview__flat {
+  position: absolute;
+  inset: 12px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.preview.is-solid .preview__flat {
+  visibility: hidden;
+}
+/* 2D の見本。上下にゆっくり揺れる。下の影も合わせて縮み、浮いた板に見える */
+.preview__image {
+  width: 100%;
+  flex: 1;
+  background: center / contain no-repeat;
+  animation: preview-bob 2.6s ease-in-out infinite;
+}
+.preview__shadow {
+  flex: none;
+  width: 34%;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: rgba(17, 24, 28, 0.14);
+  animation: preview-shadow 2.6s ease-in-out infinite;
+}
+.preview__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+@keyframes preview-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+@keyframes preview-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 0.9; }
+  50% { transform: scaleX(0.82); opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .preview__image,
+  .preview__shadow {
+    animation: none;
+  }
+}
+
+/* 置く形の選択肢（2D と 3D を両方持つ家具だけ）。見本の画像と、形の名前・ひとこと */
+.tile-actions__options {
+  display: flex;
+  gap: 10px;
+}
+.tile-actions__options[hidden] {
+  display: none;
+}
+.facet-option {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  touch-action: manipulation;
+}
+.facet-option[aria-pressed='true'] {
+  border: 2px solid var(--primary);
+  padding: 6.5px;
+  background: #eaf4f8;
+}
+.facet-option b {
+  display: block;
+  font-size: 15px;
+}
+.facet-option small {
+  font-size: 12px;
+  color: #687076;
+}
+.facet-option__mini {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #f1f3f4 center / contain no-repeat;
+  background-origin: content-box;
+  padding: 3px;
+}
+.facet-option__mini .solid-mark {
+  right: -4px;
+  bottom: -4px;
   width: 18px;
   height: 18px;
 }
 
-.tile-actions__name {
-  font-size: 16px;
+/* 2D だけの家具に出す「3D モデルを作る」。文字のボタンで控えめに */
+.tile-actions__make {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-size: 14px;
   font-weight: 700;
 }
-
-.tile-actions__kind {
-  font-size: 12px;
-  color: #687076;
+.tile-actions__make[hidden] {
+  display: none;
+}
+.tile-actions__make .ic {
+  width: 18px;
+  height: 18px;
 }
 
-/* 親指で押しやすい高さにする。下の段の［編集］の残りの幅いっぱい */
+/* 主な操作。親指で押しやすい高さで、横いっぱい */
 .tile-actions__button {
-  flex: 1;
-  min-height: 48px;
+  min-height: 50px;
   font-size: 16px;
   font-weight: 700;
+}
+
+/* 3D も持つ家具の印。画像の右下の、白い丸の中の小さな立方体 */
+.solid-mark {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(17, 24, 28, 0.2);
+}
+.solid-mark[hidden] {
+  display: none;
+}
+.solid-mark .ic {
+  width: 13px;
+  height: 13px;
 }
 
 /* 背景タブ: 1 行目に［選ぶ／変更］、2 行目に［✎ 編集］。どちらも横いっぱいで、親指で押しやすい高さにそろえる */
