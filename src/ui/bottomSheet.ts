@@ -516,10 +516,10 @@ export function createBottomSheet(container: HTMLElement): void {
    *
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
    * 選べない。一覧からなら選べる。タイルを押すと選択になり、操作の行に切り替わる。
-   * 「選択」を押すと、タイルにチェックを付けて、見出しの行の「画面から削除（N 個）」でまとめて外せる。
+   * ［☑ 選択して削除］を押すと、タイルにチェックを付けて、見出しの行の［画面から削除］でまとめて外せる。
    * そのボタンを下の段に置くと、出たり消えたりするたびにタイルに使える高さが変わり、タイルの大きさが変わってしまう。
    *
-   * **説明の一言は出さない。** タイルは押せる見た目で、チェックの丸と「画面から削除（N 個）」で選んだ数も分かる。
+   * **説明の一言は出さない。** タイルは押せる見た目で、チェックの丸で選んだ物が分かる。
    * 外したことはタイルが消えて分かる（家具は「家具を追加」の中に残っていて、置き直せる）
    *
    * タイルの大きさは fitTiles で決める（どの端末でも 2 段がそろって見える大きさ）
@@ -529,7 +529,7 @@ export function createBottomSheet(container: HTMLElement): void {
     list.className = 'manage__list';
     const scene = activeScene();
 
-    // 見出しの行: 右端に「選択」／「キャンセル」。チェックを付けている間は、その左に［画面から削除］を出しておく。
+    // 見出しの行: 右端に［☑ 選択して削除］／「キャンセル」。チェックを付けている間は、その左に［画面から削除］を出しておく。
     // 1 つも付けていない間は押せない色、付けたら押せる色（グレー）になる。ボタンが押せるようになったことで、
     // 選んだら消せることが分かる（前は付けるまで出さず、出ても濃い灰色の字の札に見えて、ボタンと分かりにくかった）。
     // 家具が 1 つも無ければ、選ぶものが無いので行ごと出さない
@@ -542,10 +542,15 @@ export function createBottomSheet(container: HTMLElement): void {
     if (furniture.length > 0) {
       const top = document.createElement('div');
       top.className = 'manage__top';
-      const toggle = createButton(checked ? 'キャンセル' : '選択', () => {
+      const toggleChecking = (): void => {
         checked = checked ? null : new Set();
         render();
-      }, 'is-text is-small manage__check-toggle');
+      };
+      // 「選択」だけだと、何を選ぶのか、押すと何ができるのか分からない。
+      // 押すと何ができるかを文字で書き、枠付きのボタンにして押せる物だと分かるようにする
+      const toggle = checked
+        ? createButton('キャンセル', toggleChecking, 'is-text is-small manage__check-toggle')
+        : createSelectButton(toggleChecking);
       top.append(removeCheckedButton, toggle);
       list.append(top);
     }
@@ -662,6 +667,18 @@ export function createBottomSheet(container: HTMLElement): void {
 
 
 
+
+  /** 一覧の見出しの行の［☑ 選択して削除］。枠だけの控えめなボタン */
+  function createSelectButton(onClick: () => void): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'manage__select';
+    const label = document.createElement('span');
+    label.textContent = '選択して削除';
+    button.append(createIcon('checkbox'), label);
+    button.addEventListener('click', onClick);
+    return button;
+  }
 
   function createButton(label: string, onClick: () => void, modifier = ''): HTMLButtonElement {
     const button = document.createElement('button');

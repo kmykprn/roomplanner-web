@@ -11,7 +11,7 @@
  */
 
 export type IconName =
-  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil';
+  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -31,6 +31,8 @@ const PATHS: Record<IconName, string[]> = {
   layers: ['M4 5h10v10H4z', 'M10 9h10v10H10z'],
   // 編集: 鉛筆
   pencil: ['M4 20h4L19 9l-4-4L4 16z'],
+  // 選択して削除: チェックの付いた四角
+  checkbox: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M8 12l3 3 5-6'],
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
