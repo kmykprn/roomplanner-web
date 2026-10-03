@@ -519,9 +519,6 @@ body {
   }
 }
 /* 見出しを出さないバー（説明の文が何のバーかを言っているとき） */
-.slider-row.slider-row--bare {
-  grid-template-columns: 1fr;
-}
 /* 寸法: 線ごとの行（線の名前・長さの欄・削除）。選んでいる行は枠をメインカラーにする */
 .scale-lines {
   display: grid;
@@ -735,13 +732,11 @@ body {
  * 「見出し｜バー」の 1 行。「操作」タブと「床に合わせる」で同じものを使う。
  * 触れるバーの見た目はアプリ内で 1 つに揃える
  */
+/* 見出しはバーの上の行に置き、バーを左端から始めて長く使う（見出しを左に並べると、幅 390px の画面でバーが 120px しかなかった） */
 .slider-row {
   display: grid;
-  /* 見出しの幅をそろえて、どの行もバーの左端が同じ位置から始まるようにする。
-     いちばん長い「前後の傾き」が 1 行に収まる幅 */
-  grid-template-columns: 72px 1fr;
-  align-items: center;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
 }
 
 /* バー本体と、両端の目安 */
@@ -757,7 +752,7 @@ body {
  */
 .slider-row__end {
   flex: 0 0 42px;
-  color: #7a8388;
+  color: #687076;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -842,11 +837,17 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * 見出し（向き・大きさ）と両端の幅（-180°・+180°）は、大きさ・太さ・色のすべてで差を付ける。
+ * どちらも同じ灰色（#7a8388、白地で 3.87:1）の小さな字だったので、見分けにくく、読みにくかった。
+ *   見出し   … 何のバーか。本文と同じ色（17.9:1）・13px・やや太字
+ *   両端の幅 … 添え書き。11px のまま、灰色を濃くして小さな字に要る 4.5:1 を満たす（#687076 は 5.04:1）
+ */
 .slider-row__label {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
-  color: #7a8388;
-  letter-spacing: 0.04em;
+  color: var(--text);
 }
 
 /* 置いてある家具の一覧（何も選んでいないとき）。見出しの行・タイルの格子・削除のあとの一言 */
@@ -955,13 +956,7 @@ body {
   background: #fff center / contain no-repeat;
 }
 
-.manage__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 見出し: 家具の名前と「画面から削除」 */
+/* 家具を選んでいるときの見出し: 左に「‹ 戻る」、右に［＋］ */
 .manage__head {
   display: flex;
   align-items: center;
@@ -969,8 +964,11 @@ body {
   gap: 8px;
   margin-bottom: 2px;
 }
-.manage__head .manage__name {
-  font-size: 14px;
+.manage__head .manage__back {
+  /* 文字の左端を、下のバーの見出し（向き・大きさ）の左端にそろえる */
+  margin-left: 0;
+  padding-left: 0;
+  font-size: 15px;
   font-weight: 600;
 }
 .slider-row__number.field__input--short {
@@ -1920,7 +1918,7 @@ body {
   color: var(--danger);
 }
 
-/* 選んでいる家具の名前の右の小さな［＋］（家具を追加） */
+/* 家具を選んでいるときの見出しの右の小さな［＋］（家具を追加） */
 .manage__add-small {
   flex: none;
   width: 36px;
