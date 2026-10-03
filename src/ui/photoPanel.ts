@@ -6,7 +6,7 @@
  *   ［✎ 編集］… 押すと下から出るメニュー
  *       拡大・縮小                     … ui/framePanel.ts
  *       寸法                           … ui/scalePanel.ts
- *       家具より手前に表示する範囲       … ui/maskPanel.ts
+ *       家具を隠す範囲       … ui/maskPanel.ts
  *       背景の画像を外す
  *
  * **ふだん使わない操作は［✎ 編集］のメニューにしまう。** 前は［⋯］だったが、文字が無く、何ができるか分からなかった。
@@ -45,7 +45,7 @@ export function createPhotoPanel(): HTMLElement {
   /** 通常の姿。1 行と一言 */
   const normal = document.createElement('div');
   normal.className = 'photo__normal';
-  /** 家具より手前に表示する範囲を指定する姿 */
+  /** 家具を隠す範囲を指定する姿 */
   const mask = createMaskPanel();
   /** 寸法を合わせる姿 */
   const scale = createScalePanel();
@@ -65,7 +65,7 @@ export function createPhotoPanel(): HTMLElement {
   const menu = createBackgroundMenu([
     { icon: 'frame', label: '拡大・縮小', run: () => setFramingPhoto(true) },
     { icon: 'ruler', label: '寸法', run: () => setScaling(true) },
-    { icon: 'layers', label: '家具より手前に表示する範囲', run: () => setMasking(true) },
+    { icon: 'layers', label: '家具を隠す範囲', run: () => setMasking(true) },
     { icon: 'trash', label: '背景の画像を外す', run: clearBackground, danger: true },
   ]);
   const editButton = document.createElement('button');

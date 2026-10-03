@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * 家具より手前に表示する範囲で囲った物は、家具がその物より奥にあるときだけ家具を隠す（core/maskRegions.ts）。
+ * 家具を隠す範囲で囲った物は、家具がその物より奥にあるときだけ家具を隠す（core/maskRegions.ts）。
  *
  * 高さ 1.3 m から水平に撮った写真（灰色一色）に、写真の右寄り（横 0.5〜0.75）の範囲を指定する。
  * 範囲のいちばん下は、カメラから 3 m 先の床に写る高さにしてあるので、その物は 3 m 先に立っている。
@@ -105,11 +105,33 @@ test('いちばん下が床に接していない範囲（窓など）は、家�
   expect(await redAt(page, [[-0.15, 0.4], [0.15, 0.4]])).toEqual([true, false]);
 });
 
-test('家具より手前に表示する範囲の画面に、自動で見つける切り替えは出さない', async ({ page }) => {
+test('家具を隠す範囲の画面に、自動で見つける切り替えは出さない', async ({ page }) => {
   await setUp(page, 0.4, FOOT_AT_3M);
   await page.locator('.sheet__tab', { hasText: '背景' }).click();
   await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
-  await page.getByRole('button', { name: '家具より手前に表示する範囲' }).click();
+  await page.getByRole('button', { name: '家具を隠す範囲' }).click();
   await expect(page.locator('.mask')).toBeVisible();
   await expect(page.getByText('自動で見つける')).toHaveCount(0);
+});
+
+test('家具を隠す範囲の画面の見出しと案内は短く、道具と進み具合に合わせて変わる', async ({ page }) => {
+  await setUp(page, 0.4, FOOT_AT_3M);
+  await page.locator('.sheet__tab', { hasText: '背景' }).click();
+  await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
+  await page.getByRole('button', { name: '家具を隠す範囲' }).click();
+  await expect(page.locator('.mask .edit__title')).toHaveText('家具を隠す範囲');
+  const guide = page.locator('.mask__guide');
+  await page.locator('.mask__tools').getByRole('button', { name: 'なぞる' }).click();
+  await expect(guide).toHaveText('家具を隠す範囲を、なぞって設定してください。');
+  await page.locator('.mask__tools').getByRole('button', { name: '点で囲む' }).click();
+  await expect(guide).toHaveText('家具を隠す範囲を、点で囲んで設定してください。');
+  const setCorners = (count: number) =>
+    page.evaluate(async (count) => {
+      const { setMaskPolygon } = await import('/src/core/photoState.ts');
+      setMaskPolygon(Array.from({ length: count }, (_, i) => ({ x: 0.2 + i * 0.1, y: 0.3 + (i % 2) * 0.2 })));
+    }, count);
+  await setCorners(1);
+  await expect(guide).toHaveText('点をあと 2 個打ってください。');
+  await setCorners(3);
+  await expect(guide).toHaveText('「囲みを閉じる」を押して、設定してください。');
 });

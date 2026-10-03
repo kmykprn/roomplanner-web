@@ -40,7 +40,7 @@ test('背景の画像があるときは［✎ 編集］が別の行に出て、�
   expect(Math.abs(editBox.width - pick.width)).toBeLessThan(1);
   await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
   const menu = page.getByRole('dialog', { name: '背景の編集' });
-  await expect(menu.getByRole('button')).toHaveText(['拡大・縮小', '寸法', '家具より手前に表示する範囲', '背景の画像を外す']);
+  await expect(menu.getByRole('button')).toHaveText(['拡大・縮小', '寸法', '家具を隠す範囲', '背景の画像を外す']);
   // 項目を選ぶとメニューは閉じ、その画面に入る
   await menu.getByRole('button', { name: '寸法' }).click();
   await expect(menu).toBeHidden();

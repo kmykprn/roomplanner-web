@@ -1,5 +1,5 @@
 /**
- * 「家具より手前に表示する範囲」の画面。写真モードの「背景」タブの「背景の調整」から入る。
+ * 「家具を隠す範囲」の画面。写真モードの「背景」タブの「背景の調整」から入る。
  *
  * 背景の画像の中で家具を隠す物（ソファや机など）を囲ってもらう。囲った物ごとに見えない板が立ち
  * （core/maskRegions.ts）、その物より奥にある家具の部分だけが隠れる。手前に置いた家具や、囲っていない物に
@@ -37,8 +37,9 @@ const TOOLS: Array<[MaskToolKind, string]> = [
  * 目的の文（「手前に表示したいエリアを…」）だけでは、指でなぞるのか点を打つのかが
  * 分からず、押してみて初めて分かる状態だった。道具と進み具合ごとに動作を書く。
  *
- * 「床に接する所まで」と書くのは、物のいちばん下の点から物までの距離を出すため（core/maskRegions.ts）。
- * 下を囲み残すと、物が実際より奥にあることになり、物の手前の家具まで隠れる。
+ * 隠れるのが「その物より奥にある家具だけ」であることは書かない（見出しの「家具を隠す範囲」で伝わる。長くなる）。
+ * 物の下の端を囲み残すと、物が実際より奥にあることになり、物のすぐ奥の家具が隠れない（core/maskRegions.ts）。
+ * ふつうは物の全体を囲むので、案内には書かない。隠れなければ見て気づけて、囲み直せば直る。
  *
  * 緑になるのは囲むの 3 点以上だけ。なぞるは塗り続けるだけで「次に押すもの」が無いので、
  * 塗った後も文と色を変えない（一筆で緑になって以後ずっと緑、が気持ち悪かった）
@@ -46,25 +47,25 @@ const TOOLS: Array<[MaskToolKind, string]> = [
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } | null {
   switch (kind) {
     case 'brush':
-      return { text: '画面上の物を床に接する所まで指でなぞると、その物より奥にある家具が隠れるようになります。', done: false };
+      return { text: '家具を隠す範囲を、なぞって設定してください。', done: false };
     case 'eraser':
       // 「消しゴム」の名前で何が起きるか分かるので、案内は出さない
       return null;
     case 'polygon':
       if (corners === 0) {
-        return { text: '画面上の物を床に接する所まで点で囲むと、その物より奥にある家具が隠れるようになります。', done: false };
+        return { text: '家具を隠す範囲を、点で囲んで設定してください。', done: false };
       }
       if (corners < MIN_CORNERS) {
-        return { text: `点をあと ${MIN_CORNERS - corners} 個タップすると、範囲を囲むことができます。`, done: false };
+        return { text: `点をあと ${MIN_CORNERS - corners} 個打ってください。`, done: false };
       }
       // 最初の点をもう一度タップしても閉じられるが、案内には閉じ方を 1 つだけ書く
-      return { text: '「囲みを閉じる」を押すと、囲んだ物より奥にある家具が隠れるようになります。', done: true };
+      return { text: '「囲みを閉じる」を押して、設定してください。', done: true };
   }
 }
 
 export function createMaskPanel(): HTMLElement {
   const screen = createSubScreen({
-    title: '家具より手前に表示する範囲',
+    title: '家具を隠す範囲',
     onBack: () => {
       maskEditor.cancelSession();
       setMasking(false);
