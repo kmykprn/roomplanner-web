@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 下のタブの「家具」を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と編集の鉛筆のメニューが出る。
+ * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と編集の鉛筆のメニューが出る。
  * 追加で置くとページを閉じて「操作」タブを出し、「×」で閉じると元のタブに戻る
  */
 test.describe('家具のページ', () => {
@@ -10,9 +10,15 @@ test.describe('家具のページ', () => {
     await page.locator('.sheet__tab').first().waitFor();
   });
 
-  async function openFirstModel(page: import('@playwright/test').Page): Promise<void> {
-    await page.locator('.sheet__tab', { hasText: '家具' }).click();
+  /** 操作タブの［＋ 家具を追加］で、家具のページを開く */
+  async function openFurniturePage(page: import('@playwright/test').Page): Promise<void> {
+    await page.locator('.sheet__tab', { hasText: '操作' }).click();
+    await page.locator('.manage__add').click();
     await expect(page.locator('.page')).toBeVisible();
+  }
+
+  async function openFirstModel(page: import('@playwright/test').Page): Promise<void> {
+    await openFurniturePage(page);
     // 一覧の先頭は「追加」のタイルなので、その次（最初の家具）を押す
     const tile = page.locator('.page .thumb__button').nth(1);
     await tile.click();
@@ -41,15 +47,15 @@ test.describe('家具のページ', () => {
   });
 
   test('鉛筆で編集の画面を開き、「×」で閉じると元のタブに戻る', async ({ page }) => {
-    const before = await page.locator('.sheet__tab.is-active').textContent();
     await openFirstModel(page);
+    const before = await page.locator('.sheet__tab.is-active').textContent();
     await page.getByRole('button', { name: '編集' }).click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toBeVisible();
     await page.locator('.page__close').click();
     await expect(page.locator('.page')).toBeHidden();
     await expect(page.locator('.sheet__tab.is-active')).toHaveText(before ?? '');
     // もう一度開くと、編集の画面ではなく一覧に戻っている
-    await page.locator('.sheet__tab', { hasText: '家具' }).click();
+    await openFurniturePage(page);
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
   });
 
@@ -61,10 +67,10 @@ test.describe('家具のページ', () => {
   });
 
   test('家具を追加する画面に、利用者 ID を出さない', async ({ page }) => {
-    await page.locator('.sheet__tab', { hasText: '家具' }).click();
+    await openFurniturePage(page);
     // 一覧の先頭の「追加」を押す
     await page.locator('.page .thumb__button').first().click();
-    await expect(page.getByText('家具を追加').filter({ visible: true }).first()).toBeVisible();
+    await expect(page.locator('.page').getByText('家具を追加').filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByText('利用者 ID')).toHaveCount(0);
   });
 });

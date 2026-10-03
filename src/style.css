@@ -204,15 +204,16 @@ body {
 }
 
 /*
- * 下のシート。高さは画面に対して固定し、タブを切り替えても上の表示が動かないようにする。
- * 中身の高さに合わせると、タブごとにシートが伸び縮みして写真・部屋の表示が押し上げられる。
- * 長い中身（家具の格子、操作の行）はタブの下だけで縦にスクロールする
+ * 下のシート。高さは画面に対して固定し、長い中身（操作の行など）はタブの下だけで縦にスクロールする。
+ * ただし写真の背景タブのふだんの姿（1 行だけ）のときは、中身の高さまで低くして写真を広く見せる
+ * （高さは ui/bottomSheet.ts の fitSheetHeight が入れる）。切り替えで写真が急に伸び縮みしないよう、高さは滑らかに変える
  */
 .sheet {
   flex: none;
   display: flex;
   flex-direction: column;
   height: max(42dvh, 280px);
+  transition: height 0.2s ease;
   background: var(--surface);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
@@ -1856,4 +1857,49 @@ body {
 .bg-menu__item.is-danger,
 .bg-menu__item.is-danger .ic {
   color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    transition: none;
+  }
+}
+
+/* 操作タブの一覧の先頭の［＋ 家具を追加］。一覧の行と同じ大きさで、押すと家具のページが開く */
+.manage__add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--primary);
+  border-radius: 8px;
+  background: #f2f8fa;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  touch-action: manipulation;
+}
+.manage__add .ic {
+  width: 22px;
+  height: 22px;
+}
+
+/* 選んでいる家具の名前の右の小さな［＋］（家具を追加） */
+.manage__add-small {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--primary);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.manage__add-small .ic {
+  width: 20px;
+  height: 20px;
 }
