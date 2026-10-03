@@ -55,8 +55,12 @@ import { clearHistory } from '@/core/editHistory';
  *
  * **成否を状態として持つ。** 画面に出さないと、読み込めなかったときに
  * 「黒いまま」としか分からず、原因の切り分けができない。
+ *
+ * restoring は、起動時に端末に残した写真を読み戻している間（core/persistence.ts）。
+ * 前に写真を選んでいたと分かっているので、画面は写真があるときと同じにする。
+ * idle のままにすると、読み終わるまでの 0.5 秒ほど「背景の画像を選ぶ」が出てから「変更」に変わり、ちらついていた
  */
-export type BackgroundStatus = 'idle' | 'loading' | 'ready' | 'failed';
+export type BackgroundStatus = 'idle' | 'restoring' | 'loading' | 'ready' | 'failed';
 
 /**
  * 手前にある物を指定する道具。
