@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * 背景タブは 1 行だけ（［背景の画像を選ぶ／変更］と［⋯］）。ふだん使わない操作は［⋯］のメニューにしまう。
- * 背景の画像が無いときは［⋯］を出さない（メニューの操作がどれも使えないため）
+ * 背景タブは 1 行目に［背景の画像を選ぶ／変更］、2 行目に［✎ 編集］。ふだん使わない操作は［✎ 編集］のメニューにしまう。
+ * 背景の画像が無いときは［✎ 編集］を出さない（メニューの操作がどれも使えないため）
  */
 async function openBackgroundTab(page: Page, withPhoto: boolean): Promise<void> {
   await page.goto('/');
@@ -24,17 +24,22 @@ test('背景の画像が無いときは、「背景の画像を選ぶ」だけ�
   await openBackgroundTab(page, false);
   const panel = page.locator('.photo__normal');
   await expect(panel.getByRole('button', { name: '背景の画像を選ぶ' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '背景のほかの操作' })).toBeHidden();
+  await expect(page.locator('.photo__normal').getByRole('button', { name: '編集' })).toBeHidden();
 });
 
-test('背景の画像があるときは 1 行で、［⋯］からほかの操作を開ける', async ({ page }) => {
+test('背景の画像があるときは［✎ 編集］が別の行に出て、押すと編集の操作のメニューが出る', async ({ page }) => {
   await openBackgroundTab(page, true);
   const panel = page.locator('.photo__normal');
   await expect(panel.getByRole('button', { name: '背景の画像を変更' })).toBeVisible();
   // 小さな見本・見出し・タイルは出さない
   await expect(page.locator('.bg-card, .bg-heading, .bg-tile')).toHaveCount(0);
-  await page.getByRole('button', { name: '背景のほかの操作' }).click();
-  const menu = page.getByRole('dialog', { name: '背景のほかの操作' });
+  // ［背景の画像を変更］の下の行に、同じ幅で並ぶ
+  const pick = (await page.locator('.photo__normal').getByRole('button', { name: '背景の画像を変更' }).boundingBox())!;
+  const editBox = (await page.locator('.photo__normal').getByRole('button', { name: '編集' }).boundingBox())!;
+  expect(editBox.y).toBeGreaterThan(pick.y + pick.height - 1);
+  expect(Math.abs(editBox.width - pick.width)).toBeLessThan(1);
+  await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
+  const menu = page.getByRole('dialog', { name: '背景の編集' });
   await expect(menu.getByRole('button')).toHaveText(['拡大・縮小', '寸法', '家具より手前に表示する範囲', '背景の画像を外す']);
   // 項目を選ぶとメニューは閉じ、その画面に入る
   await menu.getByRole('button', { name: '寸法' }).click();
@@ -44,8 +49,8 @@ test('背景の画像があるときは 1 行で、［⋯］からほかの操�
 
 test('メニューの外を押すと閉じ、「背景の画像を外す」で背景が無くなる', async ({ page }) => {
   await openBackgroundTab(page, true);
-  const more = page.getByRole('button', { name: '背景のほかの操作' });
-  const menu = page.getByRole('dialog', { name: '背景のほかの操作' });
+  const more = page.locator('.photo__normal').getByRole('button', { name: '編集' });
+  const menu = page.getByRole('dialog', { name: '背景の編集' });
   await more.click();
   await page.locator('.bg-menu__dim').click({ position: { x: 20, y: 20 } });
   await expect(menu).toBeHidden();

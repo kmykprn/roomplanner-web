@@ -11,7 +11,7 @@
  */
 
 export type IconName =
-  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers';
+  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -29,6 +29,8 @@ const PATHS: Record<IconName, string[]> = {
   ruler: ['M3 9h18v6H3z', 'M7 9v3M11 9v2M15 9v3M19 9v2'],
   // 手前に表示する範囲: 重なった 2 枚（手前の 1 枚）
   layers: ['M4 5h10v10H4z', 'M10 9h10v10H10z'],
+  // 編集: 鉛筆
+  pencil: ['M4 20h4L19 9l-4-4L4 16z'],
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
