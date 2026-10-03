@@ -4,7 +4,7 @@ import { openTab, openWithTwoCutouts } from './helpers';
 /**
  * 操作タブの一覧（何も選んでいないとき）は、横 4 つのタイルの格子。先頭は［＋ 家具を追加］。
  * タイルを押すとその家具を選ぶ。「選択」を押すとタイルにチェックを付けられ、
- * 見出しの行の「画面から削除（N 個）」でまとめて外せる（色はグレー）
+ * 見出しの行の［画面から削除］でまとめて外せる。［画面から削除］は「選択」を押すと出て、1 つ選ぶまでは押せない（色はグレー）
  */
 const placedCount = (page: Page) =>
   page.evaluate(async () => (await import('/src/core/mode.ts')).activeScene().state().furniture.length);
@@ -25,16 +25,18 @@ test('タイルの格子で、先頭は［＋ 家具を追加］。タイルを�
   expect(selectedId).toBe('test-b');
 });
 
-test('「選択」でチェックを付け、「画面から削除（2 個）」でまとめて外す', async ({ page }) => {
+test('「選択」でチェックを付け、［画面から削除］でまとめて外す', async ({ page }) => {
   await page.getByRole('button', { name: '選択' }).click();
-  const removeChecked = page.locator('.manage__top').getByRole('button', { name: /^画面から削除（/ });
+  const removeChecked = page.locator('.manage__top').getByRole('button', { name: '画面から削除' });
   // 1 つも付けていない間は出さない
-  await expect(removeChecked).toBeHidden();
+  // 「選択」を押した時点で出ていて、まだ押せない
+  await expect(removeChecked).toBeVisible();
+  await expect(removeChecked).toBeDisabled();
   await expect(page.locator('.manage__add')).toBeDisabled();
   await page.getByRole('button', { name: 'テスト 1' }).click();
   await page.getByRole('button', { name: 'テスト 2' }).click();
   await expect(page.getByRole('button', { name: 'テスト 1' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(removeChecked).toHaveText('画面から削除（2 個）');
+  await expect(removeChecked).toBeEnabled();
   // 色は「画面から削除」と同じグレー（家具そのものを消す赤ではない）
   expect(await removeChecked.evaluate((button) => getComputedStyle(button).backgroundColor)).toBe('rgb(104, 112, 118)');
   // チェックを付けている間は、家具を選ばない
@@ -51,12 +53,12 @@ test('チェックを外すと数が減り、「キャンセル」でふだん�
   await page.getByRole('button', { name: '選択' }).click();
   await expect(page.locator('.manage .hint')).toHaveCount(0);
   const tile = page.getByRole('button', { name: 'テスト 1' });
-  const removeChecked = page.locator('.manage__top').getByRole('button', { name: /^画面から削除（/ });
+  const removeChecked = page.locator('.manage__top').getByRole('button', { name: '画面から削除' });
   await tile.click();
-  await expect(removeChecked).toHaveText('画面から削除（1 個）');
+  await expect(removeChecked).toBeEnabled();
   await expect(page.locator('.manage .hint')).toHaveCount(0);
   await tile.click();
-  await expect(removeChecked).toBeHidden();
+  await expect(removeChecked).toBeDisabled();
   await page.getByRole('button', { name: 'キャンセル' }).click();
   await expect(page.locator('.manage__check')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '選択' })).toBeVisible();

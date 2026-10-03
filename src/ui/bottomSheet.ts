@@ -529,12 +529,14 @@ export function createBottomSheet(container: HTMLElement): void {
     list.className = 'manage__list';
     const scene = activeScene();
 
-    // 見出しの行: 右端に「選択」／「キャンセル」。チェックを付けている間は、その左に「画面から削除（N 個）」
-    // （1 つも付けていなければ出さない）。家具が 1 つも無ければ、選ぶものが無いので行ごと出さない
-    const removeCheckedButton = createButton('', removeChecked, 'is-small manage__delete');
+    // 見出しの行: 右端に「選択」／「キャンセル」。チェックを付けている間は、その左に［画面から削除］を出しておく。
+    // 1 つも付けていない間は押せない色、付けたら押せる色（グレー）になる。ボタンが押せるようになったことで、
+    // 選んだら消せることが分かる（前は付けるまで出さず、出ても濃い灰色の字の札に見えて、ボタンと分かりにくかった）。
+    // 家具が 1 つも無ければ、選ぶものが無いので行ごと出さない
+    const removeCheckedButton = createButton('画面から削除', removeChecked, 'is-small manage__delete');
     const showRemoveChecked = (): void => {
-      removeCheckedButton.hidden = !checked || checked.size === 0;
-      if (checked) removeCheckedButton.textContent = `画面から削除（${checked.size} 個）`;
+      removeCheckedButton.hidden = !checked;
+      removeCheckedButton.disabled = !checked || checked.size === 0;
     };
     showRemoveChecked();
     if (furniture.length > 0) {
