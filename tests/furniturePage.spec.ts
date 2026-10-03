@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と編集の鉛筆のメニューが出る。
+ * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と［✎ 編集］のメニューが出る。
  * 追加で置くとページを閉じて「操作」タブを出し、「×」で閉じると元のタブに戻る
  */
 test.describe('家具のページ', () => {
@@ -28,9 +28,13 @@ test.describe('家具のページ', () => {
   test('家具を押すとメニューが出て、まだ置かれない。外側を押すと閉じる', async ({ page }) => {
     await openFirstModel(page);
     await expect(page.locator('.tile-actions__button', { hasText: '背景に追加' })).toBeVisible();
-    // ボタンは追加の 1 つだけ。編集は名前の右の鉛筆
+    // 下の段に、文字の付いた［編集］と［背景に追加］が並ぶ
     await expect(page.locator('.tile-actions__button')).toHaveCount(1);
-    await expect(page.getByRole('button', { name: '編集' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '編集' })).toHaveText('編集');
+    const edit = (await page.getByRole('button', { name: '編集' }).boundingBox())!;
+    const place = (await page.locator('.tile-actions__button').boundingBox())!;
+    expect(Math.abs(edit.y - place.y)).toBeLessThan(2);
+    expect(place.width).toBeGreaterThan(edit.width);
     const placed = await page.evaluate(async () => (await import('/src/core/mode.ts')).activeScene().state().furniture.length);
     expect(placed).toBe(0);
     await page.locator('.tile-actions__dim').click({ position: { x: 20, y: 20 } });
@@ -46,11 +50,13 @@ test.describe('家具のページ', () => {
     expect(placed).toBe(1);
   });
 
-  test('鉛筆で編集の画面を開き、「×」で閉じると元のタブに戻る', async ({ page }) => {
+  test('［編集］で編集の画面を開き、「×」で閉じると元のタブに戻る', async ({ page }) => {
     await openFirstModel(page);
     const before = await page.locator('.sheet__tab.is-active').textContent();
     await page.getByRole('button', { name: '編集' }).click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toBeVisible();
+    // 編集の画面に、変えられないアイコンは出さない
+    await expect(page.locator('.page .lib__edit').getByText('アイコン', { exact: true })).toHaveCount(0);
     await page.locator('.page__close').click();
     await expect(page.locator('.page')).toBeHidden();
     await expect(page.locator('.sheet__tab.is-active')).toHaveText(before ?? '');
