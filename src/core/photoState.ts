@@ -141,7 +141,7 @@ export interface PhotoState extends FurnitureSceneState {
   isFramingPhoto: boolean;
 
   /**
-   * 家具より手前に表示する範囲（手前にある物）のマスク画像の URL。無ければ null。
+   * 家具を隠す範囲（手前にある物）のマスク画像の URL。無ければ null。
    * 塗った形をそのまま画像で持つ。家具を隠すのは、この画像から作った maskRegions
    */
   maskUrl: string | null;
@@ -226,7 +226,7 @@ export const photoScene = createFurnitureScene(photoState, {
 });
 
 /**
- * 家具が写真の物に隠れる割合を見積もる関数。家具より手前に表示する範囲が無い（隠す面が無い）なら null
+ * 家具が写真の物に隠れる割合を見積もる関数。家具を隠す範囲が無い（隠す面が無い）なら null
  */
 function hiddenShareChecker(): ((position: [number, number, number], size: [number, number, number], rotationY: number) => number) | null {
   const source = occluderSource();
@@ -525,7 +525,7 @@ function floorPointAt(point: PhotoPoint, lens: Lens, pose: PhotoPose): [number, 
 let occluderCache: { key: unknown[]; source: OccluderSource } | null = null;
 
 /**
- * 家具より手前にある物の面（scene/depthOccluder.ts）を作る材料。家具より手前に表示する範囲が無いなら null。
+ * 家具より手前にある物の面（scene/depthOccluder.ts）を作る材料。家具を隠す範囲が無いなら null。
  * 範囲の塊ごとの板までの奥行き（core/maskRegions.ts）を、写真の奥行きと同じ形の地図にして渡す
  */
 export function occluderSource(): OccluderSource | null {
