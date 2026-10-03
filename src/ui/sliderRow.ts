@@ -96,7 +96,6 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
     if (resetButton) resetButton.classList.toggle('is-idle', value === resetValue(options));
   }
 
-  if (options.hideLabel) element.classList.add('slider-row--bare');
   element.append(...(options.hideLabel ? [bar] : [heading, bar]));
 
   return {

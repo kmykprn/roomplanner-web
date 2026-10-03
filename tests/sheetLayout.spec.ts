@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * 下のタブは、写真モードなら「背景」「操作」、部屋モードなら「内装」「操作」の 2 つ（家具のタブは無い）。
- * 家具のページは、操作タブの［＋ 家具を追加］と、家具を選んでいる間の名前の右の［＋］から開く。
+ * 家具のページは、操作タブの［＋ 家具を追加］と、家具を選んでいる間の見出しの右の［＋］から開く。
  * 下のパネルの高さは、どのタブでも同じ（タブを切り替えても、写真の見える範囲が変わらない）
  */
 async function open(page: Page, withPhoto: boolean): Promise<void> {
@@ -33,7 +33,7 @@ test('タブは 2 つで、家具のタブは無い', async ({ page }) => {
   await expect(page.locator('.sheet__tab')).toHaveText(['内装', '操作']);
 });
 
-test('操作タブの［＋ 家具を追加］と、選んでいる家具の名前の右の［＋］で、家具のページを開く', async ({ page }) => {
+test('操作タブの［＋ 家具を追加］と、家具を選んでいる間の見出しの右の［＋］で、家具のページを開く', async ({ page }) => {
   await open(page, true);
   await page.locator('.sheet__tab', { hasText: '操作' }).click();
   await page.locator('.manage__add', { hasText: '家具を追加' }).click();

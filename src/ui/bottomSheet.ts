@@ -6,7 +6,7 @@
  *
  * **タブの並びはモードで変わる。** 部屋モードは内装と操作、写真モードは背景と操作。
  *
- * **家具を置くページはタブにしない。** 操作タブの［＋ 家具を追加］（家具を選んでいる間は名前の右の［＋］）を
+ * **家具を置くページはタブにしない。** 操作タブの［＋ 家具を追加］（家具を選んでいる間は見出しの右の［＋］）を
  * 押すと家具のページ（ui/furniturePage.ts）が画面全体に開き、「×」で閉じると元のタブに戻る。
  * 家具を置いたときは、閉じて「操作」タブを出す
  */
@@ -337,14 +337,13 @@ export function createBottomSheet(container: HTMLElement): void {
     checked = null;
 
     const { id } = selected;
-    // 見出し: どの家具を触っているか（画面から削除は下の段の右端）
+    // 見出し: 左に「‹ 戻る」（選ぶのをやめて、置いた家具の一覧に戻る）、右に［＋］（家具を選んでいる間も、続けて家具を置ける）。
+    // 家具の名前は出さない（どの家具を選んでいるかは、画面の中の枠で分かる）
     const head = document.createElement('div');
     head.className = 'manage__head';
-    const name = document.createElement('span');
-    name.className = 'manage__name';
-    name.textContent = selected.name ?? '家具';
-    // 家具を選んでいる間も、続けて家具を置けるように、名前の右に小さな［＋］を置く
-    head.append(name, createAddButton('small'));
+    const back = createButton('‹ 戻る', () => scene.select(null), 'is-text is-small manage__back');
+    back.setAttribute('aria-label', '家具の一覧に戻る');
+    head.append(back, createAddButton('small'));
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
     // 実寸は「家具を追加」のページの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
@@ -472,7 +471,7 @@ export function createBottomSheet(container: HTMLElement): void {
 
   /**
    * 家具を置くページを開くボタン。
-   * tile: 一覧の先頭のタイル（＋と「家具を追加」）。small: 選んでいる家具の名前の右に置く小さな丸（＋だけ）
+   * tile: 一覧の先頭のタイル（＋と「家具を追加」）。small: 家具を選んでいるときの見出しの右に置く小さな丸（＋だけ）
    */
   function createAddButton(kind: 'tile' | 'small'): HTMLButtonElement {
     const button = document.createElement('button');
