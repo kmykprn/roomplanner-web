@@ -22,8 +22,11 @@ export interface SliderRowOptions {
   max: number;
   /** バーの両端に添える文字。動かせる幅が見て分かるように */
   ends: [from: string, to: string];
-  /** バーの右に置く「戻す」ボタン。value に戻し、label（戻す先の値）をボタンに書く */
-  reset?: { value: number; label: string };
+  /**
+   * バーの右に置く「戻す」ボタン。value に戻し、label（戻す先の値）をボタンに書く。
+   * value が関数なら、押すたびと見せ方を決めるたびに呼ぶ（画面の大きさなどで戻す先のバーの位置が変わるとき）
+   */
+  reset?: { value: number | (() => number); label: string };
   /** つまみが動いたとき */
   onInput(value: number): void;
   /** つまみを離したとき（動かし終わりに 1 度だけしたいことがあれば） */
@@ -90,7 +93,7 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
   if (resetButton) bar.append(resetButton);
   /** 戻す先の値にあるときは、ボタンを見えなくする（押しても何も起きないため） */
   function showReset(value: number): void {
-    resetButton?.classList.toggle('is-idle', value === options.reset?.value);
+    if (resetButton) resetButton.classList.toggle('is-idle', value === resetValue(options));
   }
 
   if (options.hideLabel) element.classList.add('slider-row--bare');
@@ -114,18 +117,25 @@ export function createSliderRow(options: SliderRowOptions): SliderRow {
  * 操作の履歴には、動かしたときと同じく 1 回の操作として積まれる
  */
 function createResetButton(options: SliderRowOptions, input: HTMLInputElement): HTMLButtonElement {
-  const { value, label } = options.reset!;
+  const { label } = options.reset!;
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'slider-row__reset';
   button.textContent = label;
   button.setAttribute('aria-label', `${options.label}を${label}に戻す`);
   button.addEventListener('click', () => {
+    const value = resetValue(options);
     input.value = String(value);
     input.dispatchEvent(new Event('input'));
     options.onChange?.(value);
   });
   return button;
+}
+
+/** 戻す先のバーの値 */
+function resetValue(options: SliderRowOptions): number {
+  const value = options.reset!.value;
+  return typeof value === 'function' ? value() : value;
 }
 
 function createEndLabel(text: string): HTMLElement {

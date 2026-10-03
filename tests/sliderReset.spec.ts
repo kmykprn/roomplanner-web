@@ -85,3 +85,34 @@ test.describe('操作タブのバーの戻すボタン', () => {
     await expect(scale.locator('.slider-row__reset')).toHaveText('100%');
   });
 });
+
+/**
+ * 背景の「拡大・縮小」の画面の倍率のバーにも、倍率 1 に戻す「1倍」のボタンを置く。
+ * 倍率 1 のあいだは見えず、動かすと出て、押すと倍率 1 に戻る
+ */
+test('拡大・縮小のバーの「1倍」で、倍率 1 に戻る', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.sheet__tab').first().waitFor();
+  await page.evaluate(async () => {
+    const { photoState } = await import('/src/core/photoState.ts');
+    // 写真があることにする（写真の解析は走らせない）
+    const canvas = document.createElement('canvas');
+    canvas.width = 4;
+    canvas.height = 3;
+    photoState.set({ backgroundStatus: 'ready', backgroundUrl: canvas.toDataURL(), backgroundAspect: 4 / 3 });
+  });
+  await page.locator('.sheet__tab', { hasText: '背景' }).click();
+  await page.locator('.bg-tile', { hasText: '拡大・縮小' }).click();
+  const scaleOf = () => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().view.scale);
+  const reset = page.getByRole('button', { name: '倍率を1倍に戻す' });
+  expect(await scaleOf()).toBe(1);
+  await expect(reset).toBeHidden();
+  const range = page.getByRole('slider', { name: '倍率を変える' });
+  await range.focus();
+  for (let i = 0; i < 50; i += 1) await page.keyboard.press('ArrowRight');
+  expect(await scaleOf()).toBeGreaterThan(1.05);
+  await expect(reset).toBeVisible();
+  await reset.click();
+  expect(await scaleOf()).toBeCloseTo(1, 2);
+  await expect(reset).toBeHidden();
+});

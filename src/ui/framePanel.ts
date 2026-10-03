@@ -38,6 +38,8 @@ export function createFramePanel(): HTMLElement {
     min: 0,
     max: STEPS,
     ends: ['縮小', '拡大'],
+    // 倍率 1 に戻すボタン。倍率 1 のバーの位置は、画面と写真の縦横比で変わる（最小の倍率が変わる）ので、そのつど求める
+    reset: { value: () => scaleToSlider(1), label: '1倍' },
     onInput: (value) => setPhotoView({ ...photoState.get().view, scale: sliderToScale(value) }),
   });
   screen.body.append(createSentences(SENTENCES), zoom.element);
