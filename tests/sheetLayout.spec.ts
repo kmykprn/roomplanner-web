@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * 下のタブは、写真モードなら「背景」「操作」、部屋モードなら「内装」「操作」の 2 つ（家具のタブは無い）。
  * 家具のページは、操作タブの［＋ 家具を追加］と、家具を選んでいる間の名前の右の［＋］から開く。
- * 写真の背景タブのふだんの姿（1 行だけ）のときは、下のパネルを中身の高さまで低くする
+ * 下のパネルの高さは、どのタブでも同じ（タブを切り替えても、写真の見える範囲が変わらない）
  */
 async function open(page: Page, withPhoto: boolean): Promise<void> {
   await page.goto('/');
@@ -20,9 +20,9 @@ async function open(page: Page, withPhoto: boolean): Promise<void> {
   }
 }
 
-/** パネルの高さ。高さを滑らかに変えている途中で測らないよう、変わり終わるのを待つ */
+/** パネルの高さ */
 async function sheetHeight(page: Page): Promise<number> {
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(100);
   return (await page.locator('.sheet').boundingBox())!.height;
 }
 
@@ -50,24 +50,16 @@ test('操作タブの［＋ 家具を追加］と、選んでいる家具の名�
   await expect(page.locator('.page')).toBeVisible();
 });
 
-test('背景タブのふだんの姿ではパネルを低くし、操作タブと背景の調整の画面では今の高さにする', async ({ page }) => {
+test('背景タブと操作タブ、背景の調整の画面で、パネルの高さは同じ', async ({ page }) => {
   await open(page, true);
   await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  const compact = await sheetHeight(page);
+  const background = await sheetHeight(page);
   await page.locator('.sheet__tab', { hasText: '操作' }).click();
-  const manage = await sheetHeight(page);
-  expect(compact).toBeLessThan(150);
-  expect(manage).toBeGreaterThan(compact + 100);
-  // 背景の調整の画面（拡大・縮小）に入ると、今の高さに戻す
+  expect(await sheetHeight(page)).toBeCloseTo(background, 0);
   await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  expect(await sheetHeight(page)).toBeCloseTo(compact, 0);
   await page.getByRole('button', { name: '背景のほかの操作' }).click();
   await page.getByRole('button', { name: '拡大・縮小' }).click();
-  expect(await sheetHeight(page)).toBeCloseTo(manage, 0);
-  // 1 行が隠れずに全部見える
-  await page.getByRole('button', { name: '‹ 戻る' }).filter({ visible: true }).click();
-  expect(await sheetHeight(page)).toBeCloseTo(compact, 0);
-  const row = (await page.locator('.bg-row').boundingBox())!;
-  const sheet = (await page.locator('.sheet').boundingBox())!;
-  expect(row.y + row.height).toBeLessThanOrEqual(sheet.y + sheet.height);
+  expect(await sheetHeight(page)).toBeCloseTo(background, 0);
+  // 低くしていたころの高さ（約 110px）ではなく、今までの高さ（画面の 42%、最低 280px）
+  expect(background).toBeGreaterThanOrEqual(280);
 });

@@ -205,15 +205,14 @@ body {
 
 /*
  * 下のシート。高さは画面に対して固定し、長い中身（操作の行など）はタブの下だけで縦にスクロールする。
- * ただし写真の背景タブのふだんの姿（1 行だけ）のときは、中身の高さまで低くして写真を広く見せる
- * （高さは ui/bottomSheet.ts の fitSheetHeight が入れる）。切り替えで写真が急に伸び縮みしないよう、高さは滑らかに変える
+ * **どのタブでも同じ高さにする。** タブごとに変えると、写真を描く範囲の縦横比が変わり、写真の見える範囲
+ * （画面を覆うために切り落とす左右）も変わる。背景タブだけ低くしたときは、操作タブで収まっていた家具が左右で切れた
  */
 .sheet {
   flex: none;
   display: flex;
   flex-direction: column;
   height: max(42dvh, 280px);
-  transition: height 0.2s ease;
   background: var(--surface);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
@@ -1919,12 +1918,6 @@ body {
 .bg-menu__item.is-danger,
 .bg-menu__item.is-danger .ic {
   color: var(--danger);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sheet {
-    transition: none;
-  }
 }
 
 /* 選んでいる家具の名前の右の小さな［＋］（家具を追加） */

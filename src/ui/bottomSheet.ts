@@ -119,7 +119,7 @@ const TABS: Record<TabId, string> = {
 
 /**
  * モードごとのタブの並び。部屋は内装（壁と床）、写真は背景（部屋の写真）から始まる。
- * 家具を置くページは、タブではなく操作タブの［＋ 家具を追加］から開く（タブが減ると下のパネルを低くしやすい）
+ * 家具を置くページは、タブではなく操作タブの［＋ 家具を追加］から開く（ページは画面全体に開くので、タブの中身が無い）
  */
 const ROOM_TABS: TabId[] = ['interior', 'manage'];
 const PHOTO_TABS: TabId[] = ['background', 'manage'];
@@ -214,34 +214,8 @@ export function createBottomSheet(container: HTMLElement): void {
 
     disposeList();
     body.replaceChildren(renderActiveTab());
-    fitSheetHeight();
   }
 
-  /**
-   * 写真の背景タブの、ふだんの姿（1 行だけ）のときは、下のパネルを中身の高さまで低くし、写真を広く見せる。
-   * 背景の調整の画面（拡大・縮小・寸法・手前に表示する範囲）や、ほかのタブは、今までの高さ（style.css の .sheet）。
-   * 高さは数で入れる（CSS の transition で、切り替えのときに滑らかに伸び縮みさせるため）
-   */
-  function fitSheetHeight(): void {
-    const { isMasking, isScaling, isFramingPhoto } = photoState.get();
-    const compact = isPhotoMode() && activeTab === 'background' && !isMasking && !isScaling && !isFramingPhoto;
-    if (!compact) {
-      sheet.style.height = '';
-      return;
-    }
-    const sheetStyle = getComputedStyle(sheet);
-    const bodyStyle = getComputedStyle(body);
-    const height =
-      tabBar.offsetHeight +
-      photoPanel.offsetHeight +
-      parseFloat(bodyStyle.paddingTop) +
-      parseFloat(bodyStyle.paddingBottom) +
-      parseFloat(sheetStyle.paddingBottom) +
-      parseFloat(sheetStyle.borderTopWidth);
-    sheet.style.height = `${Math.ceil(height)}px`;
-  }
-  // 背景の調整の画面に入る・出る、読み込みに失敗した一言が出る、などで中身の高さが変わる
-  photoState.subscribe(fitSheetHeight);
 
   function renderActiveTab(): HTMLElement {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
