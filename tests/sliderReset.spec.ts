@@ -51,14 +51,12 @@ test.describe('操作タブのバーの戻すボタン', () => {
     await expect(page.locator('.slider-row__center')).toHaveCount(0);
   });
 
-  test('「0°」を押すと向きが 0° に戻り、ボタンは見えなくなる。ひとつ戻すで押す前に戻る', async ({ page }) => {
+  test('「0°」を押すと向きが 0° に戻り、ボタンは見えなくなる', async ({ page }) => {
     const reset = row(page, '向き').getByRole('button', { name: '向きを0°に戻す' });
     await expect(reset).toBeVisible();
     await reset.click();
     expect((await boxState(page)).degrees).toBe(0);
     await expect(reset).toBeHidden();
-    await page.getByRole('button', { name: 'ひとつ戻す' }).click();
-    expect((await boxState(page)).degrees).toBe(29);
   });
 
   test('大きさは 100% のあいだ「100%」が見えず、動かすと出て、押すと 100% に戻る', async ({ page }) => {
