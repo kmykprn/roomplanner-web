@@ -1,16 +1,16 @@
 /**
  * 「家具より手前に表示する範囲」の画面。写真モードの「背景」タブの「背景の調整」から入る。
  *
- * 背景の画像の中で家具より手前にある物（机など）を指定してもらう。指定した部分は
- * 背景の画像が家具の上にかぶさるので、後ろへ動かした家具が隠れる。
+ * 背景の画像の中で家具を隠す物（ソファや机など）を囲ってもらう。囲った物ごとに見えない板が立ち
+ * （core/maskRegions.ts）、その物より奥にある家具の部分だけが隠れる。手前に置いた家具や、囲っていない物に
+ * 重ねた家具は隠れない。
  *
  *   上の段 … 「‹ 戻る」と見出し（ui/subScreen.ts）
- *   自動   … 写真の奥行きから手前の物を自動で見つけるかの切り替え（奥行きがあるときだけ出す）
  *   案内   … いまなにをすればいいかを、道具と進み具合に合わせて 1 文で出す（消しゴムは出さない）
  *   部品   … 道具（なぞる・点で囲む・消しゴム）と、道具ごとの設定（細い・太い、囲みを閉じる）を 1 行に
  *   下の段 … 「ひとつ戻す」「すべて消す」と「保存」
  *
- * 「戻る」は入ったときの形と切り替えに戻す（形は core/maskEditor.ts の cancelSession）。
+ * 「戻る」は入ったときの形に戻す（形は core/maskEditor.ts の cancelSession）。
  * 指の操作は interaction/maskPaint.ts、形を描く中身は core/maskEditor.ts。
  */
 
@@ -19,7 +19,6 @@ import { createQuietButton, createSubScreen } from '@/ui/subScreen';
 import {
   clearMask,
   photoState,
-  setDepthOcclusion,
   setMasking,
   setMaskTool,
   type MaskToolKind,
@@ -38,54 +37,42 @@ const TOOLS: Array<[MaskToolKind, string]> = [
  * 目的の文（「手前に表示したいエリアを…」）だけでは、指でなぞるのか点を打つのかが
  * 分からず、押してみて初めて分かる状態だった。道具と進み具合ごとに動作を書く。
  *
+ * 「床に接する所まで」と書くのは、物のいちばん下の点から物までの距離を出すため（core/maskRegions.ts）。
+ * 下を囲み残すと、物が実際より奥にあることになり、物の手前の家具まで隠れる。
+ *
  * 緑になるのは囲むの 3 点以上だけ。なぞるは塗り続けるだけで「次に押すもの」が無いので、
  * 塗った後も文と色を変えない（一筆で緑になって以後ずっと緑、が気持ち悪かった）
  */
 function guideFor(kind: MaskToolKind, corners: number): { text: string; done: boolean } | null {
   switch (kind) {
     case 'brush':
-      return { text: '画面上を指でなぞると、なぞった部分は家具よりも手前に表示されるようになります。', done: false };
+      return { text: '画面上の物を床に接する所まで指でなぞると、その物より奥にある家具が隠れるようになります。', done: false };
     case 'eraser':
       // 「消しゴム」の名前で何が起きるか分かるので、案内は出さない
       return null;
     case 'polygon':
       if (corners === 0) {
-        return { text: '画面上で点をタップしてつなげると、囲んだ部分は家具よりも手前に表示されるようになります。', done: false };
+        return { text: '画面上の物を床に接する所まで点で囲むと、その物より奥にある家具が隠れるようになります。', done: false };
       }
       if (corners < MIN_CORNERS) {
         return { text: `点をあと ${MIN_CORNERS - corners} 個タップすると、範囲を囲むことができます。`, done: false };
       }
       // 最初の点をもう一度タップしても閉じられるが、案内には閉じ方を 1 つだけ書く
-      return { text: '「囲みを閉じる」を押すと、囲んだ範囲が家具よりも手前に表示されます。', done: true };
+      return { text: '「囲みを閉じる」を押すと、囲んだ物より奥にある家具が隠れるようになります。', done: true };
   }
 }
 
 export function createMaskPanel(): HTMLElement {
-  /** 入ったときの、自動で見つけるかの切り替え。「戻る」で戻す */
-  let occlusionAtStart = photoState.get().depthOcclusion;
   const screen = createSubScreen({
     title: '家具より手前に表示する範囲',
     onBack: () => {
       maskEditor.cancelSession();
-      setDepthOcclusion(occlusionAtStart);
       setMasking(false);
     },
     onDone: () => setMasking(false),
   });
   const panel = screen.element;
   panel.classList.add('mask');
-
-  // 写真の奥行きから自動で見つけるか。手で塗った範囲は、これと別に足される
-  const auto = document.createElement('label');
-  auto.className = 'mask__auto';
-  const autoInput = document.createElement('input');
-  autoInput.type = 'checkbox';
-  autoInput.id = 'mask-auto';
-  autoInput.setAttribute('role', 'switch');
-  autoInput.addEventListener('change', () => setDepthOcclusion(autoInput.checked));
-  const autoLabel = document.createElement('span');
-  autoLabel.textContent = '家具より手前にある物を、自動で見つける';
-  auto.append(autoInput, autoLabel);
 
   const guide = document.createElement('p');
 
@@ -100,7 +87,7 @@ export function createMaskPanel(): HTMLElement {
   ]);
   const closeButton = createButton('囲みを閉じる', () => maskEditor.closePolygon(), 'button is-small');
   row.append(toolSwitch.element, widthSwitch.element, closeButton);
-  screen.body.append(auto, guide, row);
+  screen.body.append(guide, row);
 
   const undoButton = createQuietButton('ひとつ戻す', () => maskEditor.undo());
   const clearButton = createQuietButton('すべて消す', clearMask);
@@ -110,19 +97,14 @@ export function createMaskPanel(): HTMLElement {
   let wasMasking = false;
 
   function render(): void {
-    const { maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking, depthOcclusion, depthMap } = photoState.get();
+    const { maskTool, maskUrl, maskPolygon, maskUndoDepth, isMasking } = photoState.get();
     if (isMasking && !wasMasking) {
       maskEditor.beginSession();
-      occlusionAtStart = depthOcclusion;
     }
     wasMasking = isMasking;
     panel.hidden = !isMasking;
     // この画面へは背景の画像があるときしか入れない（タイルが画像のあるときだけ出る）ので、画像の有無は見ない
     const { kind } = maskTool;
-
-    // 奥行きをまだ計算していなければ、切り替えても何も起きないので出さない
-    auto.hidden = !depthMap;
-    autoInput.checked = depthOcclusion;
 
     const next = guideFor(kind, maskPolygon.length);
     guide.hidden = next === null;

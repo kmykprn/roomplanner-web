@@ -4,56 +4,54 @@ import { expect, test, type Page } from '@playwright/test';
  * 新しく置いた家具は、写真の物（背景）の奥に入って隠れないようにする。
  *   1. 置く場所を決めるとき、隠れるなら隠れなくなるまで手前（画面の下）へずらす
  *   2. それでも隠れる（家具が広く、手前の物の間に収まらない）ときも、動かすまでは隠さずに手前に描く
- *   3. 指で動かすと、奥行きで隠す判断に戻る
+ *   3. 指で動かすと、隠す判断に戻る
  *
- * 写真は、高さ 1.4 m から 10° 見下ろして撮った、床だけの部屋の奥行きを作り、そこに手前の物を足す
+ * 写真は、高さ 1.4 m から 10° 見下ろして撮ったことにし、家具より手前に表示する範囲で手前の物を囲う。
+ * 囲った物は、範囲のいちばん下が写る床の位置に立っている（core/maskRegions.ts）
  */
 
-/** 写真があり、解析が済んだことにする。blocks は手前の物（写真の範囲と、カメラからの距離 m） */
-async function setUpPhoto(page: Page, blocks: Array<{ x: [number, number]; y: [number, number]; distance: number }>): Promise<void> {
+/** 写真があることにする。blocks は手前の物を囲った範囲（写真の割合） */
+async function setUpPhoto(page: Page, blocks: Array<{ x: [number, number]; y: [number, number] }>): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet__tab').first().waitFor();
   await page.evaluate(async (blocks) => {
-    const { photoState } = await import('/src/core/photoState.ts');
-    const { levelPointAt } = await import('/src/core/depthPlacement.ts');
-    const lens = { vfovDeg: 60, aspect: 4 / 3 };
-    const pose = { fit: { pitchDeg: 10, rollDeg: 0 }, position: [0, 1.4, 4] as [number, number, number] };
-    const width = 160;
-    const height = 120;
-    const t = Math.tan((lens.vfovDeg * Math.PI) / 360);
-    const data = new Float32Array(width * height);
-    for (let row = 0; row < height; row += 1) {
-      for (let column = 0; column < width; column += 1) {
-        const point = { x: (column + 0.5) / width, y: (row + 0.5) / height };
-        // 奥行きの地図は、正面方向の奥行きが 1 になる視線の長さで割った距離
-        const rayLength = Math.hypot((point.x * 2 - 1) * t * lens.aspect, (1 - point.y * 2) * t, 1);
-        const block = blocks.find((b) => point.x >= b.x[0] && point.x <= b.x[1] && point.y >= b.y[0] && point.y <= b.y[1]);
-        const floor = levelPointAt(point, 0, lens, pose);
-        const distance = block ? block.distance : floor ? Math.hypot(floor[0] - 0, floor[1] - 1.4, floor[2] - 4) : 20;
-        data[row * width + column] = distance / rayLength;
-      }
-    }
+    const { photoState, setMaskUrl } = await import('/src/core/photoState.ts');
     const canvas = document.createElement('canvas');
     canvas.width = 4;
     canvas.height = 3;
     photoState.set({
       backgroundStatus: 'ready',
       backgroundUrl: canvas.toDataURL(),
-      backgroundAspect: lens.aspect,
-      vfovDeg: lens.vfovDeg,
-      floorFit: pose.fit,
+      backgroundAspect: 4 / 3,
+      vfovDeg: 60,
+      floorFit: { pitchDeg: 10, rollDeg: 0 },
       cameraHeight: 1.4,
-      depthMap: { width, height, data },
-      depthOcclusion: true,
     });
+    const mask = document.createElement('canvas');
+    mask.width = 400;
+    mask.height = 300;
+    const context = mask.getContext('2d')!;
+    context.fillStyle = '#fff';
+    for (const block of blocks) {
+      context.fillRect(block.x[0] * 400, block.y[0] * 300, (block.x[1] - block.x[0]) * 400, (block.y[1] - block.y[0]) * 300);
+    }
+    const url = mask.toDataURL();
+    (window as unknown as { maskUrl: string }).maskUrl = url;
+    setMaskUrl(url);
   }, blocks);
   await page.locator('.sheet__tab', { hasText: '操作' }).click();
 }
 
-/** 隠す仕組みのオンとオフで、キャンバスの画素がいくつ変わるか（0 なら、どこも隠れていない） */
+/** 囲った範囲のありと無しで、キャンバスの画素がいくつ変わるか（0 なら、どこも隠れていない） */
 async function hiddenPixels(page: Page): Promise<number> {
   const shot = async (on: boolean) => {
-    await page.evaluate(async (on) => (await import('/src/core/photoState.ts')).setDepthOcclusion(on), on);
+    await page.evaluate(async (on) => {
+      const { setMaskUrl } = await import('/src/core/photoState.ts');
+      setMaskUrl(on ? (window as unknown as { maskUrl: string }).maskUrl : null);
+    }, on);
+    await expect
+      .poll(() => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().maskRegions !== null))
+      .toBe(on);
     await page.waitForTimeout(250);
     return (await page.locator('canvas').first().screenshot()).toString('base64');
   };
@@ -85,8 +83,9 @@ async function hiddenPixels(page: Page): Promise<number> {
 }
 
 test('置く場所が手前の物の奥なら、隠れなくなるまで手前へずらして置く', async ({ page }) => {
-  // 画面の真ん中・下から 3 割（今までの置き場所）の床は 3.3 m 先。その手前 2.6 m に物がある
-  await setUpPhoto(page, [{ x: [0.3, 0.7], y: [0.5, 0.8], distance: 2.6 }]);
+  // 画面の真ん中・下から 3 割（今までの置き場所）の床は 3.3 m 先。その手前 2.5 m に物がある
+  // （範囲のいちばん下の縦 0.8 は、真ん中から 19° 下、見下ろし 10° と合わせて 29° 下の床。1.4 / tan 29° ≒ 2.5 m）
+  await setUpPhoto(page, [{ x: [0.3, 0.7], y: [0.5, 0.8] }]);
   const distance = await page.evaluate(async () => {
     const { photoScene } = await import('/src/core/photoState.ts');
     const size: [number, number, number] = [0.46, 0.9, 0.5];
@@ -102,10 +101,10 @@ test('置く場所が手前の物の奥なら、隠れなくなるまで手前�
 });
 
 test('手前の物の間に収まらない家具も、置いた直後は手前に描き、動かすと隠す判断に戻る', async ({ page }) => {
-  // 左右の下のほうに、1 m 先の物（棚と引き出しのような）。幅のある家具は、どこまで手前へずらしても重なる
+  // 左右の下のほうに、写真の下の端まで届く物（棚と引き出しのような）。幅のある家具は、どこまで手前へずらしても重なる
   await setUpPhoto(page, [
-    { x: [0, 0.42], y: [0.45, 1], distance: 1 },
-    { x: [0.58, 1], y: [0.45, 1], distance: 1 },
+    { x: [0, 0.42], y: [0.45, 1] },
+    { x: [0.58, 1], y: [0.45, 1] },
   ]);
   // 画面の操作で、サンプルのソファを置く
   await page.locator('.manage__add').click();

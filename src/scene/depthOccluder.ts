@@ -1,41 +1,33 @@
 /**
  * 写真の中で家具より手前にある物の、見えない面（写真モードだけ）。
  *
- * **色は描かず、奥行きだけを書く。** 写真の奥行きの地図から、写真に写っている物の表面を 3D の面にして、
+ * **色は描かず、奥行きだけを書く。** 奥行きの地図から、写真に写っている物の表面を 3D の面にして、
  * 家具より先に描く。この面より奥にある家具の部分は描かれないので、下に敷いた写真がそのまま見え、
- * 写真の中の机やソファが家具の手前に出る。手で塗る範囲（ui/maskPanel.ts）は、この上から足す。
+ * 写真の中の机やソファが家具の手前に出る。奥行きの地図は、家具より手前に表示する範囲で囲った物ごとの
+ * 板のもの（core/maskRegions.ts）。範囲の外は奥行きが無いので面を作らず、家具を隠さない。
  *
  * 面はカメラの座標で作り、写真を描いているカメラと同じ位置・向きに置く（interaction/photoCamera.ts）。
  * 奥行きの地図の 1 点が、写真の同じ点に写るようにするため。
  *
- * CG の部屋の画像 120 枚で、家具の見える・隠れるの取り違えは、見える側と隠れる側の平均で 14% 前後だった。
- * 奥行きの地図の輪郭が粗いので、手前の物の縁は少しずれる
  */
 
 import * as THREE from 'three';
 
 import type { DepthMap } from '@/core/depthModel';
-import type { DepthScale, Lens } from '@/core/depthPlacement';
+import type { Lens } from '@/core/depthPlacement';
 
 /**
  * 面を、写っている物よりこの距離（m）だけ奥へ下げる。
- * 下げないと、床に置いた家具の足元が床の面に埋もれて欠ける（奥行きの誤差で、床の面が手前に来る所がある）。
- * 10 cm と 15 cm を比べ、取り違えの少なかった 10 cm にした
+ * 板は物の手前の端に立つので、物にくっつけて置いた家具（ソファの前の机など）が板に食い込んで欠けないようにする
  */
 export const PUSH_BACK = 0.1;
 
-/**
- * 隣どうしの奥行きがこの比より離れている所は、物の縁とみなし、手前の奥行きに寄せる。
- * 奥行きの地図は物の縁でぼやけ、手前の物が細く出る。縁を 1 画素ぶん手前の物に寄せると、取り違えが減った
- */
-const EDGE_RATIO = 1.12;
-
-/** 面の細かさ（奥行きの地図の何画素ごとに頂点を置くか） */
-const STEP = 2;
+/** 面の細かさ（奥行きの地図の何画素ごとに頂点を置くか）。1 画素ごとにして、囲った物の縁をなめらかにする */
+const STEP = 1;
 
 export interface OccluderSource {
+  /** 正面方向の奥行き（m）。隠さない所は NaN */
   map: DepthMap;
-  scale: DepthScale;
   lens: Lens;
 }
 
@@ -142,47 +134,14 @@ function sameSource(a: OccluderSource | null, b: OccluderSource | null): boolean
   if (a === null || b === null) return a === b;
   return (
     a.map === b.map &&
-    a.scale.a === b.scale.a &&
-    a.scale.b === b.scale.b &&
     a.lens.vfovDeg === b.lens.vfovDeg &&
     a.lens.aspect === b.lens.aspect
   );
 }
 
-/**
- * 面に使う奥行き。直し方を当て、物の縁を手前に寄せる（まわり 3×3 の最大と最小が EDGE_RATIO より離れていれば最小）。
- * 分からない所は NaN のまま
- */
-export function occluderDepths(map: DepthMap, scale: DepthScale): Float32Array {
-  const { width, height, data } = map;
-  const scaled = new Float32Array(data.length);
-  for (let i = 0; i < data.length; i += 1) scaled[i] = scale.a * data[i] + scale.b;
-  const result = new Float32Array(data.length);
-  for (let row = 0; row < height; row += 1) {
-    for (let column = 0; column < width; column += 1) {
-      let low = Infinity;
-      let high = -Infinity;
-      for (let dy = -1; dy <= 1; dy += 1) {
-        for (let dx = -1; dx <= 1; dx += 1) {
-          const y = row + dy;
-          const x = column + dx;
-          if (x < 0 || y < 0 || x >= width || y >= height) continue;
-          const value = scaled[y * width + x];
-          if (!Number.isFinite(value)) continue;
-          if (value < low) low = value;
-          if (value > high) high = value;
-        }
-      }
-      const index = row * width + column;
-      result[index] = high / low > EDGE_RATIO ? low : scaled[index];
-    }
-  }
-  return result;
-}
-
 /** 奥行きの地図の点を、カメラの座標の頂点にして、隣どうしを三角形でつなぐ。奥行きの分からない点を含む三角形は作らない */
-function buildGeometry({ map, scale, lens }: OccluderSource): THREE.BufferGeometry {
-  const depths = occluderDepths(map, scale);
+function buildGeometry({ map, lens }: OccluderSource): THREE.BufferGeometry {
+  const depths = map.data;
   const columns = Math.ceil(map.width / STEP);
   const rows = Math.ceil(map.height / STEP);
   const t = Math.tan((lens.vfovDeg * Math.PI) / 360);
