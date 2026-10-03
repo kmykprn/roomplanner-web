@@ -7,7 +7,7 @@
  *                3D は 2D から作るので、作る前に元の 2D を選ばせる
  *   続き       … 作った家具。作成中はその場で円が進み、できあがると押せる姿になる。
  *                失敗は「!」のタイルで、押すと格子の下に理由と「とじる」が出る。
- *                押すと出るメニューの［編集］で、編集の姿（名前・サイズ・削除）に切り替わる。
+ *                押すと出るメニューの［編集］で、編集の姿（アイコン・名前・サイズ・削除）に切り替わる。
  *
  * 格子の上の「すべて / 2D / 3D」で絞れる。最初から入っている椅子・ソファ（サンプル）も作った家具と同じ扱い。2D は切り抜きの板、3D は向きを変えられるモデル。
  *
@@ -883,8 +883,7 @@ function createModelThumb(tile: ModelTile, open: (tile: ModelTile) => void): Thu
 }
 
 /**
- * 作った家具の編集の姿。名前とサイズを変え、削除もここから。
- * アイコンは変えられないので出さない（何を編集しているかは、見出しと名前で分かる）。
+ * 作った家具の編集の姿。名前とサイズを変え、削除もここから。いちばん上にアイコンを出す。
  *
  * **2D と 3D は別々に開く。** 開いている面だけが消せる（2D を消しても 3D は残る）ので、
  * 見出しも削除の文言も、いまどちらを触っているかを名指しする。
@@ -926,6 +925,17 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   const headSpacer = document.createElement('span');
   headSpacer.className = 'edit__spacer';
   head.append(back, title, headSpacer);
+
+  // アイコン。ほかの欄と同じく、見出しの下に画像を出す（切り抜きがあればそれ。previewImage.ts）
+  const iconField = document.createElement('div');
+  iconField.className = 'field';
+  const iconLabel = document.createElement('span');
+  iconLabel.className = 'field__label';
+  iconLabel.textContent = 'アイコン';
+  const icon = document.createElement('span');
+  icon.className = 'thumb__img edit__icon';
+  const iconPreview = createPreviewImage(icon);
+  iconField.append(iconLabel, icon);
 
   const nameField = document.createElement('div');
   nameField.className = 'field';
@@ -1046,7 +1056,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   modalBox.append(confirmTitle, confirmRow, confirmNote, confirmButtons);
   modal.append(modalBox);
 
-  element.append(head, nameField, sizeField.element, productField, actions, modelField, spacer, divider, remove, modal);
+  element.append(head, iconField, nameField, sizeField.element, productField, actions, modelField, spacer, divider, remove, modal);
 
   /** 欄に出す高さ（m）。入れてあればそれ、無ければ置くときの高さ */
   function shownHeight(model: GeneratedModel): number {
@@ -1094,6 +1104,7 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
     title.textContent = `${kind}の編集`;
     nameInput.value = model.name;
     sizeField.show(placementSize(model, facet), facet === 'flat');
+    iconPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
     confirmIconPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
     confirmTitle.textContent = `この ${kind}を削除します`;
     confirmText.textContent = model.name;

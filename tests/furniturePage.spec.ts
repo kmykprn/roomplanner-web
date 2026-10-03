@@ -55,8 +55,6 @@ test.describe('家具のページ', () => {
     const before = await page.locator('.sheet__tab.is-active').textContent();
     await page.getByRole('button', { name: '編集' }).click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toBeVisible();
-    // 編集の画面に、変えられないアイコンは出さない
-    await expect(page.locator('.page .lib__edit').getByText('アイコン', { exact: true })).toHaveCount(0);
     await page.locator('.page__close').click();
     await expect(page.locator('.page')).toBeHidden();
     await expect(page.locator('.sheet__tab.is-active')).toHaveText(before ?? '');

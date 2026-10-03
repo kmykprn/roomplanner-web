@@ -1401,6 +1401,11 @@ body {
   align-items: center;
   gap: 12px;
 }
+.edit__icon {
+  width: 64px;
+  height: 64px;
+  flex: none;
+}
 /* サイズの欄: 左に箱の図、右に幅・奥行き・高さ */
 .size-field {
   display: flex;
