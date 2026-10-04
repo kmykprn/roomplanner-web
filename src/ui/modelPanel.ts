@@ -59,6 +59,7 @@ import { createLoginPanel } from '@/ui/loginPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProgressRing } from '@/ui/progressRing';
 import { createFurniturePreview } from '@/ui/furniturePreview';
+import { createTicketSheet } from '@/ui/ticketSheet';
 import { createWalletBar } from '@/ui/walletBar';
 
 export interface ModelPanelOptions {
@@ -620,16 +621,18 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     afterLoginNote = null;
   });
 
-  // いちばん上に、3D を作れる残りの回数（ログインしていなければ、ログインを勧める一言と［ログイン］）
+  // いちばん上に、3D を作れる残りの回数と［購入］（ログインしていなければ［ログイン］）
+  const ticketSheet = createTicketSheet();
   const walletBar = createWalletBar({
     onLogin: () => {
       signedInNote.hidden = true;
       loginPanel.open();
       renderState();
     },
+    onBuy: ticketSheet.open,
   });
 
-  element.append(head, walletBar.element, menu, loginPanel.element, authNote, signedInNote);
+  element.append(head, walletBar.element, menu, loginPanel.element, authNote, signedInNote, ticketSheet.element);
 
   function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
@@ -660,6 +663,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     pending = null;
     afterLoginNote = null;
     loginPanel.close();
+    ticketSheet.close();
     renderState();
     element.hidden = false;
     // 回数は別の端末で使ったり、券を買ったりして変わるので、開くたびに取り直す
