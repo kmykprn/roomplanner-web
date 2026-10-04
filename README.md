@@ -189,13 +189,15 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 
 ## サンプルの家具について
 
-最初から一覧に入っている「サンプル 1」「サンプル 2」の 3D モデル（`src/assets/furniture/*.glb`）は、すべて自前で作ったものです。
-画像生成（SDXL base 1.0、CreativeML Open RAIL++-M）で「白背景の商品写真」風の画像を作り
-（`assets-src/furniture/sdxl.py`、元画像は `assets-src/furniture/inputs/`）、それを自前の 3D 生成
-（Hunyuan3D-2GP、背景除去は BiRefNet）に通しました（`assets-src/furniture/generate.sh`）。
-第三者の写真や製品の意匠は使っていません。アイコン（`src/assets/furniture/*.webp`）はそのモデルを描いたものです。
-2D（切り抜き）のサンプル（`src/assets/furniture/*-cutout.webp`）は、同じ元画像を
-[BiRefNet](https://github.com/ZhengPeng7/BiRefNet)（MIT）で背景を消し、物のまわりで切り詰めたものです（`assets-src/furniture/cutout.py`）。
+最初から一覧に入っている「サンプル 1」「サンプル 2」は、すべて自前で作ったものです。
+元の画像は、画像生成（SDXL base 1.0、CreativeML Open RAIL++-M）で作った「白背景の商品写真」風の画像です
+（`assets-src/furniture/sdxl.py`、元画像は `assets-src/furniture/inputs/`）。第三者の写真や製品の意匠は使っていません。
+
+2D と 3D は、利用者が家具を作るのと同じアプリの流れで作りました。元の画像をアプリの「2D（切り抜き）を作る」に通し、
+できた 2D から「3D モデルを作る」（いまの既定の作り方、TRELLIS）で 3D にしました（`src/assets/furniture/`）。
+アイコン（`src/assets/furniture/chair.webp` など）は、その 3D を描いたものです。
+以前は 3D を別の作り方（Hunyuan3D、`assets-src/furniture/generate.sh`）で作っていましたが、写真よりずっと鮮やかな色になり、
+2D と別の物に見えたため作り直しました。
 
 ## 写真の解析について
 
