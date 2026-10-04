@@ -90,6 +90,11 @@ export interface Wallet {
   trialRemaining: number;
   /** 「バナーなし」を買い切っているか */
   noBanner: boolean;
+  /**
+   * 回数を数えない利用者か（開発者のテスト用。サーバーの config/unmetered_uids.json）。
+   * true なら作っても回数が減らず、残りが 0 でも作れる。古いサーバーは返さないので省略可
+   */
+  unmetered?: boolean;
 }
 
 /** 3D を作れる残りの回数を見る */

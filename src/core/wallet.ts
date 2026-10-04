@@ -27,11 +27,15 @@ export const walletState = createStore<WalletState>({
   credits: 0,
   trialRemaining: 0,
   noBanner: false,
+  unmetered: false,
 });
 
-/** 3D を作れる残り回数（お試しと券の合計）。写しが無ければ null */
+/**
+ * 3D を作れる残り回数（お試しと券の合計）。写しが無ければ null。
+ * 回数を数えない利用者も null（数に上限が無いので、残りが 0 でも作るボタンを押せるようにする）
+ */
 export function remainingGenerations(state: WalletState = walletState.get()): number | null {
-  if (state.status !== 'ready') return null;
+  if (state.status !== 'ready' || state.unmetered) return null;
   return state.trialRemaining + state.credits;
 }
 
