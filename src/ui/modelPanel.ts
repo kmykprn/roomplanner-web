@@ -48,7 +48,7 @@ import {
   type ModelFacet,
 } from '@/core/modelLibrary';
 import { authState, redirectLogin } from '@/platform/auth';
-import { walletState, remainingGenerations } from '@/core/wallet';
+import { refreshWallet, walletState, remainingGenerations } from '@/core/wallet';
 import { NO_CREDITS_MESSAGE } from '@/platform/api';
 import { pickImages } from '@/platform/picker';
 import { createHeightStep } from '@/ui/heightStep';
@@ -59,6 +59,8 @@ import { createLoginPanel } from '@/ui/loginPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProgressRing } from '@/ui/progressRing';
 import { createFurniturePreview } from '@/ui/furniturePreview';
+import { createTicketSheet } from '@/ui/ticketSheet';
+import { createWalletBar } from '@/ui/walletBar';
 
 export interface ModelPanelOptions {
   /** モデルを置いた直後に呼ぶ。タブの移動を抑える判断に使う */
@@ -600,10 +602,6 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     menu.append(row);
   }
 
-  /** 押す前から、ログインが要ることが分かるようにしておく。匿名のときだけ出す */
-  const loginHint = document.createElement('p');
-  loginHint.className = 'hint lib__login-hint';
-  loginHint.textContent = '家具を作るには Google ログインが必要です';
   /** 認証できないときだけ出す。押せない理由が無いと、壊れているように見える */
   const authNote = document.createElement('p');
   authNote.className = 'hint is-error';
@@ -623,7 +621,18 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     afterLoginNote = null;
   });
 
-  element.append(head, menu, loginPanel.element, loginHint, authNote, signedInNote);
+  // いちばん上に、3D を作れる残りの回数と［購入］（ログインしていなければ［ログイン］）
+  const ticketSheet = createTicketSheet();
+  const walletBar = createWalletBar({
+    onLogin: () => {
+      signedInNote.hidden = true;
+      loginPanel.open();
+      renderState();
+    },
+    onBuy: ticketSheet.open,
+  });
+
+  element.append(head, walletBar.element, menu, loginPanel.element, authNote, signedInNote, ticketSheet.element);
 
   function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
@@ -639,13 +648,12 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   }
 
   function renderState(): void {
-    const { status, anonymous } = authState.get();
+    const { status } = authState.get();
     // 認証できないとこのあと何をしても失敗する。黙って止まると原因が分からないので出す
     const authFailed = status === 'failed';
     for (const row of rows) row.disabled = authFailed;
     authNote.hidden = !authFailed;
     authNote.textContent = authFailed ? authFailureMessage() : '';
-    loginHint.hidden = authFailed || !anonymous;
     // ログインを求めている間は行を引っ込める（同じ場所に出す）
     menu.hidden = !loginPanel.element.hidden;
   }
@@ -655,8 +663,11 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     pending = null;
     afterLoginNote = null;
     loginPanel.close();
+    ticketSheet.close();
     renderState();
     element.hidden = false;
+    // 回数は別の端末で使ったり、券を買ったりして変わるので、開くたびに取り直す
+    void refreshWallet();
   }
 
   function close(): void {

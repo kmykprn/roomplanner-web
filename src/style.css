@@ -1099,11 +1099,131 @@ body {
   color: var(--danger);
 }
 
-/* 作成ボタンの下の一行。押す前からログインが要ることが分かるように */
-.lib__login-hint {
-  margin-top: 6px;
-  font-size: 12px;
-  text-align: center;
+/* 「家具を追加」のいちばん上の、3D を作れる残りの回数の帯（ui/walletBar.ts）。左に回数、右に［購入］か［ログイン］ */
+.wallet-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* ボタンの無い「回数無制限」でも、ほかの状態と同じ高さにする */
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eaf4f8;
+}
+.wallet-bar[hidden],
+.wallet-bar [hidden] {
+  display: none;
+}
+.wallet-bar__count {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.wallet-bar__mark {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+}
+.wallet-bar__mark .ic {
+  width: 16px;
+  height: 16px;
+}
+.wallet-bar__unit {
+  font-size: 14px;
+  font-weight: 700;
+}
+.wallet-bar__number {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+/* ［購入］。参考にした漫画アプリの「購入・無料チャージ」と同じ、金色の枠と文字。文字は白地で 4.5:1 以上の濃さ */
+.wallet-bar__buy {
+  flex: none;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 2px solid #c9a100;
+  border-radius: 10px;
+  background: var(--surface);
+  color: #7a6000;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.wallet-bar__login {
+  flex: none;
+}
+
+/* 回数券の一覧（ui/ticketSheet.ts）。家具のメニューと同じく、画面の下から出す */
+.ticket-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.ticket-sheet[hidden] {
+  display: none;
+}
+.ticket-sheet__dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 28, 0.38);
+}
+.ticket-sheet__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+}
+.ticket-sheet__title {
+  font-size: 17px;
+}
+.ticket-sheet__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.ticket-sheet__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+}
+.ticket-sheet__row:first-child {
+  border-top: none;
+}
+.ticket-sheet__generations {
+  font-weight: 700;
+}
+.ticket-sheet__price {
+  font-variant-numeric: tabular-nums;
+}
+.ticket-sheet__note {
+  margin: 0;
+  font-size: 13px;
+  color: #687076;
 }
 
 /* ログインを求めるパネル。作成ボタンと同じ場所に出る */
