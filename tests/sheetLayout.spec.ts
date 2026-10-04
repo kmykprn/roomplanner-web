@@ -64,3 +64,13 @@ test('写真モードの一覧と背景の調整の画面、部屋モードの�
   // 低くしていたころの高さ（約 110px）ではなく、今までの高さ（画面の 42%、最低 280px）
   expect(background).toBeGreaterThanOrEqual(280);
 });
+
+test('下のパネルは上の角が丸く、写真に少し重なる（境目がはっきりする）', async ({ page }) => {
+  await open(page, true);
+  const sheet = page.locator('.sheet');
+  const radius = await sheet.evaluate((element) => parseFloat(getComputedStyle(element).borderTopLeftRadius));
+  expect(radius).toBeGreaterThanOrEqual(12);
+  const [sheetBox, viewportBox] = await Promise.all([sheet.boundingBox(), page.locator('.viewport').boundingBox()]);
+  // パネルの上の端が、写真の下の端より上にある
+  expect(viewportBox!.y + viewportBox!.height - sheetBox!.y).toBeGreaterThan(4);
+});

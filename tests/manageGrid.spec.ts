@@ -107,3 +107,13 @@ test('置いた家具には、2D（切り抜き）か 3D（モデル）かの札
   expect(tagBox!.x - tileBox!.x).toBeLessThan(12);
   expect(tileBox!.y + tileBox!.height - (tagBox!.y + tagBox!.height)).toBeLessThan(12);
 });
+
+test('一覧の上に題「配置した家具」と置いた数を出す。家具が無くても題は出す', async ({ page }) => {
+  await expect(page.locator('.manage__title')).toHaveText(/^配置した家具\s*2$/);
+  await page.evaluate(async () => {
+    const { activeScene } = await import('/src/core/mode.ts');
+    const scene = activeScene();
+    for (const item of scene.state().furniture) scene.remove(item.id);
+  });
+  await expect(page.locator('.manage__title')).toHaveText('配置した家具');
+});
