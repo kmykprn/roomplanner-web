@@ -27,7 +27,7 @@ test('一覧に残っている古いサンプルと、置いてある古いサ�
     }));
   }, { model: OLD_MODEL, cutout: OLD_CUTOUT });
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   const r = await page.evaluate(async () => {
     const { SAMPLE_MODELS } = await import('/src/config/samples.ts');
     const { modelLibrary } = await import('/src/core/modelLibrary.ts');

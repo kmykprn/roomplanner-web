@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
  */
 async function setUp(page: Page, maskTop: number, maskBottom: number): Promise<void> {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(
     async ({ maskTop, maskBottom }) => {
       const { photoState, setMaskUrl } = await import('/src/core/photoState.ts');
@@ -107,8 +107,7 @@ test('いちばん下が床に接していない範囲（窓など）は、家�
 
 test('家具を隠す範囲の画面に、自動で見つける切り替えは出さない', async ({ page }) => {
   await setUp(page, 0.4, FOOT_AT_3M);
-  await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
+  await page.locator('.photo-menu__button').click();
   await page.getByRole('button', { name: '家具を隠す範囲' }).click();
   await expect(page.locator('.mask')).toBeVisible();
   await expect(page.getByText('自動で見つける')).toHaveCount(0);
@@ -116,8 +115,7 @@ test('家具を隠す範囲の画面に、自動で見つける切り替えは�
 
 test('家具を隠す範囲の画面の見出しと案内は短く、道具と進み具合に合わせて変わる', async ({ page }) => {
   await setUp(page, 0.4, FOOT_AT_3M);
-  await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
+  await page.locator('.photo-menu__button').click();
   await page.getByRole('button', { name: '家具を隠す範囲' }).click();
   await expect(page.locator('.mask .edit__title')).toHaveText('家具を隠す範囲');
   const guide = page.locator('.mask__guide');

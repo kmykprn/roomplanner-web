@@ -6,7 +6,7 @@ import type { Page } from '@playwright/test';
  */
 export async function openWithTwoCutouts(page: Page): Promise<string[]> {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   return page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');
     const scene = activeScene();
@@ -30,5 +30,8 @@ export async function openWithTwoCutouts(page: Page): Promise<string[]> {
 
 /** 下のタブを開く */
 export async function openTab(page: Page, label: string): Promise<void> {
-  await page.locator('.sheet__tab', { hasText: label }).click();
+  // 写真モードは操作だけでタブの帯が無い（背景の操作は写真の右上の［⋯］）。操作を開くときは何もしない
+  const tab = page.locator('.sheet__tab', { hasText: label });
+  if (label === '操作' && !(await tab.isVisible())) return;
+  await tab.click();
 }

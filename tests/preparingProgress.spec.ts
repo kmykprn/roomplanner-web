@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 家具を作り始めたとき（写真を送っている間・順番を待つ間）は、文言を「準備中」にし、円を少しずつ進める。
@@ -8,7 +9,7 @@ import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
 });
 
 test('3D: 押した瞬間から円が少し出て、順番待ちの間も進み、作業が始まっても戻らない', async ({ page }) => {
@@ -62,7 +63,7 @@ test('作成中の 3D のタイルは、送っている間も順番待ちも「�
     };
     generationState.set({ ...generationState.get(), jobs: [job as never] });
   });
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await openTab(page, '操作');
   await page.locator('.manage__add').click();
   const tile = page.locator('.page .thumb').filter({ has: page.locator('.ring') }).first();
   await expect(tile.locator('.thumb__name')).toHaveText('準備中');

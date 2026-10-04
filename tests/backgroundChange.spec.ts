@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 背景の画像を変えたり、写真の解析の結果でカメラ（画角・傾き・撮った高さ）が変わったりしても、
@@ -26,8 +27,8 @@ async function openWithCamera(page: Page): Promise<void> {
     });
   });
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await page.locator('.sheet').first().waitFor();
+  await openTab(page, '操作');
 }
 
 /** 写真 A があり、解析が済んだことにして、ソファを新しく置く場所に置く */

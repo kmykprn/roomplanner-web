@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 新しく置いた家具は、写真の物（背景）の奥に入って隠れないようにする。
@@ -13,7 +14,7 @@ import { expect, test, type Page } from '@playwright/test';
 /** 写真があることにする。blocks は手前の物を囲った範囲（写真の割合） */
 async function setUpPhoto(page: Page, blocks: Array<{ x: [number, number]; y: [number, number] }>): Promise<void> {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async (blocks) => {
     const { photoState, setMaskUrl } = await import('/src/core/photoState.ts');
     const canvas = document.createElement('canvas');
@@ -39,7 +40,7 @@ async function setUpPhoto(page: Page, blocks: Array<{ x: [number, number]; y: [n
     (window as unknown as { maskUrl: string }).maskUrl = url;
     setMaskUrl(url);
   }, blocks);
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await openTab(page, '操作');
 }
 
 /** 囲った範囲のありと無しで、キャンバスの画素がいくつ変わるか（0 なら、どこも隠れていない） */

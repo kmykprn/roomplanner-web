@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 操作タブの一覧（何も選んでいないとき）は、どの端末でもタイルが 2 段そろって切れずに見える。
@@ -15,7 +16,7 @@ for (const [name, width, height] of SCREENS) {
   test(`${name}（${width}×${height}）: タイルが 2 段そろって見え、［＋］と家具のタイルが同じ大きさ`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto('/');
-    await page.locator('.sheet__tab').first().waitFor();
+    await page.locator('.sheet').first().waitFor();
     await page.evaluate(async () => {
       const { activeScene } = await import('/src/core/mode.ts');
       const scene = activeScene();
@@ -24,7 +25,7 @@ for (const [name, width, height] of SCREENS) {
       }
       scene.select(null);
     });
-    await page.locator('.sheet__tab', { hasText: '操作' }).click();
+    await openTab(page, '操作');
     const result = await page.evaluate(() => {
       const body = document.querySelector('.sheet__body')!;
       const style = getComputedStyle(body);

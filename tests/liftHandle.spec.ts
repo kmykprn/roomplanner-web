@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 上下のつまみは、選んだ家具の真上に出す。家具そのものを指で動かしている間は隠し、離したら戻す。
@@ -6,7 +7,7 @@ import { expect, test } from '@playwright/test';
  */
 test('家具を動かしている間は上下のつまみを隠し、離したら戻す', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async () => {
     const { photoState, photoScene } = await import('/src/core/photoState.ts');
     // 写真があることにする（写真の解析は走らせない）。縦横比を決めないので、3D はキャンバス全体に描く
@@ -44,14 +45,14 @@ test('家具を動かしている間は上下のつまみを隠し、離した�
 /** 床からの高さは上下のつまみで変える。操作タブの「細かく調整」には、高さのバーを置かない */
 test('操作タブに床からの高さのバーを出さない', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');
     const scene = activeScene();
     scene.add({ id: 'box', typeId: 'box', name: '箱', color: '#888888', size: [0.6, 0.8, 0.6], position: [0, 0, 0], rotationY: 0 });
     scene.select('box');
   });
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await openTab(page, '操作');
   await page.locator('.manage__more-summary').click();
   await expect(page.getByText('前後の傾き')).toBeVisible();
   await expect(page.getByText('床からの高さ')).toHaveCount(0);

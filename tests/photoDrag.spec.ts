@@ -7,7 +7,7 @@ import { expect, test } from '@playwright/test';
  */
 test('寸法を計算する前でも、画面の上へドラッグすると高さを変えずに奥へ動く', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
 
   const start = await page.evaluate(async () => {
     const { photoState, photoScene } = await import('/src/core/photoState.ts');

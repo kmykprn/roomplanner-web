@@ -414,18 +414,12 @@ body {
   opacity: 0.45;
 }
 
-/* 背景タブ。通常の姿と、手前の範囲を指定する姿を切り替える */
-.photo,
-.photo__normal {
+/* 写真の調整の画面（拡大・縮小・寸法・家具を隠す範囲）を入れる箱（ui/photoPanel.ts） */
+.photo {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   width: 100%;
-}
-
-.photo__note {
-  margin-top: 8px;
-  font-size: 12px;
 }
 
 /* 設定画面のような「見出し・いまの値・右端」の 1 行。行ごとボタンにもなる */
@@ -2140,41 +2134,42 @@ body {
   height: 13px;
 }
 
-/* 背景タブ: 1 行目に［選ぶ／変更］、2 行目に［✎ 編集］。どちらも横いっぱいで、親指で押しやすい高さにそろえる */
-.bg-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+/* 写真の右上の［⋯］（ui/photoMenu.ts）。どんな写真の上でも見えるよう、白い丸に薄い影。
+   押せるのは丸だけで、まわりの指の操作（家具のドラッグ）は下のキャンバスに通す */
+.photo-menu {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  pointer-events: none;
 }
-.bg-row__pick {
-  min-height: 46px;
-  font-size: 15px;
-}
-/* 控えめな［✎ 編集］。枠だけで、主の［背景の画像を変更］より弱く見せる */
-.bg-row__edit {
+.photo-menu__button {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 46px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
   color: var(--text);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(17, 24, 28, 0.25);
   touch-action: manipulation;
 }
-.bg-row__edit .ic {
-  width: 18px;
-  height: 18px;
-}
-.bg-row__edit[hidden] {
+.photo-menu__button[hidden] {
   display: none;
 }
+.photo-menu__button .ic {
+  width: 22px;
+  height: 22px;
+}
+/* メニューは画面全体に重ねる（［⋯］の箱の外に出す） */
+.photo-menu .bg-menu {
+  pointer-events: auto;
+}
 
-/* ［✎ 編集］で下から出るメニュー。家具のメニュー（tile-actions）と同じく、画面の下に重ねる */
+/* ［⋯］で下から出るメニュー。家具のメニュー（tile-actions）と同じく、画面の下に重ねる */
 .bg-menu {
   position: fixed;
   inset: 0;
