@@ -536,9 +536,24 @@ export function createBottomSheet(container: HTMLElement): void {
       removeCheckedButton.disabled = !checked || checked.size === 0;
     };
     showRemoveChecked();
+    // 見出しの行: 左に題「配置した家具」と置いた数。写真と一覧の境目で、何の一覧かが分かるように。
+    // 家具が 1 つも無いときも題は出す（数と［☑ 選択して削除］は出さない）
+    const top = document.createElement('div');
+    top.className = 'manage__top';
+    const title = document.createElement('h2');
+    title.className = 'manage__title';
+    title.textContent = '配置した家具';
     if (furniture.length > 0) {
-      const top = document.createElement('div');
-      top.className = 'manage__top';
+      const count = document.createElement('span');
+      count.className = 'manage__count';
+      count.textContent = String(furniture.length);
+      title.append(count);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'manage__top-actions';
+    top.append(title, actions);
+    list.append(top);
+    if (furniture.length > 0) {
       const toggleChecking = (): void => {
         checked = checked ? null : new Set();
         render();
@@ -548,8 +563,7 @@ export function createBottomSheet(container: HTMLElement): void {
       const toggle = checked
         ? createButton('キャンセル', toggleChecking, 'is-text is-small manage__check-toggle')
         : createSelectButton(toggleChecking);
-      top.append(removeCheckedButton, toggle);
-      list.append(top);
+      actions.append(removeCheckedButton, toggle);
     }
 
     const grid = document.createElement('div');

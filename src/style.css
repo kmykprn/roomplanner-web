@@ -212,11 +212,16 @@ body {
  */
 .sheet {
   flex: none;
+  position: relative;
   display: flex;
   flex-direction: column;
   height: max(42dvh, 280px);
+  /* 上の角を丸め、影を付けて写真に少し重ねる。下のパネルが 1 枚のカードに見え、写真との境目がはっきりする */
+  margin-top: -12px;
+  border-radius: 16px 16px 0 0;
   background: var(--surface);
-  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 14px rgba(17, 24, 28, 0.12);
+  padding-top: 4px;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -841,9 +846,30 @@ body {
 .manage__top {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
   min-height: 34px;
+}
+/* 題「配置した家具」と置いた数 */
+.manage__title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.manage__count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #687076;
+  font-variant-numeric: tabular-nums;
+}
+.manage__top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* 置いた家具の形の札（2D / 3D）。左下に置く（右上はチェックの丸）。3D は主色、2D は濃い灰色 */
