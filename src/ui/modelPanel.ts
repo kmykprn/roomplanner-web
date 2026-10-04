@@ -23,7 +23,7 @@
 import type { PlacedFurniture } from '@/config/furniture';
 import { IS_CONFIGURED } from '@/config/api';
 import { activeScene, isPhotoMode } from '@/core/mode';
-import { progressFor } from '@/core/progress';
+import { preparingRatio, progressFor } from '@/core/progress';
 import {
   dismissError,
   generationState,
@@ -308,7 +308,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   // 3分待たせる画面で数字が動かないと、固まったように見える
   setInterval(() => {
     if (
-      generationState.get().jobs.some((job) => job.phase === 'running') ||
+      generationState.get().jobs.some((job) => job.phase !== 'failed' && job.phase !== 'saving') ||
       cutoutState.get().jobs.some((job) => job.phase !== 'failed')
     ) {
       render();
@@ -1184,18 +1184,13 @@ function createJobThumb(job: GenerationJob): ThumbNode<GenerationJob> {
   if (job.previewUrl) thumb.image.style.backgroundImage = `url("${job.previewUrl}")`;
 
   // 円は小さく出すので中に文字は入れない。残り時間は下の名前の場所に出す。
-  // 実行が始まるまでは残り時間が読めないので、円は空のまま
+  // 実行が始まるまでも円を少しずつ進める（0 のままだと、押しても反応していないように見える）
   const ring = createProgressRing();
   thumb.image.append(ring.element, createTag('3D'));
 
   function update(current: GenerationJob): void {
     thumb.name.textContent = describe(current);
-    ring.update(
-      current.phase === 'running'
-        ? progressFor(current.serverPhase, elapsedInPhase(current), current.engine).ratio
-        : 0,
-      ''
-    );
+    ring.update(jobRingRatio(current), '');
   }
   update(job);
   // 元写真の Blob URL は作成の状態が持っているので、ここでは解放しない
@@ -1273,13 +1268,30 @@ function authFailureMessage(): string {
     : 'このアプリには家具を作る設定がありません。管理者にお知らせください';
 }
 
-/** サムネイルの下に出す短い状態。幅 72px に収まる長さにする */
+/** 作成中の 3D の円の進み。作業が始まるまでも少しずつ進め、始まったらその続きから進む */
+function jobRingRatio(job: GenerationJob, now = Date.now()): number {
+  switch (job.phase) {
+    case 'uploading':
+      return preparingRatio('uploading', (now - job.createdAt) / 1000);
+    case 'queued':
+      return preparingRatio('queued', (now - (job.startedAt ?? now)) / 1000);
+    case 'running':
+    case 'saving':
+      return progressFor(job.serverPhase, elapsedInPhase(job), job.engine).ratio;
+    case 'failed':
+      return 0;
+  }
+}
+
+/**
+ * サムネイルの下に出す短い状態。幅 72px に収まる長さにする。
+ * 作業が始まるまでは、送っている間も順番待ちも「準備中」（「送信中」「順番待ち」は利用者にとって意味が無い）
+ */
 function describe(job: GenerationJob): string {
   switch (job.phase) {
     case 'uploading':
-      return '送信中';
     case 'queued':
-      return '順番待ち';
+      return '準備中';
     case 'running':
       // 「あと5分」「まもなく」。見込みであって約束ではない（core/progress.ts）
       return progressFor(job.serverPhase, elapsedInPhase(job), job.engine).centerText;

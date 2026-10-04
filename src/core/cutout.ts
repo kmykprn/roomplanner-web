@@ -10,6 +10,7 @@
  * 戻ってきた時点・次に開いた時点で続きを見に行く。
  */
 
+import { PREPARING } from '@/core/progress';
 import { createStore } from '@/core/store';
 import { shrinkForUpload } from '@/core/imageResize';
 import {
@@ -121,7 +122,8 @@ function setState(patch: Partial<CutoutState>): void {
  * 3D の core/progress.ts と同じ考え方で、持ち分を超えたら止まって次の工程を待つ
  * （止まるのは正直な表示で、実際に長引いているという情報になる）。
  *
- *   順番待ち（queued、まだ応答が無いときも）… 0 → 10%。起動待ちは実測 15〜20 秒
+ *   写真を送っている間（uploading）         … 2 → 4%。押した瞬間に少し出す（core/progress.ts の PREPARING と同じ）
+ *   順番待ち（queued、まだ応答が無いときも）… 4 → 10%。起動待ちは実測 15〜20 秒
  *   running                                … 10% → 90%。秒数はサーバーが返した見込み
  *   saving（結果を取って端末に保存）       … 90% → 97%。1 秒ほど
  */
@@ -142,7 +144,12 @@ export function cutoutProgress(job: CutoutJob, now = Date.now()): CutoutProgress
   const within = (seconds: number): number => Math.min(elapsed / seconds, 1);
 
   if (job.phase === 'importing') return { ratio: 0, label: '商品を取り込み中' };
-  if (job.phase === 'uploading') return { ratio: 0, label: '送信中' };
+  if (job.phase === 'uploading') {
+    return {
+      ratio: PREPARING.start + (PREPARING.uploaded - PREPARING.start) * within(PREPARING.uploadSeconds),
+      label: '準備中',
+    };
+  }
   if (job.phase === 'saving') {
     return {
       ratio: Math.min(
@@ -155,7 +162,10 @@ export function cutoutProgress(job: CutoutJob, now = Date.now()): CutoutProgress
   switch (job.serverPhase) {
     case null:
     case 'queued':
-      return { ratio: SHARE.starting * within(QUEUED_SECONDS), label: '準備中' };
+      return {
+        ratio: PREPARING.uploaded + (SHARE.starting - PREPARING.uploaded) * within(QUEUED_SECONDS),
+        label: '準備中',
+      };
     case 'running': {
       const seconds = job.expectedSeconds ?? QUEUED_SECONDS;
       return { ratio: SHARE.starting + SHARE.cutting * within(seconds), label: '切り抜き中' };
