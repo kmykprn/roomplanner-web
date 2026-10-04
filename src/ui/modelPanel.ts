@@ -563,7 +563,7 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const sample = SAMPLE_MODELS.find((model) => model.id === 'sample-chair') ?? SAMPLE_MODELS[0];
   const WAYS: { way: Way; facet: ModelFacet; label: string; note: string }[] = [
     { way: 'cutout', facet: 'flat', label: '2D（切り抜き）を作る', note: '画像から切り抜きます（数秒）' },
-    { way: 'model', facet: 'solid', label: '3D モデルを作る', note: '2D から立体を作ります（数分）' },
+    { way: 'model', facet: 'solid', label: '3D モデルを作る', note: '置いたあと向きを変えられます（数分）' },
   ];
   /** 行ごとの見本。画面を開いている間だけ動かす（3D は開いている間だけ描く） */
   const samples: { preview: FurniturePreview; facet: ModelFacet }[] = [];
