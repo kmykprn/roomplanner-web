@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と、見出しの右に［✎ 編集］のメニューが出る。
@@ -7,12 +8,12 @@ import { expect, test } from '@playwright/test';
 test.describe('家具のページ', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.locator('.sheet__tab').first().waitFor();
+    await page.locator('.sheet').first().waitFor();
   });
 
   /** 操作タブの［＋ 家具を追加］で、家具のページを開く */
   async function openFurniturePage(page: import('@playwright/test').Page): Promise<void> {
-    await page.locator('.sheet__tab', { hasText: '操作' }).click();
+    await openTab(page, '操作');
     await page.locator('.manage__add').click();
     await expect(page.locator('.page')).toBeVisible();
   }
@@ -41,23 +42,23 @@ test.describe('家具のページ', () => {
     await expect(page.locator('.tile-actions')).toBeHidden();
   });
 
-  test('「背景に追加」で置くと、ページを閉じて操作タブを出す', async ({ page }) => {
+  test('「背景に追加」で置くと、ページを閉じて、置いた家具の操作を出す', async ({ page }) => {
     await openFirstModel(page);
     await page.locator('.tile-actions__button', { hasText: '背景に追加' }).click();
     await expect(page.locator('.page')).toBeHidden();
-    await expect(page.locator('.sheet__tab.is-active')).toHaveText('操作');
+    // 写真モードの下のパネルは操作だけ（タブが無い）。置いた家具が選ばれ、その操作が出る
+    await expect(page.locator('.manage__head')).toBeVisible();
     const placed = await page.evaluate(async () => (await import('/src/core/mode.ts')).activeScene().state().furniture.length);
     expect(placed).toBe(1);
   });
 
-  test('［編集］で編集の画面を開き、「×」で閉じると元のタブに戻る', async ({ page }) => {
+  test('［編集］で編集の画面を開き、「×」で閉じると元の一覧に戻る', async ({ page }) => {
     await openFirstModel(page);
-    const before = await page.locator('.sheet__tab.is-active').textContent();
     await page.getByRole('button', { name: '編集' }).click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toBeVisible();
     await page.locator('.page__close').click();
     await expect(page.locator('.page')).toBeHidden();
-    await expect(page.locator('.sheet__tab.is-active')).toHaveText(before ?? '');
+    await expect(page.locator('.manage__add')).toBeVisible();
     // もう一度開くと、編集の画面ではなく一覧に戻っている
     await openFurniturePage(page);
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);

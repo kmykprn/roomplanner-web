@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 2D の家具から 3D を作っている間は、作成中の別のタイルを出さず、その家具のタイルの上で円を回す。
@@ -6,7 +7,7 @@ import { expect, test } from '@playwright/test';
  */
 test('3D を作っている間は、元の家具のタイルの上で円が回り、別のタイルは増えない', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async () => {
     const { modelLibrary } = await import('/src/core/modelLibrary.ts');
     const sofa = modelLibrary.get().models.find((model) => model.name === 'サンプル 2')!;
@@ -22,7 +23,7 @@ test('3D を作っている間は、元の家具のタイルの上で円が回�
       } as never],
     });
   });
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await openTab(page, '操作');
   await page.locator('.manage__add').click();
   // 追加・サンプル 2 つ・ソファの 4 枚だけ（作成中の別のタイルは無い）
   await expect(page.locator('.page .tiles > .thumb')).toHaveCount(4);

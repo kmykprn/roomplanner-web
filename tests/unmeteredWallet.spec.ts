@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 回数を数えない利用者（開発者のテスト用。サーバーの config/unmetered_uids.json）は、
@@ -8,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 /** 2D だけの家具を足し、その編集の姿を開く。財布の写しは wallet にする */
 async function openFlatOnlyEditor(page: Page, wallet: { trialRemaining: number; credits: number; unmetered: boolean }): Promise<void> {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async (wallet) => {
     const { walletState } = await import('/src/core/wallet.ts');
     walletState.set({ status: 'ready', noBanner: false, ...wallet });
@@ -16,7 +17,7 @@ async function openFlatOnlyEditor(page: Page, wallet: { trialRemaining: number; 
     const sample = modelLibrary.get().models.find((model) => model.name === 'サンプル 2')!;
     modelLibrary.set({ models: [...modelLibrary.get().models, { ...sample, id: 'flat-only', name: '切り抜きだけ', modelKey: null }] });
   }, wallet);
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await openTab(page, '操作');
   await page.locator('.manage__add').click();
   await page.locator('.page .thumb__button', { hasText: '切り抜きだけ' }).click();
   await page.getByRole('button', { name: '3D モデルを作る' }).click();

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 操作タブで家具を選んでいるときの画面。
@@ -10,14 +11,14 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');
     const scene = activeScene();
     scene.add({ id: 'box', typeId: 'box', name: 'サンプル 2', color: '#888888', size: [0.6, 0.8, 0.6], baseSize: [0.6, 0.8, 0.6], position: [0, 0, 0], rotationY: 0.5 });
     scene.select('box');
   });
-  await page.locator('.sheet__tab', { hasText: '操作' }).click();
+  await openTab(page, '操作');
 });
 
 /** 白地に対するコントラスト比（WCAG の計算） */

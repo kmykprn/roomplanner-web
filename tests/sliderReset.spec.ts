@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openTab } from './helpers';
 
 /**
  * 操作タブのバーは、真ん中で吸い付かない。置いたときの姿（向きの 0°・大きさの 100%）へは、
@@ -7,7 +8,7 @@ import { expect, test, type Page } from '@playwright/test';
 test.describe('操作タブのバーの戻すボタン', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.locator('.sheet__tab').first().waitFor();
+    await page.locator('.sheet').first().waitFor();
     await page.evaluate(async () => {
       const { activeScene } = await import('/src/core/mode.ts');
       const scene = activeScene();
@@ -15,7 +16,7 @@ test.describe('操作タブのバーの戻すボタン', () => {
       scene.add({ id: 'box', typeId: 'box', name: '箱', color: '#888888', size: [0.6, 0.8, 0.6], baseSize: [0.6, 0.8, 0.6], position: [0, 0, 0], rotationY: 0.5 });
       scene.select('box');
     });
-    await page.locator('.sheet__tab', { hasText: '操作' }).click();
+    await openTab(page, '操作');
   });
 
   const row = (page: Page, label: string) => page.locator('.slider-row', { hasText: label });
@@ -90,7 +91,7 @@ test.describe('操作タブのバーの戻すボタン', () => {
  */
 test('拡大・縮小のバーの「1倍」で、倍率 1 に戻る', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async () => {
     const { photoState } = await import('/src/core/photoState.ts');
     // 写真があることにする（写真の解析は走らせない）
@@ -99,8 +100,7 @@ test('拡大・縮小のバーの「1倍」で、倍率 1 に戻る', async ({ p
     canvas.height = 3;
     photoState.set({ backgroundStatus: 'ready', backgroundUrl: canvas.toDataURL(), backgroundAspect: 4 / 3 });
   });
-  await page.locator('.sheet__tab', { hasText: '背景' }).click();
-  await page.locator('.photo__normal').getByRole('button', { name: '編集' }).click();
+  await page.locator('.photo-menu__button').click();
   await page.getByRole('button', { name: '拡大・縮小' }).click();
   const scaleOf = () => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().view.scale);
   const reset = page.getByRole('button', { name: '倍率を1倍に戻す' });

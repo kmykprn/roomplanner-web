@@ -44,7 +44,7 @@ test('平らな床の奥行きから、撮った高さを見積もる', async ({
  */
 test('写真を選んで拡大・縮小を保存しても、寸法の画面は開かない', async ({ page }) => {
   await page.goto('/');
-  await page.locator('.sheet__tab').first().waitFor();
+  await page.locator('.sheet').first().waitFor();
   await page.evaluate(async () => {
     const { setBackground } = await import('/src/core/photoState.ts');
     const canvas = document.createElement('canvas');

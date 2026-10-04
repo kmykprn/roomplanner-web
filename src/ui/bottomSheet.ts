@@ -17,7 +17,7 @@ import { createModelPanel } from '@/ui/modelPanel';
 import { createFurniturePage } from '@/ui/furniturePage';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
-import { createPhotoPanel } from '@/ui/photoPanel';
+import { createPhotoPanel, isAdjustingPhoto } from '@/ui/photoPanel';
 import { createInteriorPanel } from '@/ui/interiorPanel';
 import { createIcon } from '@/ui/icons';
 import { createSliderRow } from '@/ui/sliderRow';
@@ -27,7 +27,7 @@ import { releaseFurnitureAssets } from '@/core/modelLibrary';
 import { beginEdit, discardLater, endEdit, recordEdit } from '@/core/editHistory';
 import { photoState, setFramingPhoto, setMasking, setScaling } from '@/core/photoState';
 
-type TabId = 'interior' | 'background' | 'manage';
+type TabId = 'interior' | 'manage';
 
 /**
  * 「操作」の行に敷くバーの決まりごと。
@@ -113,7 +113,6 @@ function toDegrees(radians: number): number {
 
 const TABS: Record<TabId, string> = {
   interior: '内装',
-  background: '背景',
   manage: '操作',
 };
 
@@ -127,7 +126,11 @@ const TILE_COLUMNS = 4;
 const TILE_MIN = 52;
 
 const ROOM_TABS: TabId[] = ['interior', 'manage'];
-const PHOTO_TABS: TabId[] = ['background', 'manage'];
+/**
+ * 写真は操作だけ（タブが 1 つなので、タブの帯ごと出さない）。背景の操作は写真の右上の［⋯］（ui/photoMenu.ts）。
+ * 拡大・縮小などの画面に入っている間だけ、操作の代わりにその画面を出す（ui/photoPanel.ts）
+ */
+const PHOTO_TABS: TabId[] = ['manage'];
 
 
 /**
@@ -192,15 +195,8 @@ export function createBottomSheet(container: HTMLElement): void {
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
     if (!tabs.includes(activeTab)) activeTab = tabs[0];
 
-    // 手前の範囲の指定も大きさ合わせも「背景」タブの中で行う。タブを離れたら終える。
-    // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる。**
-    // 家具をタップすると「操作」タブへ移るので、それもここで終わる
-    if (activeTab !== 'background') {
-      setMasking(false);
-      setScaling(false);
-      setFramingPhoto(false);
-    }
-
+    // タブが 1 つ（写真）なら、タブの帯ごと出さない
+    tabBar.hidden = tabs.length < 2;
     tabBar.replaceChildren(
       ...tabs.map((tab) => {
         const button = document.createElement('button');
@@ -251,7 +247,8 @@ export function createBottomSheet(container: HTMLElement): void {
 
   function renderActiveTab(): HTMLElement {
     // 自分で状態を購読して描き替えるパネルは、作り直さず使い回す
-    if (activeTab === 'background') return photoPanel;
+    // 写真の拡大・縮小などの画面に入っている間は、操作の代わりにその画面を出す
+    if (isPhotoMode() && isAdjustingPhoto()) return photoPanel;
     if (activeTab === 'interior') return interiorPanel;
     return renderManageTab();
   }
@@ -704,7 +701,19 @@ export function createBottomSheet(container: HTMLElement): void {
   // 選択状態が変わったら「操作」タブの中身を描き直す必要がある。
   // どちらのモードの家具が変わったかは問わない（表示中のほうだけ描き直せばよい）。
   // 同じ家具を触っている間は行を残し、値だけ書き替える（上の manageView を参照）
+  /** 直前に、写真の拡大・縮小などの画面を出していたか。入った・出た瞬間にパネルを描き替えるために持つ */
+  let wasAdjusting = isPhotoMode() && isAdjustingPhoto();
+
   const followSelection = (): void => {
+    // 写真の拡大・縮小などの画面に入った・出たら、パネルの中身を入れ替える。入っている間は一覧を描き直さない
+    const adjusting = isPhotoMode() && isAdjustingPhoto();
+    if (adjusting !== wasAdjusting) {
+      wasAdjusting = adjusting;
+      render();
+      return;
+    }
+    if (adjusting) return;
+
     const { selectedId, furniture } = activeScene().state();
 
     // タップで家具を選んだら「操作」タブへ移る。すぐ動かしたり回したりできるように。
@@ -739,6 +748,11 @@ export function createBottomSheet(container: HTMLElement): void {
   // 操作タブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
   // 先にやるべき「背景の写真を選ぶ」に辿り着けない
   modeState.subscribe(() => {
+    // 写真の拡大・縮小などの途中で部屋に切り替えたら終える。
+    // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる**
+    setMasking(false);
+    setScaling(false);
+    setFramingPhoto(false);
     activeTab = visibleTabs()[0];
     checked = null;
     previousSelectedId = activeScene().state().selectedId;

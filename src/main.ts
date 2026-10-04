@@ -37,6 +37,7 @@ import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createModeSwitch } from '@/ui/modeSwitch';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
+import { createPhotoMenu } from '@/ui/photoMenu';
 import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
@@ -80,6 +81,8 @@ restoreModelLibrary();
 const viewer = createViewer(viewport);
 // 写真が無いときの案内。キャンバスと写真の層の上に重ねるので、viewer のあとに足す
 viewport.append(createPhotoEmpty());
+// 写真の右上の［⋯］。押すと背景の操作のメニューが下から出る
+viewport.append(createPhotoMenu());
 // 床を合わせている間の目安のバー。キャンバスの上に重ねる
 const { room } = appState.get();
 

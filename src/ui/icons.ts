@@ -11,7 +11,7 @@
  */
 
 export type IconName =
-  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox';
+  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox' | 'more' | 'image';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -31,6 +31,10 @@ const PATHS: Record<IconName, string[]> = {
   layers: ['M4 5h10v10H4z', 'M10 9h10v10H10z'],
   // 編集: 鉛筆
   pencil: ['M4 20h4L19 9l-4-4L4 16z'],
+  // 背景の編集の［⋯］: 横に並んだ 3 つの点（小さな丸）
+  more: ['M5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0', 'M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0', 'M16 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0'],
+  // 背景の画像を変更: 写真（枠と山）
+  image: ['M4 6h16v12H4z', 'M4 15l5-4 4 3 3-2 4 3'],
   // 選択して削除: チェックの付いた四角
   checkbox: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M8 12l3 3 5-6'],
 };
