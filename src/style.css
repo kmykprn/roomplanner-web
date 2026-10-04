@@ -1099,11 +1099,92 @@ body {
   color: var(--danger);
 }
 
-/* 作成ボタンの下の一行。押す前からログインが要ることが分かるように */
-.lib__login-hint {
-  margin-top: 6px;
+/* 「家具を追加」のいちばん上の、3D を作れる残りの回数の帯（ui/walletBar.ts） */
+.wallet-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #eaf4f8;
+}
+.wallet-bar[hidden],
+.wallet-bar__main[hidden],
+.wallet-bar__count [hidden],
+.wallet-bar p[hidden],
+.wallet-bar button[hidden] {
+  display: none;
+}
+.wallet-bar__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wallet-bar__count {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.wallet-bar__mark {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+}
+.wallet-bar__mark .ic {
+  width: 16px;
+  height: 16px;
+}
+.wallet-bar__unit {
+  font-size: 14px;
+  font-weight: 700;
+}
+.wallet-bar__number {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.wallet-bar__unmetered {
+  align-self: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+.wallet-bar__buy {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid var(--primary);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--primary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+.wallet-bar__detail,
+.wallet-bar__login-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.wallet-bar__login-text span {
+  display: block;
+}
+.wallet-bar__note {
+  margin: 0;
   font-size: 12px;
-  text-align: center;
+  color: #687076;
+}
+.wallet-bar__login {
+  flex: none;
 }
 
 /* ログインを求めるパネル。作成ボタンと同じ場所に出る */
