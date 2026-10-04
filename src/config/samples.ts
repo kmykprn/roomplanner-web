@@ -6,8 +6,10 @@
  *
  * 元の画像は自前で作ったもの: 画像生成（SDXL）で「白背景の商品写真」風の画像を作った（assets-src/furniture/inputs/）。
  * 第三者の写真・意匠は使っていない（作り方は README「サンプルの家具について」）。
- * **2D と 3D は、利用者が作るのと同じアプリの流れで作った。** 元の画像をアプリの「2D（切り抜き）を作る」に通し
- * （切り抜きのサービス）、できた 2D から「3D モデルを作る」（いまの既定の作り方、TRELLIS）で 3D にした。
+ * **3D は、利用者が作るのと同じ作り方（いまの既定、TRELLIS）で、2D から作った。**
+ *   椅子 … 元の画像をアプリの「2D（切り抜き）を作る」に通し（切り抜きのサービス）、できた 2D からアプリで 3D にした
+ *   ソファ … 2D は元の画像を BiRefNet（切り抜きのサービスと同じモデル）で切り抜いたもの
+ *            （assets-src/furniture/cutout.py）。その 2D を、アプリが使う本番の TRELLIS のジョブに通して 3D にした
  * 前は 3D を別の作り方（Hunyuan3D）で作っていて、写真よりずっと鮮やかなオレンジになり、2D と別の物に見えた。
  * アイコンは 3D を描いたもの。
  *
@@ -30,7 +32,7 @@ import type { GeneratedModel } from '@/core/modelLibrary';
  * 一覧は新しい順（配列の逆順）に並ぶので、サンプル 1 が先に見えるよう後ろに置く
  */
 export const SAMPLE_MODELS: GeneratedModel[] = [
-  { id: 'sample-sofa', name: 'サンプル 2', modelKey: sofaModel, imageKey: sofaCutout, previewKey: sofaThumb, size: [1.6, 0.85, 0.85], createdAt: 0 },
+  { id: 'sample-sofa', name: 'サンプル 2', modelKey: sofaModel, imageKey: sofaCutout, previewKey: sofaThumb, size: [1.44, 0.85, 0.92], createdAt: 0 },
   { id: 'sample-chair', name: 'サンプル 1', modelKey: chairModel, imageKey: chairCutout, previewKey: chairThumb, size: [0.44, 0.9, 0.54], createdAt: 0 },
 ];
 
