@@ -54,11 +54,12 @@ import { pickImages } from '@/platform/picker';
 import { createHeightStep } from '@/ui/heightStep';
 import { createSizeField } from '@/ui/sizeField';
 import { placementSize, setModelHeight } from '@/core/furnitureHeight';
-import { createIcon, type IconName } from '@/ui/icons';
+import { createIcon } from '@/ui/icons';
 import { createLoginPanel } from '@/ui/loginPanel';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProgressRing } from '@/ui/progressRing';
-import { createFurniturePreview } from '@/ui/furniturePreview';
+import { createFurniturePreview, type FurniturePreview } from '@/ui/furniturePreview';
+import { SAMPLE_MODELS } from '@/config/samples';
 import { createTicketSheet } from '@/ui/ticketSheet';
 import { createWalletBar } from '@/ui/walletBar';
 
@@ -557,27 +558,23 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   const menu = document.createElement('div');
   menu.className = 'ways';
   const rows: HTMLButtonElement[] = [];
-  const WAYS: { way: Way; icon: IconName; label: string; note: string }[] = [
-    {
-      way: 'cutout',
-      icon: 'camera',
-      label: '2D（切り抜き）を作る',
-      note: '画像から家具を切り抜きます。背景に物が少ない画像のほうが、きれいに切り抜けます',
-    },
-    {
-      way: 'model',
-      icon: 'cube',
-      label: '3D モデルを作る',
-      note: '2D（切り抜き）から 3D モデルを作成します。事前に 2D（切り抜き）の作成が必要です。',
-    },
+  // 行の左の見本は、サンプルの椅子。2D の行は切り抜きが上下に揺れ、3D の行は 3D が回る（ui/furniturePreview.ts）。
+  // 作る前に「2D を作るとこう、3D を作るとこう」が見て分かるように。前はカメラと立方体のアイコンだった
+  const sample = SAMPLE_MODELS.find((model) => model.id === 'sample-chair') ?? SAMPLE_MODELS[0];
+  const WAYS: { way: Way; facet: ModelFacet; label: string; note: string }[] = [
+    { way: 'cutout', facet: 'flat', label: '2D（切り抜き）を作る', note: '画像から切り抜きます（数秒）' },
+    { way: 'model', facet: 'solid', label: '3D モデルを作る', note: '2D から立体を作ります（数分）' },
   ];
-  for (const { way, icon, label, note } of WAYS) {
+  /** 行ごとの見本。画面を開いている間だけ動かす（3D は開いている間だけ描く） */
+  const samples: { preview: FurniturePreview; facet: ModelFacet }[] = [];
+  for (const { way, facet, label, note } of WAYS) {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'way';
-    const iconBox = document.createElement('span');
-    iconBox.className = 'way__icon';
-    iconBox.append(createIcon(icon));
+    const preview = createFurniturePreview();
+    preview.element.classList.add('is-mini');
+    preview.element.setAttribute('aria-hidden', 'true');
+    samples.push({ preview, facet });
     const text = document.createElement('span');
     text.className = 'way__text';
     const strong = document.createElement('span');
@@ -587,7 +584,12 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     small.className = 'way__note';
     small.textContent = note;
     text.append(strong, small);
-    row.append(iconBox, text);
+    // 押すと次へ進む行だと分かるように、右に「›」
+    const chevron = document.createElement('span');
+    chevron.className = 'way__chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    chevron.textContent = '›';
+    row.append(preview.element, text, chevron);
     row.addEventListener('click', () => {
       signedInNote.hidden = true;
       if (authState.get().anonymous) {
@@ -666,12 +668,14 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     ticketSheet.close();
     renderState();
     element.hidden = false;
+    for (const { preview, facet } of samples) preview.show(sample, facet);
     // 回数は別の端末で使ったり、券を買ったりして変わるので、開くたびに取り直す
     void refreshWallet();
   }
 
   function close(): void {
     element.hidden = true;
+    for (const { preview } of samples) preview.stop();
     actions.onClose();
   }
 

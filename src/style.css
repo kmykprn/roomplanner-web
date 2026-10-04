@@ -1446,15 +1446,39 @@ body {
 .way:disabled {
   color: #7a8388;
 }
-.way__icon {
-  display: grid;
-  place-items: center;
+/* 行の左の見本（サンプルの椅子。ui/furniturePreview.ts を小さくしたもの）。2D は揺れ、3D は回る */
+.preview.is-mini {
   flex: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  background: #eaf4f8;
-  color: var(--primary);
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+}
+.preview.is-mini .preview__flat {
+  inset: 6px 6px 4px;
+}
+.preview.is-mini .preview__image {
+  animation-name: preview-bob-mini;
+}
+.preview.is-mini .preview__shadow {
+  height: 5px;
+  margin-top: 2px;
+}
+@keyframes preview-bob-mini {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .preview.is-mini .preview__image {
+    animation: none;
+  }
+}
+/* 押すと次へ進む行だと分かる印 */
+.way__chevron {
+  flex: none;
+  margin-left: auto;
+  color: #687076;
+  font-size: 20px;
+  line-height: 1;
 }
 .way__text {
   display: grid;
