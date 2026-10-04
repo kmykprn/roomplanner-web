@@ -744,9 +744,7 @@ export function createBottomSheet(container: HTMLElement): void {
   appState.subscribe(followSelection);
   photoState.subscribe(followSelection);
 
-  // モードが変わったら、そのモードの最初のタブへ戻す。
-  // 操作タブは両方にあるので、そのままだと写真モードに入っても開いたままになり、
-  // 先にやるべき「背景の写真を選ぶ」に辿り着けない
+  // モードが変わったら、そのモードの最初のタブへ戻す（部屋は内装、写真は操作だけ）
   modeState.subscribe(() => {
     // 写真の拡大・縮小などの途中で部屋に切り替えたら終える。
     // **終えないと 1 本指がそちらに取られたままになり、家具を動かせなくなる**
