@@ -1104,8 +1104,9 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   /** 「。お試しはあと 2 回です」のような添え書き。匿名なら、ログインすると使えることを伝える */
   function remainingNote(): string {
     if (authState.get().anonymous) return 'Google でログインすると、お試しで 3 回まで作れます';
-    const { status, trialRemaining, credits } = walletState.get();
-    if (status !== 'ready') return '';
+    const { status, trialRemaining, credits, unmetered } = walletState.get();
+    // 回数を数えない利用者には、残りの回数を出さない（減らないので意味が無い）
+    if (status !== 'ready' || unmetered) return '';
     if (trialRemaining > 0) return `お試しはあと ${trialRemaining} 回です`;
     return `残り ${credits} 回です`;
   }
