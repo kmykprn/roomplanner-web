@@ -87,3 +87,23 @@ test('［☑ 選択して削除］は、押すと何ができるかを書いた�
   const [buttonBox, rowBox] = await Promise.all([select.boundingBox(), page.locator('.manage__top').boundingBox()]);
   expect(Math.abs(buttonBox!.x + buttonBox!.width - (rowBox!.x + rowBox!.width))).toBeLessThan(1);
 });
+
+test('置いた家具には、2D（切り抜き）か 3D（モデル）かの札が左下に付く', async ({ page }) => {
+  // 用意した 2 つはどちらも切り抜き。3D を 1 つ足す
+  await page.evaluate(async () => {
+    const { activeScene } = await import('/src/core/mode.ts');
+    const { SAMPLE_MODELS } = await import('/src/config/samples.ts');
+    const chair = SAMPLE_MODELS.find((model) => model.id === 'sample-chair')!;
+    const size: [number, number, number] = [0.46, 0.9, 0.5];
+    activeScene().add({ id: 'solid', typeId: 'generated', name: 'モデル', color: '#ccc', size, baseSize: size, position: [0, 0, 1], rotationY: 0, modelUrl: chair.modelKey! });
+    activeScene().select(null);
+  });
+  await expect(page.getByRole('button', { name: 'テスト 1' }).locator('.manage__form')).toHaveText('2D');
+  const solid = page.getByRole('button', { name: 'モデル' });
+  await expect(solid.locator('.manage__form')).toHaveText('3D');
+  await expect(solid).toHaveAttribute('aria-label', 'モデル（3D）');
+  // 札は左下（右上はチェックの丸）
+  const [tileBox, tagBox] = await Promise.all([solid.boundingBox(), solid.locator('.manage__form').boundingBox()]);
+  expect(tagBox!.x - tileBox!.x).toBeLessThan(12);
+  expect(tileBox!.y + tileBox!.height - (tagBox!.y + tagBox!.height)).toBeLessThan(12);
+});

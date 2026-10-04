@@ -31,7 +31,9 @@ export interface GenerationJob {
   previewKey: string | null;
   previewUrl: string | null;
   phase: GenerationPhase;
-  /** 受付時刻（epoch ms）。全体の打ち切り判断に使う */
+  /** 端末で作り始めた（写真を送り始めた）時刻（epoch ms）。送っている間の円を進めるのに使う */
+  createdAt: number;
+  /** 受付時刻（epoch ms）。全体の打ち切り判断と、順番待ちの間の円に使う */
   startedAt: number | null;
   /**
    * 実行が始まった時刻（epoch ms）。待機列に並んでいる間は null。
@@ -137,6 +139,7 @@ export async function startGenerationForModel(model: GeneratedModel): Promise<vo
     previewKey: null,
     previewUrl: null,
     phase: 'uploading',
+    createdAt: Date.now(),
     startedAt: null,
     startedRunningAt: null,
     serverPhase: null,
@@ -196,6 +199,8 @@ export function resumeGeneration(): void {
       previewKey: job.previewKey ?? null,
       previewUrl: null,
       phase: 'queued',
+      // 送っていたときの時刻は残していない。送り終えているので、送る間の円には使わない
+      createdAt: job.startedAt ?? Date.now(),
       startedAt: job.startedAt ?? Date.now(),
       // 実行中だったかどうかは端末に残していない。復帰後に最初の応答で分かる
       startedRunningAt: null,

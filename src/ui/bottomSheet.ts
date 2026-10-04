@@ -578,6 +578,16 @@ export function createBottomSheet(container: HTMLElement): void {
         icon.style.background = item.color;
       }
       tile.append(icon);
+      // 2D（切り抜きの板）か 3D（モデル）か。同じ家具を両方の形で置けるので、左下の札で見分ける
+      const form = formLabel(item);
+      if (form) {
+        const tag = document.createElement('span');
+        tag.className = form === '3D' ? 'manage__form is-solid' : 'manage__form';
+        tag.textContent = form;
+        tag.setAttribute('aria-hidden', 'true');
+        tile.append(tag);
+        tile.setAttribute('aria-label', `${name}（${form}）`);
+      }
       if (checked) {
         const mark = document.createElement('span');
         mark.className = 'manage__check';
@@ -736,4 +746,11 @@ export function createBottomSheet(container: HTMLElement): void {
   });
 
   render();
+}
+
+/** 置いた家具の形の札。3D モデルなら「3D」、切り抜きの板なら「2D」、どちらでもない（箱だけの古い記録）なら null */
+function formLabel(item: PlacedFurniture): '2D' | '3D' | null {
+  if (item.modelUrl) return '3D';
+  if (item.imageUrl) return '2D';
+  return null;
 }

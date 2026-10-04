@@ -852,6 +852,25 @@ body {
   min-height: 34px;
 }
 
+/* 置いた家具の形の札（2D / 3D）。左下に置く（右上はチェックの丸）。3D は主色、2D は濃い灰色 */
+.manage__form {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(17, 24, 28, 0.72);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.manage__form.is-solid {
+  background: var(--primary);
+}
+
 /* 横 4 つのタイルの格子。名前が長くても、どのタイルも同じ大きさにする */
 .manage__grid {
   display: grid;

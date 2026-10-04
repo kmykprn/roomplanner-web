@@ -35,7 +35,7 @@ interface Step {
 
 /** Hunyuan（既定）の工程。実測は Hunyuan3D-2GP の api/SPEC.md */
 const HUNYUAN_STEPS: readonly Step[] = [
-  { phase: null, seconds: 10, label: '順番を待っています' },
+  { phase: null, seconds: 10, label: '準備しています' },
   // 重みのダウンロード（10.9GB、15 秒）と import を含む
   { phase: 'preparing', seconds: 45, label: '写真を読み込んでいます' },
   // ここから3つは同じ文言にしてある。利用者から見ればどれも「形ができるのを
@@ -55,7 +55,7 @@ const HUNYUAN_STEPS: readonly Step[] = [
  * 実測は Hunyuan3D-2GP の api/SPEC.md（engine=trellis の表）
  */
 const TRELLIS_STEPS: readonly Step[] = [
-  { phase: null, seconds: 10, label: '順番を待っています' },
+  { phase: null, seconds: 10, label: '準備しています' },
   // コンテナの起動と、重み 4.1GB のダウンロード
   { phase: 'preparing', seconds: 30, label: '写真を読み込んでいます' },
   { phase: 'loading_model', seconds: 30, label: '形を作っています' },
@@ -86,6 +86,39 @@ const TABLES = {
  * 「終わったはずなのに終わらない」という最悪の見え方になる
  */
 const MAX_RATIO = 0.99;
+
+/**
+ * 作業が始まるまで（写真を送っている間と、順番を待つ間）の円の持ち分。
+ *
+ * 0 のままだと、押しても反応していないように見える。押した瞬間に少し出し、待つ間も少しずつ進める。
+ * 止まっていても嘘にならないよう、持ち分は小さく（8% まで）にし、待ちが長引いたらそこで止めて次を待つ。
+ * 作業が始まったら（progressFor）、この続きから進む（円は戻らない）
+ */
+export const PREPARING = {
+  /** 押した瞬間 */
+  start: 0.02,
+  /** 写真を送り終えた時点 */
+  uploaded: 0.04,
+  /** 順番待ちの終わり＝作業の始まり */
+  end: 0.08,
+  /** 写真を送るのにかかる見込み（秒） */
+  uploadSeconds: 3,
+  /** 順番待ちの見込み（秒） */
+  queueSeconds: 30,
+} as const;
+
+/** 作業が始まるまでの円。stage は写真を送っている間（uploading）か順番待ち（queued）か */
+export function preparingRatio(stage: 'uploading' | 'queued', elapsedSec: number): number {
+  if (stage === 'uploading') {
+    return PREPARING.start + (PREPARING.uploaded - PREPARING.start) * clamp(elapsedSec / PREPARING.uploadSeconds, 0, 1);
+  }
+  return PREPARING.uploaded + (PREPARING.end - PREPARING.uploaded) * clamp(elapsedSec / PREPARING.queueSeconds, 0, 1);
+}
+
+/** 作業の進み（0〜1）を、作業が始まるまでの持ち分の続きに詰める */
+function afterPreparing(ratio: number): number {
+  return Math.min(PREPARING.end + (1 - PREPARING.end) * ratio, MAX_RATIO);
+}
 
 /** 残り時間を数字で出すのをやめる境目 */
 const IMMINENT_SECONDS = 60;
@@ -122,7 +155,7 @@ export function progressFor(
   const done = startsAt[index] + within;
 
   return {
-    ratio: Math.min(done / total, MAX_RATIO),
+    ratio: afterPreparing(done / total),
     centerText: remainingText(total - done),
     label: step.label,
   };
@@ -137,9 +170,10 @@ export function progressFor(
  */
 function unknownPhase(phase: string | null): Progress {
   return {
-    ratio: 0,
+    // 作業が始まるまでの持ち分のところで止める（0 に戻すと、円が戻って見える）
+    ratio: PREPARING.end,
     centerText: '作成中',
-    label: phase ? '作成しています' : '順番を待っています',
+    label: phase ? '作成しています' : '準備しています',
   };
 }
 
