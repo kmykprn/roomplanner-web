@@ -48,5 +48,6 @@ test('一覧の中身が変わったら、一覧を描き直す', async ({ page 
     const { activeScene } = await import('/src/core/mode.ts');
     activeScene().update(renamedId, { name: '名前を変えた' });
   }, id);
-  await expect(tiles.first()).toHaveAttribute('aria-label', '名前を変えた');
+  // 読み上げの名前には、形（2D / 3D）も付く
+  await expect(tiles.first()).toHaveAttribute('aria-label', '名前を変えた（2D）');
 });

@@ -253,7 +253,15 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     // 毎回作り直すと画像の読み込みが一瞬遅れて、できあがったモデルの一覧が
     // ちらつく（実機で確認）。要素を保ったまま並べ替えれば画像は読み直されない
     const cutouts = cutoutState.get().jobs;
-    const running = jobs.filter((job) => job.phase !== 'failed');
+    // 2D の家具から作っている 3D は、別のタイルにせず、その家具のタイルの上で円を回す（createModelThumb）。
+    // 別のタイルが増えると、同じ家具が 2 つあるように見えるため。元の家具が無い作成だけ、作成中のタイルを出す
+    const making = new Map<string, GenerationJob>();
+    for (const job of jobs) {
+      if (job.phase !== 'failed' && job.targetModelId && models.some((model) => model.id === job.targetModelId)) {
+        making.set(job.targetModelId, job);
+      }
+    }
+    const running = jobs.filter((job) => job.phase !== 'failed' && !(job.targetModelId && making.has(job.targetModelId)));
     const cutting = cutouts.filter((job) => job.phase !== 'failed');
     const failures: FailedItem[] = [
       ...cutouts
@@ -264,14 +272,14 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
         .map((job) => ({ id: job.id, name: job.fileName, error: job.error, dismiss: () => dismissError(job.id) })),
     ];
     // 2D と 3D を両方持つ家具も 1 枚。新しい順
-    const shown = [...models].reverse();
+    const shown: ModelItem[] = [...models].reverse().map((model) => ({ id: model.id, model, making: making.get(model.id) ?? null }));
 
     const ordered: HTMLElement[] = [];
     ordered.push(addTile);
     ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
-    ordered.push(...syncThumbs(modelNodes, shown, (model) => createModelThumb(model, tileActions.open)));
+    ordered.push(...syncThumbs(modelNodes, shown, (item) => createModelThumb(item, tileActions.open)));
     grid.replaceChildren(...ordered);
 
     // 押した失敗がまだあれば理由を出す。とじるで見えなくなったら畳む
@@ -286,7 +294,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   const cutoutNodes = new Map<string, ThumbNode<CutoutJob>>();
   const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
   const failedNodes = new Map<string, ThumbNode<FailedItem>>();
-  const modelNodes = new Map<string, ThumbNode<GeneratedModel>>();
+  const modelNodes = new Map<string, ThumbNode<ModelItem>>();
   const addTile = createAddTile(openChooser);
 
   render();
@@ -883,23 +891,40 @@ function createPencilIcon(): SVGSVGElement {
   return svg;
 }
 
-/** 家具のタイル。押すとメニューを開く（置くのはメニューから）。3D も持つなら右下に立方体の印 */
-function createModelThumb(model: GeneratedModel, open: (model: GeneratedModel) => void): ThumbNode<GeneratedModel> {
-  const thumb = createThumb(model.name);
-  let current = model;
+/** 一覧の家具のタイル 1 枚。making は、この家具から作っている最中の 3D（無ければ null） */
+interface ModelItem {
+  id: string;
+  model: GeneratedModel;
+  making: GenerationJob | null;
+}
+
+/**
+ * 家具のタイル。押すとメニューを開く（置くのはメニューから）。3D も持つなら右下に立方体の印。
+ * この家具から 3D を作っている間は、画像の上で円を回し、名前の所に「準備中」「あと 2 分」を出す。
+ * 作っている間も押せる（2D はメニューから置ける）
+ */
+function createModelThumb(item: ModelItem, open: (model: GeneratedModel) => void): ThumbNode<ModelItem> {
+  const thumb = createThumb(item.model.name);
+  let current = item.model;
   thumb.button.addEventListener('click', () => open(current));
   const preview = createPreviewImage(thumb.image);
   const solidMark = createSolidMark();
-  thumb.image.append(solidMark);
+  const ring = createProgressRing();
+  thumb.image.append(solidMark, ring.element);
 
-  function update(next: GeneratedModel): void {
-    current = next;
-    thumb.name.textContent = next.name;
-    solidMark.hidden = next.modelKey === null;
-    thumb.button.setAttribute('aria-label', next.modelKey ? `${next.name}（3D あり）` : next.name);
-    preview.show({ cutoutKey: next.imageKey, previewKey: next.previewKey });
+  function update(next: ModelItem): void {
+    const { model, making } = next;
+    current = model;
+    thumb.name.textContent = making ? describe(making) : model.name;
+    solidMark.hidden = model.modelKey === null || making !== null;
+    thumb.image.classList.toggle('is-running', making !== null);
+    ring.setVisible(making !== null);
+    if (making) ring.update(jobRingRatio(making), '');
+    const label = model.modelKey ? `${model.name}（3D あり）` : model.name;
+    thumb.button.setAttribute('aria-label', making ? `${label}: 3D を作っています（${describe(making)}）` : label);
+    preview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
   }
-  update(model);
+  update(item);
   return { element: thumb.element, update, dispose: preview.dispose };
 }
 
