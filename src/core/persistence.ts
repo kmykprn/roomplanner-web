@@ -10,6 +10,7 @@
  * GLB の中身は大きいので Cache Storage に分けてある（modelCache.ts）。
  */
 
+import { withCurrentSampleAssets } from '@/config/samples';
 import { appState, type AppState } from '@/core/appState';
 import { editSession } from '@/core/editHistory';
 import { roomSizeFor } from '@/config/interior';
@@ -60,7 +61,8 @@ export function restoreRoom(): void {
 function withBaseSize(furniture: unknown): PlacedFurniture[] {
   if (!Array.isArray(furniture)) return [];
   return (furniture as PlacedFurniture[]).map((item) =>
-    item.baseSize ? item : { ...item, baseSize: [...item.size] as [number, number, number] }
+    // 置いたサンプルの中身の URL も今の版のものにする（以前の版の URL では読めない。config/samples.ts）
+    withCurrentSampleAssets(item.baseSize ? item : { ...item, baseSize: [...item.size] as [number, number, number] })
   );
 }
 

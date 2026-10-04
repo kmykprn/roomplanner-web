@@ -120,19 +120,33 @@ export function restoreModelLibrary(): void {
   const models = raw === null
     ? importPlaced()
     : (Array.isArray(saved) ? saved : []).filter(isSavedModel).map(normalizeSaved);
-  setModels(seedSamples(withSampleCutouts(models)));
+  setModels(seedSamples(withCurrentSamples(models)));
 }
 
 /**
- * 以前から入っているサンプルに、あとから足した 2D（切り抜き）を持たせる。
- * サンプルを入れるのは最初の起動の 1 回だけなので、それより前から使っている端末ではここで足す。
- * 一覧に残っていて 2D をまだ持っていないサンプルだけ（消したサンプルは戻さない）
+ * 一覧に残っているサンプルの中身（3D・2D・アイコン・寸法）を、今の版のものにする。
+ *
+ * サンプルを入れるのは最初の起動の 1 回だけなので、それより前から使っている端末には古い中身の URL が残っている。
+ * サンプルの中身を差し替えると古い URL では読めなくなる（ファイル名に中身のハッシュが付くため）ので、ここで今の URL にする。
+ * 2D をまだ持っていない古いサンプル（2D を足す前の版）にも 2D を持たせる。
+ * 名前と、利用者が入れた高さは変えない。消したサンプルは戻さない（一覧に残っているものだけ）
  */
-function withSampleCutouts(models: GeneratedModel[]): GeneratedModel[] {
+function withCurrentSamples(models: GeneratedModel[]): GeneratedModel[] {
   return models.map((model) => {
-    if (model.imageKey !== null) return model;
     const sample = SAMPLE_MODELS.find((entry) => entry.id === model.id);
-    return sample?.imageKey ? { ...model, imageKey: sample.imageKey } : model;
+    if (!sample) return model;
+    // もう今の中身なら何もしない（測ってある形を、起動のたびに捨てないように）
+    const modelKey = model.modelKey === null ? null : sample.modelKey;
+    if (model.modelKey === modelKey && model.imageKey === sample.imageKey && model.previewKey === sample.previewKey) return model;
+    return {
+      ...model,
+      modelKey,
+      imageKey: sample.imageKey,
+      previewKey: sample.previewKey,
+      size: sample.size,
+      // 形は前の中身で測ったもの。中身が変わったので測り直す
+      shape: undefined,
+    };
   });
 }
 
