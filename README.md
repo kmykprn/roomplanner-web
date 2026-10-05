@@ -214,6 +214,9 @@ three.js を直接使えば `camera.position` がすでに答えなので、
 - 奥行き: [MoGe-2](https://github.com/microsoft/MoGe)（Wang ほか, 2025）の ViT-S を、重みだけ int8 にしたもの
   （`moge2-vits-int8w.onnx`）。コードと学習済みの重みは MIT（© Microsoft Corporation）。
   骨格の [DINOv2](https://github.com/facebookresearch/dinov2) は Apache-2.0（© Meta Platforms, Inc.）。
+- 写真から家具を切り抜く: [BiRefNet](https://github.com/ZhengPeng7/BiRefNet)（Zheng ほか, 2024）の軽い版（BiRefNet_lite）を、
+  入力 512×512 で書き出し直し、重みだけ int8 にしたもの（`birefnet-lite-512-int8w.onnx`）。コードと学習済みの重みは MIT。
+  まず端末の中で切り抜き、端末で切り抜けないときだけサーバー（Hunyuan3D-2GP の cutout/）に頼む。作り方は `assets-src/models/birefnet/README.md`。
 
 ## 商品リンクについて
 
