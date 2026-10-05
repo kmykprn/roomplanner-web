@@ -18,7 +18,7 @@ import * as ort from 'onnxruntime-web/wasm';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
 import wasmLoaderUrl from 'onnxruntime-web/ort-wasm-simd-threaded.mjs?url';
 
-import type { TensorData, WorkerReply, WorkerRequest } from '@/core/onnxModel';
+import type { HeapStage, TensorData, WorkerReply, WorkerRequest } from '@/core/onnxModel';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -31,6 +31,19 @@ function reply(message: WorkerReply, transfer: Transferable[] = []): void {
   self.postMessage(message, transfer);
 }
 
+/**
+ * wasm のメモリが伸びるたびに、その大きさと今の段階を画面に知らせる。
+ * iPhone はメモリ不足だと例外を出さずにページごと止めるので、落ちる直前の大きさを残すのに使う（core/cutout.ts）。
+ * onnxruntime-web はメモリを直接は見せないので、伸ばす関数を差し替えて横から見る
+ */
+let stage: HeapStage = 'idle';
+const originalGrow = WebAssembly.Memory.prototype.grow;
+WebAssembly.Memory.prototype.grow = function grow(this: WebAssembly.Memory, pages: number): number {
+  const previous = originalGrow.call(this, pages);
+  reply({ type: 'heap', bytes: this.buffer.byteLength, stage });
+  return previous;
+};
+
 /** モデルを読む。2 回目からは落とさずに同じものを使う */
 function load(url: string): Promise<ort.InferenceSession> {
   let session = sessions.get(url);
@@ -40,7 +53,10 @@ function load(url: string): Promise<ort.InferenceSession> {
         if (!response.ok) throw new Error(`モデルを読めませんでした（${response.status}）`);
         return response.arrayBuffer();
       })
-      .then((bytes) => ort.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'] }))
+      .then((bytes) => {
+        stage = 'loading';
+        return ort.InferenceSession.create(new Uint8Array(bytes), { executionProviders: ['wasm'] });
+      })
       .catch((error) => {
         sessions.delete(url); // 落とせなかったら次回また試す
         throw error;
@@ -54,7 +70,16 @@ async function run(url: string, feeds: Record<string, TensorData>): Promise<Reco
   const session = await load(url);
   const inputs: Record<string, ort.Tensor> = {};
   for (const [name, tensor] of Object.entries(feeds)) inputs[name] = new ort.Tensor('float32', tensor.data, tensor.dims);
-  const outputs = await session.run(inputs);
+  stage = 'running';
+  try {
+    const outputs = await session.run(inputs);
+    return toTensorData(outputs);
+  } finally {
+    stage = 'idle';
+  }
+}
+
+function toTensorData(outputs: ort.InferenceSession.OnnxValueMapType): Record<string, TensorData> {
   const result: Record<string, TensorData> = {};
   for (const [name, tensor] of Object.entries(outputs)) {
     result[name] = { data: tensor.data as Float32Array, dims: [...tensor.dims] };

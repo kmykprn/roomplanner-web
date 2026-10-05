@@ -21,6 +21,7 @@ import { PREPARING } from '@/core/progress';
 import { createStore } from '@/core/store';
 import { shrinkForUpload } from '@/core/imageResize';
 import { cutoutOnDevice } from '@/core/cutoutModel';
+import { onHeapGrowth, type HeapInfo } from '@/core/onnxModel';
 import {
   ApiError,
   createCutoutJob,
@@ -37,7 +38,7 @@ import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCa
 import type { ProductInfo } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.cutouts';
-/** 端末で切り抜いている間だけ残す印。残ったまま起動したら、前回は切り抜きの途中でアプリが落ちた */
+/** 端末で切り抜いている間だけ残す記録（LocalRunning）。残ったまま起動したら、前回は切り抜きの途中でアプリが落ちた */
 const LOCAL_RUNNING_KEY = 'roomplanner.cutout.localRunning';
 /** 一度落ちた端末では、以後サーバーに頼む印 */
 const LOCAL_DISABLED_KEY = 'roomplanner.cutout.localDisabled';
@@ -89,21 +90,36 @@ export interface CutoutState {
 
 export const cutoutState = createStore<CutoutState>({ jobs: [] });
 
+/** 端末で切り抜いている間、localStorage に残す記録。落ちたあとの起動で、写真を「失敗」として一覧に戻すのに使う */
+interface LocalRunning {
+  jobs: { fileName: string; previewKey: string | null }[];
+  /** ワーカーのメモリの最後の大きさ（MB）。落ちる直前の値が残る */
+  heapMB: number | null;
+  /** そのときワーカーが何をしていたか */
+  stage: HeapInfo['stage'] | null;
+}
+
 /**
- * 起動時に 1 回だけ判断する。切り抜きの途中で印を見ると、同時に進む 2 枚目が「落ちた」扱いになるため、
+ * 起動時に 1 回だけ判断する。切り抜きの途中で記録を見ると、同時に進む 2 枚目が「落ちた」扱いになるため、
  * 切り抜くたびには見ない
  */
-const localCutoutDisabled = crashedWhileCuttingLocally();
+const crashed = crashedWhileCuttingLocally();
+const localCutoutDisabled = crashed !== null;
 
-function crashedWhileCuttingLocally(): boolean {
+/** 前回、端末で切り抜く途中で落ちていればその記録。この端末で以後サーバーに頼む印も置く。落ちていなければ null */
+function crashedWhileCuttingLocally(): LocalRunning | null {
   try {
-    if (localStorage.getItem(LOCAL_RUNNING_KEY)) {
+    const value = localStorage.getItem(LOCAL_RUNNING_KEY);
+    if (value !== null) {
       localStorage.setItem(LOCAL_DISABLED_KEY, '1');
       localStorage.removeItem(LOCAL_RUNNING_KEY);
     }
-    return localStorage.getItem(LOCAL_DISABLED_KEY) !== null;
+    if (localStorage.getItem(LOCAL_DISABLED_KEY) === null) return null;
+    const parsed: unknown = value === null ? null : JSON.parse(value);
+    const record = typeof parsed === 'object' && parsed !== null ? (parsed as Partial<LocalRunning>) : {};
+    return { jobs: Array.isArray(record.jobs) ? record.jobs : [], heapMB: record.heapMB ?? null, stage: record.stage ?? null };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -112,17 +128,63 @@ export function isLocalCutoutDisabled(): boolean {
   return localCutoutDisabled;
 }
 
-/** 端末で切り抜いている写真の数。1 枚目で印を置き、最後の 1 枚が終わったら消す */
-let localRunning = 0;
+/** 落ちたときの文言。残っていた記録から、どこまで行ったかを添える */
+function crashMessage(record: LocalRunning): string {
+  const stage = record.stage === 'loading' ? 'モデルを読み込み中' : record.stage === 'running' ? '切り抜き中' : null;
+  const detail = record.heapMB === null ? '' : `（メモリ ${record.heapMB}MB まで${stage ? `、${stage}` : ''}）`;
+  return `端末で切り抜く途中でアプリが落ちました${detail}。もう一度選ぶと、サーバーで切り抜きます`;
+}
 
-function markLocalRunning(running: boolean): void {
-  localRunning += running ? 1 : -1;
+/** 端末で切り抜いている写真。1 枚目で記録を置き、最後の 1 枚が終わったら消す */
+const localRunning = new Map<string, LocalRunning['jobs'][number]>();
+let stopListeningHeap: (() => void) | null = null;
+let lastHeap: HeapInfo | null = null;
+
+function writeLocalRunning(): void {
   try {
-    if (running && localRunning === 1) localStorage.setItem(LOCAL_RUNNING_KEY, '1');
-    if (!running && localRunning === 0) localStorage.removeItem(LOCAL_RUNNING_KEY);
+    const record: LocalRunning = { jobs: [...localRunning.values()], heapMB: lastHeap?.megabytes ?? null, stage: lastHeap?.stage ?? null };
+    localStorage.setItem(LOCAL_RUNNING_KEY, JSON.stringify(record));
   } catch {
     // localStorage が使えない端末では、落ちたことを次回に伝えられないだけ
   }
+}
+
+function markLocalRunning(job: CutoutJob, running: boolean): void {
+  if (running) {
+    localRunning.set(job.id, { fileName: job.fileName, previewKey: job.previewKey });
+    if (!stopListeningHeap) {
+      stopListeningHeap = onHeapGrowth((info) => {
+        lastHeap = info;
+        writeLocalRunning();
+      });
+    }
+    writeLocalRunning();
+    return;
+  }
+  localRunning.delete(job.id);
+  if (localRunning.size > 0) {
+    writeLocalRunning();
+    return;
+  }
+  stopListeningHeap?.();
+  stopListeningHeap = null;
+  try {
+    localStorage.removeItem(LOCAL_RUNNING_KEY);
+  } catch {
+    // 上と同じ
+  }
+}
+
+/** 前回、端末で切り抜く途中で落ちた写真を「失敗」として一覧に戻す。利用者がもう一度選べるように（今度はサーバーで切り抜く） */
+function restoreCrashed(): void {
+  if (!crashed || crashed.jobs.length === 0) return;
+  const jobs = crashed.jobs.map<CutoutJob>((item) => ({
+    ...newJob(item.fileName || '写真から作った家具', 'failed'),
+    previewKey: item.previewKey ?? null,
+    error: crashMessage(crashed),
+  }));
+  setState({ jobs: [...cutoutState.get().jobs, ...jobs] });
+  for (const job of jobs) if (job.previewKey) void restorePreview(job.id, job.previewKey);
 }
 
 /** 端末に残す形。預けたものだけ。写真そのもの（プレビュー）は previewCache にある */
@@ -329,9 +391,10 @@ async function submit(id: string, file: File, extras: CutoutExtras = {}): Promis
     const preview = await savePreview(id, file);
     if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
     const image = await shrinkForUpload(file);
-    if (!localCutoutDisabled) {
+    const job = cutoutState.get().jobs.find((item) => item.id === id);
+    if (!localCutoutDisabled && job) {
       updateJob(id, { extras, phase: 'local', phaseStartedAt: Date.now() });
-      markLocalRunning(true);
+      markLocalRunning(job, true);
       try {
         const png = await cutoutOnDevice(image);
         await store(id, png);
@@ -340,7 +403,7 @@ async function submit(id: string, file: File, extras: CutoutExtras = {}): Promis
         // 端末で切り抜けなかった（モデルを読めない・メモリ不足・時間切れ）。サーバーに頼む
         console.warn('端末で切り抜けなかったので、サーバーに頼みます', error);
       } finally {
-        markLocalRunning(false);
+        markLocalRunning(job, false);
       }
     }
     const { id: jobId, expectedSeconds } = await createCutoutJob(image);
@@ -365,6 +428,7 @@ async function submit(id: string, file: File, extras: CutoutExtras = {}): Promis
  * できあがっていれば、そのまま保管庫に入る
  */
 export function resumeCutouts(): void {
+  restoreCrashed();
   let saved: Partial<SavedCutout>[] = [];
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
