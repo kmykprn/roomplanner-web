@@ -1515,6 +1515,10 @@ body {
 .lib__failure .hint {
   margin: 0;
 }
+/* サーバーで切り抜いている知らせは、失敗ではないので色を付けない */
+.lib__local {
+  background: var(--surface-2, var(--surface));
+}
 
 .thumb {
   position: relative;
