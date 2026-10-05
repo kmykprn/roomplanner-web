@@ -34,6 +34,8 @@ import {
   cutoutProgress,
   cutoutState,
   dismissCutoutError,
+  isLocalCutoutDisabled,
+  retryLocalCutout,
   startCutout,
   type CutoutJob,
 } from '@/core/cutout';
@@ -96,7 +98,27 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   failureDetail.hidden = true;
   let openFailureId: string | null = null;
 
-  normal.append(grid, failureDetail);
+  /**
+   * 端末で切り抜く途中でアプリが落ちた端末では、以後サーバーで切り抜いている（core/cutout.ts）。
+   * そのことを伝え、端末でもう一度試す入口を出す（押すと次の写真から端末で切り抜く）
+   */
+  const localNotice = document.createElement('div');
+  localNotice.className = 'lib__failure lib__local';
+  localNotice.hidden = !isLocalCutoutDisabled();
+  const localMessage = document.createElement('p');
+  localMessage.className = 'hint';
+  localMessage.textContent = '端末で切り抜く途中でアプリが落ちたことがあるので、写真はサーバーで切り抜いています';
+  const retryLocal = document.createElement('button');
+  retryLocal.type = 'button';
+  retryLocal.className = 'button is-quiet is-small';
+  retryLocal.textContent = '端末でもう一度試す';
+  retryLocal.addEventListener('click', () => {
+    retryLocalCutout();
+    localNotice.hidden = true;
+  });
+  localNotice.append(localMessage, retryLocal);
+
+  normal.append(grid, failureDetail, localNotice);
 
   // --- 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る ---
   const chooser = createChooser({

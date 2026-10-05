@@ -104,7 +104,7 @@ interface LocalRunning {
  * 切り抜くたびには見ない
  */
 const crashed = crashedWhileCuttingLocally();
-const localCutoutDisabled = crashed !== null;
+let localCutoutDisabled = crashed !== null;
 
 /** 前回、端末で切り抜く途中で落ちていればその記録。この端末で以後サーバーに頼む印も置く。落ちていなければ null */
 function crashedWhileCuttingLocally(): LocalRunning | null {
@@ -126,6 +126,16 @@ function crashedWhileCuttingLocally(): LocalRunning | null {
 /** この端末では端末の中で切り抜かず、サーバーに頼むか（前回、端末で切り抜く途中で落ちた） */
 export function isLocalCutoutDisabled(): boolean {
   return localCutoutDisabled;
+}
+
+/** 落ちた印を消し、次の写真から端末で切り抜く（利用者が「端末でもう一度試す」を押したとき） */
+export function retryLocalCutout(): void {
+  localCutoutDisabled = false;
+  try {
+    localStorage.removeItem(LOCAL_DISABLED_KEY);
+  } catch {
+    // localStorage が使えなければ、もともと印は残らない
+  }
 }
 
 /** 落ちたときの文言。残っていた記録から、どこまで行ったかを添える */
