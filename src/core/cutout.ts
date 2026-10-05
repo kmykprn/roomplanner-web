@@ -11,7 +11,10 @@
  *
  * **まず端末の中で切り抜く（core/cutoutModel.ts）。** サーバーに頼むのは、端末で切り抜けなかったとき
  * （モデルを読めない・メモリ不足・時間切れ）だけ。端末で切り抜く間はサーバーの受付番号が無いので、
- * アプリを閉じると続きは拾えない（開き直したら、もう一度選んでもらう）
+ * アプリを閉じると続きは拾えない（開き直したら、もう一度選んでもらう）。
+ *
+ * メモリ不足で iPhone が WebView ごと止めると例外は出ない。そのため端末で切り抜く間だけ localStorage に印を残し、
+ * 印が残ったまま起動したら「前回は途中で落ちた」とみなして、その端末では以後サーバーに頼む
  */
 
 import { PREPARING } from '@/core/progress';
@@ -34,6 +37,10 @@ import { deletePreview, resolvePreview, savePreview } from '@/platform/previewCa
 import type { ProductInfo } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.cutouts';
+/** 端末で切り抜いている間だけ残す印。残ったまま起動したら、前回は切り抜きの途中でアプリが落ちた */
+const LOCAL_RUNNING_KEY = 'roomplanner.cutout.localRunning';
+/** 一度落ちた端末では、以後サーバーに頼む印 */
+const LOCAL_DISABLED_KEY = 'roomplanner.cutout.localDisabled';
 
 /** local は端末の中で切り抜いている間。cutting はサーバーに預けて進行中 */
 export type CutoutPhase = 'importing' | 'uploading' | 'local' | 'cutting' | 'saving' | 'failed';
@@ -81,6 +88,42 @@ export interface CutoutState {
 }
 
 export const cutoutState = createStore<CutoutState>({ jobs: [] });
+
+/**
+ * 起動時に 1 回だけ判断する。切り抜きの途中で印を見ると、同時に進む 2 枚目が「落ちた」扱いになるため、
+ * 切り抜くたびには見ない
+ */
+const localCutoutDisabled = crashedWhileCuttingLocally();
+
+function crashedWhileCuttingLocally(): boolean {
+  try {
+    if (localStorage.getItem(LOCAL_RUNNING_KEY)) {
+      localStorage.setItem(LOCAL_DISABLED_KEY, '1');
+      localStorage.removeItem(LOCAL_RUNNING_KEY);
+    }
+    return localStorage.getItem(LOCAL_DISABLED_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** この端末では端末の中で切り抜かず、サーバーに頼むか（前回、端末で切り抜く途中で落ちた） */
+export function isLocalCutoutDisabled(): boolean {
+  return localCutoutDisabled;
+}
+
+/** 端末で切り抜いている写真の数。1 枚目で印を置き、最後の 1 枚が終わったら消す */
+let localRunning = 0;
+
+function markLocalRunning(running: boolean): void {
+  localRunning += running ? 1 : -1;
+  try {
+    if (running && localRunning === 1) localStorage.setItem(LOCAL_RUNNING_KEY, '1');
+    if (!running && localRunning === 0) localStorage.removeItem(LOCAL_RUNNING_KEY);
+  } catch {
+    // localStorage が使えない端末では、落ちたことを次回に伝えられないだけ
+  }
+}
 
 /** 端末に残す形。預けたものだけ。写真そのもの（プレビュー）は previewCache にある */
 interface SavedCutout {
@@ -286,14 +329,19 @@ async function submit(id: string, file: File, extras: CutoutExtras = {}): Promis
     const preview = await savePreview(id, file);
     if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
     const image = await shrinkForUpload(file);
-    updateJob(id, { extras, phase: 'local', phaseStartedAt: Date.now() });
-    try {
-      const png = await cutoutOnDevice(image);
-      await store(id, png);
-      return;
-    } catch (error) {
-      // 端末で切り抜けなかった（モデルを読めない・メモリ不足・時間切れ）。サーバーに頼む
-      console.warn('端末で切り抜けなかったので、サーバーに頼みます', error);
+    if (!localCutoutDisabled) {
+      updateJob(id, { extras, phase: 'local', phaseStartedAt: Date.now() });
+      markLocalRunning(true);
+      try {
+        const png = await cutoutOnDevice(image);
+        await store(id, png);
+        return;
+      } catch (error) {
+        // 端末で切り抜けなかった（モデルを読めない・メモリ不足・時間切れ）。サーバーに頼む
+        console.warn('端末で切り抜けなかったので、サーバーに頼みます', error);
+      } finally {
+        markLocalRunning(false);
+      }
     }
     const { id: jobId, expectedSeconds } = await createCutoutJob(image);
     updateJob(id, {
