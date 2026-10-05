@@ -83,6 +83,21 @@ function workerOf(): Worker {
   return worker;
 }
 
+/**
+ * ワーカーを止めて、wasm のメモリと読んであるモデルを全部手放す。何か頼んでいる最中なら止めない（false を返す）。
+ *
+ * wasm のメモリは一度伸びると縮まない。深度の AI を動かしたあとのワーカーで切り抜きを動かすと、
+ * 残ったメモリと重みのぶん高いところから伸びる（PC で 621MB → 804MB。iPhone ではメモリ不足で落ちた）。
+ * 大きなモデルを動かす前後で止めれば、同時に抱えるのは大きいほう 1 つぶんで済む。
+ * 次に頼むときはワーカーを作り直し、モデルはキャッシュから読み直す（数秒）
+ */
+export function releaseWorker(): boolean {
+  if (pending.size > 0) return false;
+  worker?.terminate();
+  worker = null;
+  return true;
+}
+
 /** ワーカーに頼んで、返事を待つ */
 function ask(request: RequestBody, transfer: Transferable[] = []): Promise<Record<string, TensorData>> {
   const id = nextId;
