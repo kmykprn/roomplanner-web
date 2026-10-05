@@ -20,10 +20,20 @@ type RequestBody = { type: 'run'; url: string; feeds: Record<string, TensorData>
 /** 画面 → ワーカー。返事と結び付けるための番号を付けて送る */
 export type WorkerRequest = RequestBody & { id: number };
 
-/** ワーカー → 画面 */
+/** ワーカーがいま何をしているか。メモリの記録に添える */
+export type HeapStage = 'idle' | 'loading' | 'running';
+
+/** ワーカーの wasm のメモリの大きさ。伸びるたびに知らせが来る */
+export interface HeapInfo {
+  megabytes: number;
+  stage: HeapStage;
+}
+
+/** ワーカー → 画面。heap は頼みごとに紐づかない知らせ */
 export type WorkerReply =
   | { id: number; type: 'done'; outputs: Record<string, TensorData> }
-  | { id: number; type: 'error'; message: string };
+  | { id: number; type: 'error'; message: string }
+  | { type: 'heap'; bytes: number; stage: HeapStage };
 
 /** 返事を待っている頼みごと */
 interface Pending {
@@ -35,12 +45,34 @@ let worker: Worker | null = null;
 const pending = new Map<number, Pending>();
 let nextId = 0;
 
+/**
+ * メモリの伸びを聞きたい側（core/cutout.ts）。iPhone はメモリ不足だと例外を出さずにページごと止めるので、
+ * 落ちる直前の大きさを端末に残すのに使う
+ */
+const heapListeners = new Set<(info: HeapInfo) => void>();
+let lastHeap: HeapInfo | null = null;
+
+export function onHeapGrowth(listener: (info: HeapInfo) => void): () => void {
+  heapListeners.add(listener);
+  return () => heapListeners.delete(listener);
+}
+
+/** 最後に知らされたワーカーのメモリの大きさ。まだ何も動かしていなければ null */
+export function lastHeapInfo(): HeapInfo | null {
+  return lastHeap;
+}
+
 /** ワーカーは最初に頼むときに作る。起動時の読み込みに混ぜない */
 function workerOf(): Worker {
   if (!worker) {
     worker = new Worker(new URL('./onnxWorker.ts', import.meta.url), { type: 'module' });
     worker.addEventListener('message', (event: MessageEvent<WorkerReply>) => {
       const message = event.data;
+      if (message.type === 'heap') {
+        lastHeap = { megabytes: Math.round(message.bytes / 1048576), stage: message.stage };
+        for (const listener of heapListeners) listener(lastHeap);
+        return;
+      }
       const request = pending.get(message.id);
       if (!request) return;
       pending.delete(message.id);

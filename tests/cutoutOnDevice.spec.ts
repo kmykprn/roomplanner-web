@@ -65,12 +65,15 @@ test('写真を端末の中で切り抜き、Python で動かした結果と正�
   const photo = fixture('chair-in-room.jpg');
   const result = await page.evaluate(async (bytes) => {
     const { cutoutOnDevice } = await import('/src/core/cutoutModel.ts');
+    const { lastHeapInfo } = await import('/src/core/onnxModel.ts');
     const started = performance.now();
     const png = await cutoutOnDevice(new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }));
     const bitmap = await createImageBitmap(png);
-    return { bytes: Array.from(new Uint8Array(await png.arrayBuffer())), width: bitmap.width, height: bitmap.height, seconds: (performance.now() - started) / 1000 };
+    return { bytes: Array.from(new Uint8Array(await png.arrayBuffer())), width: bitmap.width, height: bitmap.height, seconds: (performance.now() - started) / 1000, heap: lastHeapInfo() };
   }, photo);
-  console.log(`端末での切り抜き: ${result.seconds.toFixed(1)} 秒、${result.width}×${result.height}`);
+  console.log(`端末での切り抜き: ${result.seconds.toFixed(1)} 秒、${result.width}×${result.height}、ワーカーのメモリ ${result.heap?.megabytes}MB`);
+  // ワーカーのメモリの伸びが画面に届いている（落ちる直前の大きさを残すのに使う）。PC では 600MB ほど
+  expect(result.heap?.megabytes ?? 0).toBeGreaterThan(300);
   // 中身のまわりで切り詰めてある（椅子は写真の一部）
   expect(result.width).toBeLessThan(1024);
   expect(result.height).toBeLessThan(768);
