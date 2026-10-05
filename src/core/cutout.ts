@@ -8,11 +8,16 @@
  * 待ち状態は端末に残す（localStorage）。iPhone は PWA を裏に回すと数秒で通信を切るので、
  * 楽天のページに URL をコピーしに行く間にも切り抜きは失われない。裏にいる間は見に行かず、
  * 戻ってきた時点・次に開いた時点で続きを見に行く。
+ *
+ * **まず端末の中で切り抜く（core/cutoutModel.ts）。** サーバーに頼むのは、端末で切り抜けなかったとき
+ * （モデルを読めない・メモリ不足・時間切れ）だけ。端末で切り抜く間はサーバーの受付番号が無いので、
+ * アプリを閉じると続きは拾えない（開き直したら、もう一度選んでもらう）
  */
 
 import { PREPARING } from '@/core/progress';
 import { createStore } from '@/core/store';
 import { shrinkForUpload } from '@/core/imageResize';
+import { cutoutOnDevice } from '@/core/cutoutModel';
 import {
   ApiError,
   createCutoutJob,
@@ -30,7 +35,8 @@ import type { ProductInfo } from '@/config/furniture';
 
 const STORAGE_KEY = 'roomplanner.cutouts';
 
-export type CutoutPhase = 'importing' | 'uploading' | 'cutting' | 'saving' | 'failed';
+/** local は端末の中で切り抜いている間。cutting はサーバーに預けて進行中 */
+export type CutoutPhase = 'importing' | 'uploading' | 'local' | 'cutting' | 'saving' | 'failed';
 
 /** サーバー側の段階のうち、途中のもの（done / failed は phase に畳む） */
 export type CutoutServerPhase = 'queued' | 'running';
@@ -53,7 +59,7 @@ export interface CutoutJob {
   /** 元写真の縮小プレビュー。切り抜いている間のサムネイルに出す */
   previewKey: string | null;
   previewUrl: string | null;
-  /** 端末側の段階。取り込み中・送る前・預けた（サーバーで進行中）・保存中・失敗 */
+  /** 端末側の段階。取り込み中・送る前・端末で切り抜き中・預けた（サーバーで進行中）・保存中・失敗 */
   phase: CutoutPhase;
   /** 受付時刻（epoch ms）。諦める判断に使う */
   startedAt: number;
@@ -128,6 +134,8 @@ function setState(patch: Partial<CutoutState>): void {
  *   saving（結果を取って端末に保存）       … 90% → 97%。1 秒ほど
  */
 const QUEUED_SECONDS = 20;
+/** 端末で切り抜くのにかかる見込み（秒）。PC で 5 秒ほど、iPhone はその 2 倍ほどを見ておく */
+const LOCAL_SECONDS = 10;
 const SAVING_SECONDS = 1;
 const SHARE = { starting: 0.1, cutting: 0.8, finishing: 0.07 } as const;
 /** 満杯にしない上限。最後で止まると「終わったのに終わらない」に見える */
@@ -148,6 +156,13 @@ export function cutoutProgress(job: CutoutJob, now = Date.now()): CutoutProgress
     return {
       ratio: PREPARING.start + (PREPARING.uploaded - PREPARING.start) * within(PREPARING.uploadSeconds),
       label: '準備中',
+    };
+  }
+  if (job.phase === 'local') {
+    // 端末で切り抜いている間。見込みの秒数で進め、長引いたらそこで止まって待つ
+    return {
+      ratio: PREPARING.uploaded + (SHARE.starting + SHARE.cutting - PREPARING.uploaded) * within(LOCAL_SECONDS),
+      label: '切り抜き中',
     };
   }
   if (job.phase === 'saving') {
@@ -271,6 +286,15 @@ async function submit(id: string, file: File, extras: CutoutExtras = {}): Promis
     const preview = await savePreview(id, file);
     if (preview) updateJob(id, { previewKey: preview.key, previewUrl: preview.url });
     const image = await shrinkForUpload(file);
+    updateJob(id, { extras, phase: 'local', phaseStartedAt: Date.now() });
+    try {
+      const png = await cutoutOnDevice(image);
+      await store(id, png);
+      return;
+    } catch (error) {
+      // 端末で切り抜けなかった（モデルを読めない・メモリ不足・時間切れ）。サーバーに頼む
+      console.warn('端末で切り抜けなかったので、サーバーに頼みます', error);
+    }
     const { id: jobId, expectedSeconds } = await createCutoutJob(image);
     updateJob(id, {
       jobId,
@@ -379,11 +403,20 @@ async function watch(id: string, jobId: string): Promise<void> {
   }
 }
 
-/** できあがった切り抜きを取って端末に保存し、保管庫に入れる */
+/** サーバーでできあがった切り抜きを取って、端末に保存する */
 async function finish(id: string, jobId: string): Promise<void> {
   try {
     updateJob(id, { phase: 'saving', phaseStartedAt: Date.now() });
-    const png = await getCutoutResult(jobId);
+    await store(id, await getCutoutResult(jobId));
+  } catch (error) {
+    updateJob(id, { phase: 'failed', error: toMessage(error) });
+  }
+}
+
+/** できあがった切り抜き（透過 PNG）を端末に保存し、保管庫に入れる。端末で切り抜いたときもサーバーのときも同じ */
+async function store(id: string, png: Blob): Promise<void> {
+  try {
+    updateJob(id, { phase: 'saving', phaseStartedAt: Date.now() });
     const key = await saveCutout(crypto.randomUUID(), png);
     // アイコンは切り抜きそのもの。透過のまま縮めると JPEG で黒く潰れるので、
     // サムネイルの下地と同じ色を敷く
