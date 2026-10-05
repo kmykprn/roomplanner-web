@@ -7,6 +7,8 @@
  *   3. 写真の大きさに戻して不透明度にし、中身のまわりに 2% の余白を残して切り詰め、PNG にする
  *
  * **写真は端末の外に出ない。** モデル（約 52MB）は初回だけ落とす（core/onnxModel.ts）。
+ * ワーカーは切り抜きの前後で作り直す。深度の AI と同じワーカーで続けて動かすと、残ったメモリの上に積まれて
+ * iPhone ではメモリ不足で落ちた（PC で 621MB → 804MB、iPhone 11 Pro で 1070MB まで伸びて落ちた）。
  * サーバーは 1024×1024 で動かすが、ブラウザではメモリが足りない（1024 で 3.6GB、768 で 1.9GB）ので 512 にした。
  * 512 でも輪郭は 1024 とほぼ同じ（重なり 0.90）。384 や 448 では家具が検出されないことがあるので、これ以上は小さくしない。
  * 512 の最大メモリは 0.78GB（PC のブラウザ）。深度の AI と同じく、重みだけ int8 にしてある
@@ -15,7 +17,7 @@
  * メモリ不足・モデルを読めない・時間切れのときは例外になる。呼ぶ側（core/cutout.ts）がサーバーに切り替える
  */
 
-import { decodePhoto, runModel, type TensorData } from '@/core/onnxModel';
+import { decodePhoto, releaseWorker, runModel, type TensorData } from '@/core/onnxModel';
 
 const MODEL_FILE = 'birefnet-lite-512-int8w.onnx';
 /** モデルの入力の大きさ。書き出したときに固定している */
@@ -44,8 +46,15 @@ export async function cutoutOnDevice(photo: Blob): Promise<Blob> {
     context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, width, height).data;
     const feeds: Record<string, TensorData> = { input_image: { data: toNetworkInput(pixels, width, height), dims: [1, 3, INPUT_SIZE, INPUT_SIZE] } };
-    const outputs = await withTimeout(runModel(MODEL_FILE, feeds), TIMEOUT_MS);
-    const logits = Object.values(outputs)[0].data;
+    // 深度の AI が残したメモリの上に積まないよう、新しいワーカーで動かし、終わったら捨てる（onnxModel.ts の releaseWorker）
+    releaseWorker();
+    let logits: Float32Array;
+    try {
+      const outputs = await withTimeout(runModel(MODEL_FILE, feeds), TIMEOUT_MS);
+      logits = Object.values(outputs)[0].data;
+    } finally {
+      releaseWorker();
+    }
     const alpha = toAlpha(logits);
     return await toCroppedPng(canvas, alpha);
   } finally {
