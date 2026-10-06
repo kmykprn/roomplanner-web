@@ -50,11 +50,13 @@ import {
 } from '@/core/photoState';
 import { isPhotoMode, modeState } from '@/core/mode';
 import {
+  connectSceneLibrary,
+  loadPhoto,
+  loadRoom,
   persistPhotoOnChange,
   persistRoomOnChange,
-  restorePhoto,
-  restoreRoom,
 } from '@/core/persistence';
+import { restoreSceneLibrary, sceneLibrary, setSnapshotSource } from '@/core/sceneLibrary';
 import { resumeGeneration } from '@/core/generation';
 import { resumeCutouts } from '@/core/cutout';
 import { watchWallet } from '@/core/wallet';
@@ -72,9 +74,12 @@ const viewport = requireElement('#viewport');
 const app = requireElement('#app');
 const header = requireElement('.header');
 
+// 保存した背景と部屋の一覧を先に読み、開いているものの中身を読み戻す。
 // シーンを組み立てる前に読み戻す。あとからだと部屋の大きさが二重に反映される
-restoreRoom();
-restorePhoto();
+restoreSceneLibrary();
+connectSceneLibrary();
+loadRoom(sceneLibrary.get().current.room);
+loadPhoto(sceneLibrary.get().current.photo);
 // 作ったモデルの保管庫。置いてある家具を見て取り込むので、部屋と写真のあと
 restoreModelLibrary();
 
@@ -360,10 +365,60 @@ createBottomSheet(app);
 // --- 端末に残す ---
 persistRoomOnChange();
 persistPhotoOnChange();
+// 保存した背景と部屋の一覧に出すアイコン。いま見えているもの（写真と家具、または部屋）を縮めて作る
+setSnapshotSource((kind) => captureSnapshot(kind === 'photo'));
 // 前回の生成・切り抜きが終わっていれば、ここで保管庫に入る
 resumeGeneration();
 resumeCutouts();
 watchWallet();
+
+/**
+ * いま見えているものを縮めた画像にする（一覧のアイコン）。
+ *
+ * 写真モードは、写真の層（CSS の背景画像）と家具を描いたキャンバスを、画面上の位置どおりに重ねる。
+ * 下のシートは入れない。部屋モードはキャンバスだけ。
+ * キャンバスは描いた直後にしか読めない（preserveDrawingBuffer を切ってある）ので、ここで 1 度描いてから写す。
+ * 縦長（3:4）に真ん中を切り抜き、長辺 480px の JPEG にする
+ */
+async function captureSnapshot(photo: boolean): Promise<Blob | null> {
+  const viewportRect = viewport.getBoundingClientRect();
+  if (viewportRect.width === 0 || viewportRect.height === 0) return null;
+  const width = 360;
+  const height = 480;
+  const scale = Math.max(width / viewportRect.width, height / viewportRect.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.fillStyle = photo ? '#1f2326' : THEME.background;
+  context.fillRect(0, 0, width, height);
+  // 画面の真ん中が切り抜きの真ん中に来るように寄せる
+  const offsetX = (width - viewportRect.width * scale) / 2;
+  const offsetY = (height - viewportRect.height * scale) / 2;
+  const place = (rect: DOMRect): [number, number, number, number] => [
+    offsetX + (rect.left - viewportRect.left) * scale,
+    offsetY + (rect.top - viewportRect.top) * scale,
+    rect.width * scale,
+    rect.height * scale,
+  ];
+  if (photo) {
+    const url = photoState.get().backgroundUrl;
+    if (url) {
+      const image = new Image();
+      image.src = url;
+      try {
+        await image.decode();
+        context.drawImage(image, ...place(viewer.photoLayer.getBoundingClientRect()));
+      } catch {
+        // 写真が読めなければ家具だけになる
+      }
+    }
+  }
+  viewer.renderer.render(viewer.scene, viewer.camera);
+  context.drawImage(viewer.canvas, ...place(viewer.canvas.getBoundingClientRect()));
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85));
+}
 
 // --- 毎フレームの処理 ---
 viewer.onFrame(() => {

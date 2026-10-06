@@ -350,6 +350,40 @@ export async function showBackground(blob: Blob): Promise<boolean> {
   return true;
 }
 
+/**
+ * 写真モードを最初の状態に戻す（写真・計算・寸法・隠す場所・家具を全部捨てる）。
+ * 開く背景を切り替えるとき（core/persistence.ts の loadPhoto）に、前の背景のものが残らないように呼ぶ。
+ * 端末に残したものは消さない（切り替え元の背景のものなので）。塗る道具の設定だけは残す
+ */
+export function resetPhotoState(): void {
+  replaceBackgroundUrl(null);
+  clearHistory(photoScene);
+  photoState.set({
+    backgroundName: null,
+    backgroundStatus: 'idle',
+    backgroundAspect: null,
+    view: { ...DEFAULT_PHOTO_VIEW },
+    floorFit: { ...DEFAULT_FLOOR_FIT },
+    vfovDeg: null,
+    lensFocal35: null,
+    measure: { status: 'idle' },
+    depthMap: null,
+    cameraHeight: null,
+    scaleLines: [],
+    selectedScaleLine: 0,
+    depthScale: null,
+    isScaling: false,
+    isFramingPhoto: false,
+    maskUrl: null,
+    maskRegions: null,
+    isMasking: false,
+    maskPolygon: [],
+    maskUndoDepth: 0,
+    furniture: [],
+    selectedId: null,
+  });
+}
+
 /** 背景の写真を外す */
 export function clearBackground(): void {
   replaceBackgroundUrl(null);
