@@ -11,7 +11,8 @@
  */
 
 export type IconName =
-  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox' | 'more' | 'image';
+  | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox' | 'more' | 'image'
+  | 'chevron-left' | 'copy' | 'grid';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -37,6 +38,12 @@ const PATHS: Record<IconName, string[]> = {
   image: ['M4 6h16v12H4z', 'M4 15l5-4 4 3 3-2 4 3'],
   // 選択して削除: チェックの付いた四角
   checkbox: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M8 12l3 3 5-6'],
+  // 一覧に戻る: 左向きの山
+  'chevron-left': ['M14.5 5.5L8 12l6.5 6.5'],
+  // 複製: 重なった四角
+  copy: ['M9 9h11v11H9z', 'M15 9V4H4v11h5'],
+  // 一覧: 田の字
+  grid: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
 };
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

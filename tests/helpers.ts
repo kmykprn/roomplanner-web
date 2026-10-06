@@ -30,8 +30,22 @@ export async function openWithTwoCutouts(page: Page): Promise<string[]> {
 
 /** 下のタブを開く */
 export async function openTab(page: Page, label: string): Promise<void> {
+  await enterEditor(page);
   // 写真モードは操作だけでタブの帯が無い（背景の操作は写真の右上の［⋯］）。操作を開くときは何もしない
   const tab = page.locator('.sheet__tab', { hasText: label });
   if (label === '操作' && !(await tab.isVisible())) return;
   await tab.click();
+}
+
+/**
+ * 保存した背景と部屋の一覧（最初の画面）が出ていれば、開いているもののタイルを押して編集の画面へ。
+ * 初めての起動は編集の画面から始まるので何もしない
+ */
+export async function enterEditor(page: Page): Promise<void> {
+  const list = page.locator('.scenes');
+  if (!(await list.isVisible())) return;
+  const tile = list.locator('.scene-tile__button').first();
+  if (await tile.count()) await tile.click();
+  else await list.locator('.scene-tile--add').click();
+  await list.waitFor({ state: 'hidden' });
 }
