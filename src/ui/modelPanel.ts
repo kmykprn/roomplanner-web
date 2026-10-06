@@ -1122,14 +1122,14 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'button is-quiet is-small';
-  cancel.textContent = 'やめる';
+  cancel.textContent = 'キャンセル';
   cancel.addEventListener('click', () => {
     modal.hidden = true;
   });
   const doRemove = document.createElement('button');
   doRemove.type = 'button';
   doRemove.className = 'button is-danger is-small';
-  doRemove.textContent = '削除する';
+  doRemove.textContent = '削除';
   doRemove.addEventListener('click', () => {
     if (!current) return;
     removeModel(current.id);

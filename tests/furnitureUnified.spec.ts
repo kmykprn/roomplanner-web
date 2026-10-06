@@ -77,7 +77,7 @@ test('編集の姿の削除は、2D と 3D をまとめて家具ごと消す', a
   await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
   await page.getByRole('button', { name: '編集' }).click();
   await page.getByRole('button', { name: 'この家具を完全に削除' }).click();
-  await page.getByRole('button', { name: '削除する' }).click();
+  await page.getByRole('button', { name: '削除', exact: true }).click();
   await expect(page.locator('.page .thumb__button', { hasText: 'サンプル 1' })).toHaveCount(0);
   const left = await page.evaluate(async () =>
     (await import('/src/core/modelLibrary.ts')).modelLibrary.get().models.some((model) => model.name === 'サンプル 1')
