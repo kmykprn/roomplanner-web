@@ -7,9 +7,10 @@
 
 import { modeState, setMode, type Mode } from '@/core/mode';
 
+/** 左が背景（写真）、右が部屋。写真に家具を置くのが主な使い方なので、背景を先に置く */
 const MODES: Array<{ id: Mode; label: string }> = [
-  { id: 'room', label: '部屋' },
   { id: 'photo', label: '背景' },
+  { id: 'room', label: '部屋' },
 ];
 
 export function createModeSwitch(): HTMLElement {

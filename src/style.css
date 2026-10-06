@@ -1456,21 +1456,9 @@ body {
 .preview.is-mini .preview__flat {
   inset: 6px 6px 4px;
 }
-.preview.is-mini .preview__image {
-  animation-name: preview-bob-mini;
-}
 .preview.is-mini .preview__shadow {
   height: 5px;
   margin-top: 2px;
-}
-@keyframes preview-bob-mini {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .preview.is-mini .preview__image {
-    animation: none;
-  }
 }
 /* 押すと次へ進む行だと分かる印 */
 .way__chevron {
@@ -2044,12 +2032,11 @@ body {
 .preview.is-solid .preview__flat {
   visibility: hidden;
 }
-/* 2D の見本。上下にゆっくり揺れる。下の影も合わせて縮み、浮いた板に見える */
+/* 2D の見本。動かさない（前は上下に揺らしていたが、浮いて見えて落ち着かなかった）。下の影で平らな板だと分かる */
 .preview__image {
   width: 100%;
   flex: 1;
   background: center / contain no-repeat;
-  animation: preview-bob 2.6s ease-in-out infinite;
 }
 .preview__shadow {
   flex: none;
@@ -2058,7 +2045,6 @@ body {
   margin-top: 4px;
   border-radius: 50%;
   background: rgba(17, 24, 28, 0.14);
-  animation: preview-shadow 2.6s ease-in-out infinite;
 }
 .preview__canvas {
   position: absolute;
@@ -2066,20 +2052,6 @@ body {
   width: 100%;
   height: 100%;
   cursor: grab;
-}
-@keyframes preview-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
-}
-@keyframes preview-shadow {
-  0%, 100% { transform: scaleX(1); opacity: 0.9; }
-  50% { transform: scaleX(0.82); opacity: 0.55; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .preview__image,
-  .preview__shadow {
-    animation: none;
-  }
 }
 
 /* 置く形の選択肢（2D と 3D を両方持つ家具だけ）。見本の画像と、形の名前・ひとこと */
