@@ -63,7 +63,7 @@ import {
   createScene,
   currentScene,
   deleteScenes,
-  isFirstLaunch,
+  entriesOf,
   openScene,
   restoreSceneLibrary,
   sceneLibrary,
@@ -377,10 +377,13 @@ applyBackground();
 // --- UI ---
 header.replaceChildren(createSceneHeader(() => void leaveEditor()));
 createBottomSheet(app);
-// 保存した背景と部屋の一覧。編集の画面の上に重ねる。初めての起動だけは新しい背景の編集から始める
+// 保存した背景と部屋の一覧。編集の画面の上に重ねる。
+// 背景が 1 つも無ければ（初めての起動、全部消したあと）、一覧ではなく新しい背景の編集から始める。
+// 写真選びは開かない（起動時は利用者の操作ではないので、端末が開かせない）
 const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter });
 app.append(scenePage.element);
-if (!isFirstLaunch()) scenePage.open('photo');
+if (entriesOf('photo').length === 0) enterScene(createScene('photo'));
+else scenePage.open('photo');
 
 /** 一覧のタイルを押した。それを開いて（モードも合わせて）編集の画面へ */
 function enterScene(entry: SceneEntry): void {
@@ -389,7 +392,7 @@ function enterScene(entry: SceneEntry): void {
   scenePage.close();
 }
 
-/** 一覧の ＋。新しく作って開く。背景なら、そのまま写真を選んでもらう（選ばずに戻ったら消える） */
+/** 一覧の ＋（と、1 つも無い種類のタブ）。新しく作って開く。背景なら、そのまま写真を選んでもらう（選ばずに戻ったら消える） */
 async function createAndEnter(kind: SceneKind): Promise<void> {
   enterScene(createScene(kind));
   if (kind !== 'photo') return;

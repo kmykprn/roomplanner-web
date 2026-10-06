@@ -16,7 +16,7 @@ const chairAt = (x: number) => {
 };
 const CHAIR_SOURCE = chairAt.toString();
 
-test('初めての起動では背景と部屋が 1 つずつでき、置いた家具はその鍵に残る', async ({ page }) => {
+test('初めての起動では背景が 1 つだけでき（部屋は作らない）、置いた家具はその鍵に残る', async ({ page }) => {
   const r = await page.evaluate(async () => {
     const { sceneLibrary, photoDataKey, entriesOf } = await import('/src/core/sceneLibrary.ts');
     const { photoScene } = await import('/src/core/photoState.ts');
@@ -34,11 +34,11 @@ test('初めての起動では背景と部屋が 1 つずつでき、置いた�
   });
   expect(r.photos).toHaveLength(1);
   expect(r.photos[0]).toMatch(/^背景 \d+\/\d+$/);
-  expect(r.rooms).toHaveLength(1);
+  expect(r.rooms).toHaveLength(0);
   expect(r.current.photo).toBeTruthy();
-  expect(r.current.room).toBeTruthy();
+  expect(r.current.room).toBeNull();
   expect(r.savedCount).toBe(1);
-  expect(r.index.entries).toHaveLength(2);
+  expect(r.index.entries).toHaveLength(1);
 });
 
 test('背景を切り替えると家具が入れ替わり、開き直しても開いていたものが残る', async ({ page }) => {
@@ -112,7 +112,8 @@ test('名前を変える・複製する・削除する。開いているもの�
     const chair = new Function(`return (${source})`)() as (x: number) => Parameters<typeof roomScene.add>[0];
     const { sceneLibrary, createScene, openScene, renameScene, duplicateScene, deleteScenes, entriesOf, currentScene } = await import('/src/core/sceneLibrary.ts');
     const { appState, roomScene } = await import('/src/core/appState.ts');
-    const first = sceneLibrary.get().current.room!;
+    const first = createScene('room').id;
+    openScene(first);
     renameScene(first, '  和室  ');
     roomScene.add(chair(0));
     const copy = (await duplicateScene(first))!;
@@ -146,10 +147,11 @@ test('名前を変える・複製する・削除する。開いているもの�
 test('いま見えているものから一覧のアイコンを作って残す', async ({ page }) => {
   const r = await page.evaluate(async () => {
     const { setMode } = await import('/src/core/mode.ts');
-    const { sceneLibrary, snapshotScene, readSceneThumbnail } = await import('/src/core/sceneLibrary.ts');
+    const { createScene, openScene, snapshotScene, readSceneThumbnail } = await import('/src/core/sceneLibrary.ts');
+    const id = createScene('room').id;
+    openScene(id);
     setMode('room');
     await new Promise((resolve) => requestAnimationFrame(resolve));
-    const id = sceneLibrary.get().current.room!;
     await snapshotScene(id);
     const blob = await readSceneThumbnail(id);
     if (!blob) return null;

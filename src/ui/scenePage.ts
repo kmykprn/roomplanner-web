@@ -1,7 +1,7 @@
 /**
- * 保存した背景と部屋の一覧。アプリを開いたときの最初の画面（初めての起動だけは、新しい背景の編集から）。
+ * 保存した背景と部屋の一覧。アプリを開いたときの最初の画面（背景が 1 つも無いときだけは、新しい背景の編集から）。
  *
- *   下のタブ       … 背景の一覧か、部屋の一覧か
+ *   下のタブ       … 背景の一覧か、部屋の一覧か。1 つも無い種類は、空の一覧を見せずに新しく作って編集へ
  *   ＋             … 背景なら写真を選んですぐ編集へ、部屋なら新しい部屋を作って編集へ
  *   タイル         … 押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
  *   タイルの ⋯     … 名前を変える・複製（複製したものを開く）
@@ -97,6 +97,11 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     button.className = 'scenes__tab';
     button.append(createIcon(tabKind === 'photo' ? 'image' : 'cube'), Object.assign(document.createElement('span'), { textContent: LABELS[tabKind].title }));
     button.addEventListener('click', () => {
+      // 1 つも無い種類は、空の一覧を見せずに新しく作って編集へ
+      if (entriesOf(tabKind).length === 0) {
+        handlers.onCreate(tabKind);
+        return;
+      }
       if (kind === tabKind) return;
       kind = tabKind;
       setSelecting(false);

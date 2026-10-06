@@ -14,7 +14,10 @@
  * persistence が登録した読み込み（setSceneLoader）を呼ぶ。保存は persistence が「開いているものの id」をここから引いて行う。
  *
  * 保存した背景と部屋を持つ前の版は、背景と部屋を 1 つずつ固定の鍵に置いていた。一覧の記録がまだ無い最初の起動で、
- * それらを「背景 10/7」「部屋 10/7」のような名前で一覧に入れる（消えない）
+ * それらを「背景 10/7」「部屋 10/7」のような名前で一覧に入れる（消えない）。
+ *
+ * 勝手には作らない。背景も部屋も、無ければ利用者が一覧の ＋ かタブを押したときに作る（main.ts）。
+ * 中身を残す側（persistence.ts）は開いている id の鍵に書くので、開いているものが無い間は何も残らない
  */
 
 import { createStore } from '@/core/store';
@@ -83,13 +86,6 @@ export function setSnapshotSource(source: (kind: SceneKind) => Promise<Blob | nu
  * 一覧の記録がまだ無ければ、前の版の背景と部屋があるかを見て一覧に入れる。
  * 前の版の記録も無ければ（初めての起動）、一覧は空のまま
  */
-/** 起動時に一覧の記録も前の版の記録も無かったか（初めての起動）。最初の画面を一覧にするか編集にするかに使う */
-let firstLaunch = false;
-
-export function isFirstLaunch(): boolean {
-  return firstLaunch;
-}
-
 export function restoreSceneLibrary(): void {
   const saved = readJson<Partial<SceneLibraryState>>(STORAGE_KEY);
   if (saved) {
@@ -103,26 +99,9 @@ export function restoreSceneLibrary(): void {
       },
     });
     setBackgroundScope(sceneLibrary.get().current.photo);
-    ensureCurrent();
     return;
   }
   migrateLegacy();
-  ensureCurrent();
-}
-
-/**
- * 開いているものが無い種類には、新しいものを作って開いておく。
- * 初めての起動（一覧が空）では、新しい背景を開いた状態から始める。
- * 中身を残す側（persistence.ts）は開いている id の鍵に書くので、id が無いと何も残らない
- */
-function ensureCurrent(): void {
-  for (const kind of ['photo', 'room'] as const) {
-    if (sceneLibrary.get().current[kind]) continue;
-    const entry = newEntry(kind, defaultName(kind), Date.now());
-    sceneLibrary.set((state) => ({ entries: [...state.entries, entry], current: { ...state.current, [kind]: entry.id } }));
-    if (kind === 'photo') setBackgroundScope(entry.id);
-  }
-  persist();
 }
 
 /** 前の版の背景と部屋（固定の鍵に 1 つずつ）を一覧に入れる。中身の鍵を id 付きの鍵に移す */
@@ -147,7 +126,6 @@ function migrateLegacy(): void {
   }
   sceneLibrary.set({ entries, current });
   setBackgroundScope(current.photo);
-  firstLaunch = entries.length === 0;
   if (entries.length > 0) persist();
 }
 
