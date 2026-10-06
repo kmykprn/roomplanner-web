@@ -35,7 +35,9 @@ import { drawScaleLines } from '@/ui/scaleLineOverlay';
 import { photoPointAt, type PhotoPoint } from '@/core/photoView';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
-import { createModeSwitch } from '@/ui/modeSwitch';
+import { createSceneHeader } from '@/ui/sceneHeader';
+import { createScenePage } from '@/ui/scenePage';
+import { pickImage } from '@/platform/picker';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createPhotoMenu } from '@/ui/photoMenu';
 import { appState, roomScene } from '@/core/appState';
@@ -48,15 +50,29 @@ import {
   setLensSource,
   setPhotoPlacement,
 } from '@/core/photoState';
-import { isPhotoMode, modeState } from '@/core/mode';
+import { isPhotoMode, modeState, setMode } from '@/core/mode';
 import {
   connectSceneLibrary,
+  flushSaves,
   loadPhoto,
   loadRoom,
   persistPhotoOnChange,
   persistRoomOnChange,
 } from '@/core/persistence';
-import { restoreSceneLibrary, sceneLibrary, setSnapshotSource } from '@/core/sceneLibrary';
+import {
+  createScene,
+  currentScene,
+  deleteScenes,
+  isFirstLaunch,
+  openScene,
+  restoreSceneLibrary,
+  sceneLibrary,
+  setSnapshotSource,
+  snapshotScene,
+  type SceneEntry,
+  type SceneKind,
+} from '@/core/sceneLibrary';
+import { setBackground } from '@/core/photoState';
 import { resumeGeneration } from '@/core/generation';
 import { resumeCutouts } from '@/core/cutout';
 import { watchWallet } from '@/core/wallet';
@@ -359,8 +375,51 @@ applyMode();
 applyBackground();
 
 // --- UI ---
-header.appendChild(createModeSwitch());
+header.replaceChildren(createSceneHeader(() => void leaveEditor()));
 createBottomSheet(app);
+// 保存した背景と部屋の一覧。編集の画面の上に重ねる。初めての起動だけは新しい背景の編集から始める
+const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter });
+app.append(scenePage.element);
+if (!isFirstLaunch()) scenePage.open('photo');
+
+/** 一覧のタイルを押した。それを開いて（モードも合わせて）編集の画面へ */
+function enterScene(entry: SceneEntry): void {
+  openScene(entry.id);
+  setMode(entry.kind);
+  scenePage.close();
+}
+
+/** 一覧の ＋。新しく作って開く。背景なら、そのまま写真を選んでもらう（選ばずに戻ったら消える） */
+async function createAndEnter(kind: SceneKind): Promise<void> {
+  enterScene(createScene(kind));
+  if (kind !== 'photo') return;
+  const file = await pickImage();
+  if (file) await setBackground(file);
+}
+
+/**
+ * 編集の画面の「‹」。開いているもののアイコンを作ってから一覧へ戻る。
+ * 写真も家具も無い背景は、作っただけで何もしなかったものなので一覧に残さない
+ */
+async function leaveEditor(): Promise<void> {
+  const kind = modeState.get().mode;
+  const entry = currentScene(kind);
+  flushSaves();
+  if (entry) {
+    const { backgroundStatus, furniture } = photoState.get();
+    const untouched = kind === 'photo' && backgroundStatus === 'idle' && furniture.length === 0;
+    if (untouched) await deleteScenes([entry.id]);
+    else await snapshotScene(entry.id);
+  }
+  scenePage.open(kind);
+}
+
+// 編集の画面のままアプリを閉じたり裏に回したりしたときも、アイコンを最新にしておく
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden' || scenePage.isOpen()) return;
+  const entry = currentScene(modeState.get().mode);
+  if (entry) void snapshotScene(entry.id);
+});
 
 // --- 端末に残す ---
 persistRoomOnChange();

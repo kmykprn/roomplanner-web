@@ -28,7 +28,7 @@ import {
 import { pickImage } from '@/platform/picker';
 import { createIcon, type IconName } from '@/ui/icons';
 
-interface MenuItem {
+export interface MenuItem {
   icon: IconName;
   label: string;
   run(): void;
@@ -77,8 +77,8 @@ export function createPhotoMenu(): HTMLElement {
   return element;
 }
 
-/** ［⋯］で下から出るメニュー。外側を押すか、項目を選ぶと閉じる */
-function createMenu(items: MenuItem[]): { element: HTMLElement; open(): void; close(): void } {
+/** ［⋯］で下から出るメニュー。外側を押すか、項目を選ぶと閉じる。一覧のタイルの ⋯（ui/scenePage.ts）も使う */
+export function createMenu(items: MenuItem[], label = '背景の編集'): { element: HTMLElement; open(): void; close(): void } {
   const element = document.createElement('div');
   element.className = 'bg-menu';
   element.hidden = true;
@@ -87,7 +87,7 @@ function createMenu(items: MenuItem[]): { element: HTMLElement; open(): void; cl
   const sheet = document.createElement('div');
   sheet.className = 'bg-menu__sheet';
   sheet.setAttribute('role', 'dialog');
-  sheet.setAttribute('aria-label', '背景の編集');
+  sheet.setAttribute('aria-label', label);
   const close = (): void => {
     element.hidden = true;
   };
