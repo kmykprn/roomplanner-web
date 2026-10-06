@@ -1,4 +1,4 @@
-# 切り抜きのモデル（`public/models/birefnet-lite-512-int8w.onnx`）の作り方
+# 切り抜きのモデル（`public/models/birefnet-lite-512-g7-int8w.onnx`）の作り方
 
 写真から家具を切り抜く [BiRefNet](https://github.com/ZhengPeng7/BiRefNet)（MIT）の軽い版（BiRefNet_lite）を、
 ブラウザで動かせる形にしたもの。深度の AI と同じく onnxruntime-web でワーカーの中で動かす（`src/core/cutoutModel.ts`）。
@@ -31,7 +31,11 @@ Python 3.10 と GPU は要らない（CPU で数分）。
 python -m venv .venv && .venv/bin/pip install torch torchvision transformers timm kornia einops onnx onnxruntime
 .venv/bin/python export_lite_gs.py 512 birefnet-lite-512.onnx          # HF の ZhengPeng7/BiRefNet_lite を落として書き出す
 .venv/bin/python quantize_weights.py birefnet-lite-512.onnx q.onnx
-.venv/bin/python shrink_constants.py q.onnx ../../../public/models/birefnet-lite-512-int8w.onnx
+.venv/bin/python shrink_constants.py q.onnx ../../../public/models/birefnet-lite-512-g7-int8w.onnx
 ```
 
 入力は `input_image`（1×3×512×512、ImageNet の平均と分散で正規化）、出力は `output_image`（1×1×512×512 のロジット）。
+
+**モデルを作り直したら、ファイル名を変えること**（`g7` の部分。`src/core/cutoutModel.ts` の `MODEL_FILE` も合わせる）。
+端末は一度使ったモデルを Service Worker の保管庫に残し、同じ名前なら保管庫のものを読む（vite.config.ts の `analysis-models`）。
+同じ名前で中身だけ変えると、端末は古いモデルを使い続ける（実際に iPhone で、作り直す前のモデルのまま落ち続けた）。

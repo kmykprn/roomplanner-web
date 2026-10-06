@@ -19,7 +19,8 @@
 
 import { decodePhoto, releaseWorker, runModel, type TensorData } from '@/core/onnxModel';
 
-const MODEL_FILE = 'birefnet-lite-512-int8w.onnx';
+/** モデルを作り直したら名前も変える。端末は同じ名前なら保管庫の古いものを読む（assets-src/models/birefnet/README.md） */
+const MODEL_FILE = 'birefnet-lite-512-g7-int8w.onnx';
 /** モデルの入力の大きさ。書き出したときに固定している */
 const INPUT_SIZE = 512;
 /** ImageNet の平均と分散。学習時と同じ値でないと精度が落ちる */
