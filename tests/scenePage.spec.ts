@@ -18,10 +18,33 @@ test('初めての起動は編集の画面。何もせずに戻ると、その�
   await expect(page.locator('.scenes__title')).toHaveText('背景');
   await expect(page.locator('.scene-tile--add')).toHaveText(/背景の画像を選ぶ/);
   await expect(page.locator('.scene-tile__button')).toHaveCount(0);
-  // 部屋のタブ。最初の起動で作られた部屋が 1 つある
+  // 部屋のタブ。部屋はまだ 1 つも無いので、空の一覧を見せずに新しく作って編集へ
   await page.locator('.scenes__tab', { hasText: '部屋' }).click();
+  await expect(page.locator('.scenes')).toBeHidden();
+  await expect(page.locator('.scene-header__name')).toHaveText(/^部屋 \d+\/\d+$/);
+  await expect(page.locator('.sheet__tab', { hasText: '内装' })).toBeVisible();
+  // 戻ると部屋の一覧に、その部屋が 1 つある
+  await page.getByRole('button', { name: '一覧に戻る' }).click();
   await expect(page.locator('.scenes__title')).toHaveText('部屋');
   await expect(page.locator('.scene-tile__button')).toHaveCount(1);
+});
+
+test('背景を全部消すと、次に開いたときは一覧ではなく新しい背景の編集から始まる', async ({ page }) => {
+  await page.evaluate(async () => {
+    const { photoScene } = await import('/src/core/photoState.ts');
+    const size: [number, number, number] = [0.5, 0.9, 0.5];
+    photoScene.add({ id: 'c1', typeId: 'box', name: '椅子', color: '#ccc', size, baseSize: size, position: [0, 0, 0], rotationY: 0 });
+  });
+  await page.getByRole('button', { name: '一覧に戻る' }).click();
+  await page.evaluate(async () => {
+    const { deleteScenes, entriesOf } = await import('/src/core/sceneLibrary.ts');
+    await deleteScenes(entriesOf('photo').map((e) => e.id));
+  });
+  await expect(page.locator('.scene-tile__button')).toHaveCount(0);
+  await page.reload();
+  await page.locator('.sheet').first().waitFor();
+  await expect(page.locator('.scenes')).toBeHidden();
+  await expect(page.locator('.scene-header__name')).toHaveText(/^背景 \d+\/\d+$/);
 });
 
 test('家具を置いて戻ると一覧にアイコン付きで残り、2 回目は一覧から始まり、押すと開く', async ({ page }) => {
