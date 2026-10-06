@@ -61,7 +61,7 @@ export function createLoginPanel(onSignedIn: () => void): LoginPanel {
   const loginButton = createButton('Google でログイン', 'button', () => void login(loginButton, signInWithGoogle));
   const appleButton = createButton('Apple でログイン', 'button', () => void login(appleButton, signInWithApple));
   appleButton.hidden = !isNativeApp;
-  const cancelButton = createButton('やめる', 'button is-quiet', () => close());
+  const cancelButton = createButton('キャンセル', 'button is-quiet', () => close());
   buttons.append(loginButton, appleButton, cancelButton);
 
   const error = document.createElement('p');
