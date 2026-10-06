@@ -11,7 +11,8 @@ test('家具を動かしている間は保存せず、離したときに保存�
   const result = await page.evaluate(async (movingId) => {
     const { activeScene, isPhotoMode } = await import('/src/core/mode.ts');
     const { beginEdit, endEdit } = await import('/src/core/editHistory.ts');
-    const key = isPhotoMode() ? 'roomplanner.photo' : 'roomplanner.room';
+    const { sceneLibrary, photoDataKey, roomDataKey } = await import('/src/core/sceneLibrary.ts');
+    const key = isPhotoMode() ? photoDataKey(sceneLibrary.get().current.photo!) : roomDataKey(sceneLibrary.get().current.room!);
     const savedX = (): number | undefined =>
       JSON.parse(localStorage.getItem(key) ?? '{}').furniture?.find((f: { id: string }) => f.id === movingId)?.position[0];
 
@@ -46,7 +47,8 @@ test('指で触っていないときの変更は、すぐ保存する', async ({
   const [id] = await openWithTwoCutouts(page);
   const saved = await page.evaluate(async (removedId) => {
     const { activeScene, isPhotoMode } = await import('/src/core/mode.ts');
-    const key = isPhotoMode() ? 'roomplanner.photo' : 'roomplanner.room';
+    const { sceneLibrary, photoDataKey, roomDataKey } = await import('/src/core/sceneLibrary.ts');
+    const key = isPhotoMode() ? photoDataKey(sceneLibrary.get().current.photo!) : roomDataKey(sceneLibrary.get().current.room!);
     activeScene().remove(removedId);
     return JSON.parse(localStorage.getItem(key) ?? '{}').furniture.map((f: { id: string }) => f.id);
   }, id);

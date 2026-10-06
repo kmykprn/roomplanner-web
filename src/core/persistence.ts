@@ -8,20 +8,21 @@
  * 保存先は localStorage。部屋と家具の一覧は数KBにしかならないので十分で、
  * 同期的に読めるぶん起動時の扱いが単純になる。
  * GLB の中身は大きいので Cache Storage に分けてある（modelCache.ts）。
+ *
+ * **背景と部屋は何組も持てる（core/sceneLibrary.ts）。** 残すのは「いま開いているもの」の鍵（id 付き）へ。
+ * 開くものが切り替わったら、ここの loadPhoto / loadRoom で中身を入れ替える（sceneLibrary が呼ぶ）
  */
 
 import { withCurrentSampleAssets } from '@/config/samples';
 import { appState, type AppState } from '@/core/appState';
 import { editSession } from '@/core/editHistory';
-import { roomSizeFor } from '@/config/interior';
-import { photoState, restoreDepth, setMaskUrl, settledView, showBackground, startAnalysis, type FittedScale, type PhotoState } from '@/core/photoState';
+import { DEFAULT_INTERIOR, DEFAULT_MATS, roomSizeFor } from '@/config/interior';
+import { photoState, resetPhotoState, restoreDepth, setMaskUrl, settledView, showBackground, startAnalysis, type FittedScale, type PhotoState } from '@/core/photoState';
 import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
 import { normalizeFloorFit } from '@/core/floorFit';
 import { normalizeScaleLine, normalizeScaleLines } from '@/core/scaleLine';
+import { photoDataKey, roomDataKey, sceneLibrary, setSaveFlusher, setSceneLoader, touchScene } from '@/core/sceneLibrary';
 import type { PlacedFurniture } from '@/config/furniture';
-
-const STORAGE_KEY = 'roomplanner.room';
-const PHOTO_STORAGE_KEY = 'roomplanner.photo';
 
 /** localStorage に残す写真モードの項目。写真そのものは大きいので IndexedDB（backgroundStore.ts） */
 type SavedPhoto = Pick<
@@ -31,17 +32,34 @@ type SavedPhoto = Pick<
 >;
 
 /**
- * 保存した状態を読み戻す。**シーンを組み立てる前**に呼ぶ。
+ * 部屋を読み戻す。起動時は**シーンを組み立てる前**に呼ぶ。開く部屋を切り替えたときも呼ぶ（sceneLibrary）。
+ * null なら新しい空の部屋（既定の内装、家具なし）。
  *
  * 壊れた値が入っていても起動できなくならないよう、読めなければ既定のまま進む。
  */
-export function restoreRoom(): void {
-  const saved = readSaved<Partial<AppState>>(STORAGE_KEY);
-  if (!saved) return;
+export function loadRoom(id: string | null): void {
+  loading += 1;
+  try {
+    applyRoom(id ? readSaved<Partial<AppState>>(roomDataKey(id)) : null);
+  } finally {
+    loading -= 1;
+  }
+}
+
+function applyRoom(saved: Partial<AppState> | null): void {
+  if (!saved) {
+    appState.set({
+      room: roomSizeFor(DEFAULT_INTERIOR, DEFAULT_MATS),
+      interior: { template: DEFAULT_INTERIOR, mats: DEFAULT_MATS },
+      furniture: [],
+      selectedId: null,
+    });
+    return;
+  }
 
   // 選択状態は残さない。前回選んでいた家具が消えている可能性があり、
   // 復元しても操作の手掛かりにならない
-  const interior = { ...appState.get().interior, ...(saved.interior ?? {}) };
+  const interior = { template: DEFAULT_INTERIOR, mats: DEFAULT_MATS, ...(saved.interior ?? {}) };
   appState.set({
     // 部屋の大きさは内装（畳数）から決まるので、保存値ではなく内装から引き直す
     room: roomSizeFor(interior.template, interior.mats),
@@ -66,15 +84,38 @@ function withBaseSize(furniture: unknown): PlacedFurniture[] {
   );
 }
 
+/** 何回目の読み込みか。読み戻しの途中で別の背景に切り替わったら、古いほうの写真を出さない */
+let photoLoad = 0;
+
 /**
- * 写真モードを読み戻す。
+ * 写真モードを読み戻す。起動時と、開く背景を切り替えたとき（sceneLibrary）に呼ぶ。
+ * null なら新しい空の背景（写真なし、家具なし）。
  *
  * 家具と寄り具合は同期的に戻し、写真そのものは IndexedDB から非同期に読んで
  * 出す。写真が残っていなければ「未選択」のまま（家具だけ残っていてもよい。
  * 写真を選び直せばそのまま乗る）
  */
-export function restorePhoto(): void {
-  const saved = readSaved<Partial<SavedPhoto>>(PHOTO_STORAGE_KEY);
+export function loadPhoto(id: string | null): void {
+  photoLoad += 1;
+  const load = photoLoad;
+  loading += 1;
+  try {
+    applyPhoto(id ? readSaved<Partial<SavedPhoto>>(photoDataKey(id)) : null, load);
+  } finally {
+    loading -= 1;
+  }
+}
+
+/**
+ * 読み込みの最中か。最中は保存しない。
+ * 読み込みは「前のものを捨てる → 入れる」の 2 段階で状態を書き換えるので、途中の空の状態が
+ * 開いたばかりのものの鍵に書かれてしまう（開いた直後に中身が消える）
+ */
+let loading = 0;
+
+function applyPhoto(saved: Partial<SavedPhoto> | null, load: number): void {
+  // 前に開いていた背景の写真・計算・家具を全部捨ててから入れる
+  resetPhotoState();
   if (!saved) return;
 
   photoState.set({
@@ -97,12 +138,14 @@ export function restorePhoto(): void {
 
   /** 読み戻しをやめて「写真が無い」に戻す。読み戻す間に別の写真を選んでいたら何もしない */
   const giveUp = (): void => {
+    if (load !== photoLoad) return;
     if (photoState.get().backgroundStatus === 'restoring') photoState.set({ backgroundStatus: 'idle', backgroundName: null });
   };
 
   readBackground()
     .then(async (blob) => {
-      // 読み戻す間に別の写真を選んでいたら、古い写真で上書きしない
+      // 読み戻す間に別の背景に切り替わった、または別の写真を選んでいたら、古い写真で上書きしない
+      if (load !== photoLoad) return;
       if (!['restoring', 'idle'].includes(photoState.get().backgroundStatus)) return;
       if (!blob) {
         // 名前だけ残って写真が無い状態にしない
@@ -110,11 +153,14 @@ export function restorePhoto(): void {
         return;
       }
       if (!(await showBackground(blob))) return;
+      if (load !== photoLoad) return;
       // 隠す場所は写真に付いているものなので、写真が出せたときだけ戻す
       const mask = await readMask();
+      if (load !== photoLoad) return;
       if (mask) setMaskUrl(URL.createObjectURL(mask));
       // 室内の寸法を計算した奥行きも、写真に付いているものなので同じく戻す
       const depthMap = await readDepth();
+      if (load !== photoLoad) return;
       if (depthMap) restoreDepth(depthMap);
       // 奥行きが残っていなければ（以前の版で選んだ写真など）、裏で解析する
       else startAnalysis();
@@ -161,28 +207,48 @@ function saveAfterEdit(save: () => void): () => void {
   const flush = (): void => {
     if (!waiting) return;
     waiting = false;
+    if (loading > 0) return;
     save();
   };
   editSession.subscribe(({ editing }) => {
     if (!editing) flush();
   });
   window.addEventListener('pagehide', flush);
+  flushes.push(flush);
   return () => {
     waiting = true;
     if (!editSession.get().editing) flush();
   };
 }
 
+/** 溜まっている保存を全部書き出す関数。開くものを切り替える前に sceneLibrary が呼ぶ（切り替えたあとに前のものの鍵へ書かないように） */
+const flushes: Array<() => void> = [];
+
+export function flushSaves(): void {
+  for (const flush of flushes) flush();
+}
+
+/** 読み込みと書き出しを sceneLibrary につなぐ。起動時に一度だけ呼ぶ */
+export function connectSceneLibrary(): void {
+  setSceneLoader('photo', loadPhoto);
+  setSceneLoader('room', loadRoom);
+  setSaveFlusher(flushSaves);
+}
+
 /** 変化したら保存する。起動時に一度だけ呼ぶ */
 export function persistRoomOnChange(): void {
   const request = saveAfterEdit(() => {
+    // 開いている部屋が無ければ残さない（空の状態を編集している。一覧から新しく作ると id が付く）
+    const id = sceneLibrary.get().current.room;
+    if (!id) return;
     const state = appState.get();
     try {
       // 選択状態は保存しない（上と同じ理由）
       localStorage.setItem(
-        STORAGE_KEY,
+        roomDataKey(id),
         JSON.stringify({ room: state.room, interior: state.interior, furniture: state.furniture })
       );
+      touchScene(id);
     } catch {
       // 容量超過やプライベートモード。保存できなくても操作は続けられる
     }
@@ -193,6 +259,8 @@ export function persistRoomOnChange(): void {
 /** 変化したら保存する。起動時に一度だけ呼ぶ */
 export function persistPhotoOnChange(): void {
   const request = saveAfterEdit(() => {
+    const id = sceneLibrary.get().current.photo;
+    if (!id) return;
     const state = photoState.get();
     // 読み込みと読み戻しの途中は残さない。名前だけ先に入って写真が無い、という中途半端を防ぐ
     // （読み戻しの途中に残すと、写真の名前が消え、次に開いたときに読み戻す間の画面が「写真が無い」になる）
@@ -210,7 +278,8 @@ export function persistPhotoOnChange(): void {
       backgroundName: state.backgroundStatus === 'ready' ? state.backgroundName : null,
     };
     try {
-      localStorage.setItem(PHOTO_STORAGE_KEY, JSON.stringify(saved));
+      localStorage.setItem(photoDataKey(id), JSON.stringify(saved));
+      touchScene(id);
     } catch {
       // 容量超過やプライベートモード。保存できなくても操作は続けられる
     }
