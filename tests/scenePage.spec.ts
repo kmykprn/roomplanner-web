@@ -16,7 +16,7 @@ test('初めての起動は編集の画面。何もせずに戻ると、その�
   await page.getByRole('button', { name: '一覧に戻る' }).click();
   await expect(page.locator('.scenes')).toBeVisible();
   await expect(page.locator('.scenes__title')).toHaveText('背景');
-  await expect(page.locator('.scene-tile--add')).toHaveText(/背景の画像を選ぶ/);
+  await expect(page.locator('.scene-tile--add')).toHaveText(/背景を作る/);
   await expect(page.locator('.scene-tile__button')).toHaveCount(0);
   // 部屋のタブ。部屋はまだ 1 つも無いので、空の一覧を見せずに新しく作って編集へ
   await page.locator('.scenes__tab', { hasText: '部屋' }).click();
@@ -114,4 +114,15 @@ test('複製すると「〜のコピー」ができて開く。選択して削�
   await confirm.getByRole('button', { name: '削除' }).click();
   await expect(page.locator('.scene-tile__button')).toHaveCount(1);
   await expect(list.locator('.manage__select')).toContainText('選択して削除');
+});
+
+test('ヘッダーの名前は真ん中にあり、‹ の押せる範囲と重ならない', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const back = document.querySelector('.scene-header__back')!.getBoundingClientRect();
+    const name = document.querySelector('.scene-header__name')!.getBoundingClientRect();
+    const header = document.querySelector('.header')!.getBoundingClientRect();
+    return { backRight: back.right, nameLeft: name.left, nameCenter: (name.left + name.right) / 2, headerCenter: (header.left + header.right) / 2 };
+  });
+  expect(r.nameLeft).toBeGreaterThanOrEqual(r.backRight);
+  expect(Math.abs(r.nameCenter - r.headerCenter)).toBeLessThan(1);
 });
