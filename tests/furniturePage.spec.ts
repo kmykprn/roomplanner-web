@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 操作タブの［＋ 家具を追加］を押すと、家具のページが画面全体に開く。家具を押すと「背景に追加」（部屋なら「部屋に追加」）と、見出しの右に［✎ 編集］のメニューが出る。
@@ -9,6 +9,7 @@ test.describe('家具のページ', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.locator('.sheet').first().waitFor();
+    await enterEditor(page);
   });
 
   /** 操作タブの［＋ 家具を追加］で、家具のページを開く */

@@ -16,27 +16,27 @@ const chairAt = (x: number) => {
 };
 const CHAIR_SOURCE = chairAt.toString();
 
-test('初めての起動では背景が 1 つだけでき（部屋は作らない）、置いた家具はその鍵に残る', async ({ page }) => {
+test('初めての起動では背景も部屋も無く、作って開いてから置いた家具がその鍵に残る', async ({ page }) => {
   const r = await page.evaluate(async () => {
-    const { sceneLibrary, photoDataKey, entriesOf } = await import('/src/core/sceneLibrary.ts');
+    const { sceneLibrary, photoDataKey, entriesOf, createScene, openScene } = await import('/src/core/sceneLibrary.ts');
     const { photoScene } = await import('/src/core/photoState.ts');
-    const { current } = sceneLibrary.get();
+    const atStart = { ...sceneLibrary.get().current, photos: entriesOf('photo').length, rooms: entriesOf('room').length };
+    const entry = createScene('photo');
+    openScene(entry.id);
     const size: [number, number, number] = [0.5, 0.9, 0.5];
     photoScene.add({ id: 'c1', typeId: 'box', name: '椅子', color: '#ccc', size, baseSize: size, position: [0, 0, 0], rotationY: 0 });
-    const saved = JSON.parse(localStorage.getItem(photoDataKey(current.photo!)) ?? '{}');
+    const saved = JSON.parse(localStorage.getItem(photoDataKey(entry.id)) ?? '{}');
     return {
-      photos: entriesOf('photo').map((e) => e.name),
-      rooms: entriesOf('room').map((e) => e.name),
-      current,
+      atStart,
+      name: entry.name,
+      current: sceneLibrary.get().current.photo,
       savedCount: saved.furniture?.length,
       index: JSON.parse(localStorage.getItem('roomplanner.scenes') ?? 'null'),
     };
   });
-  expect(r.photos).toHaveLength(1);
-  expect(r.photos[0]).toMatch(/^背景 \d+\/\d+$/);
-  expect(r.rooms).toHaveLength(0);
-  expect(r.current.photo).toBeTruthy();
-  expect(r.current.room).toBeNull();
+  expect(r.atStart).toEqual({ photo: null, room: null, photos: 0, rooms: 0 });
+  expect(r.name).toMatch(/^背景 \d+\/\d+$/);
+  expect(r.current).toBeTruthy();
   expect(r.savedCount).toBe(1);
   expect(r.index.entries).toHaveLength(1);
 });
@@ -46,7 +46,8 @@ test('背景を切り替えると家具が入れ替わり、開き直しても�
     const chair = new Function(`return (${source})`)() as (x: number) => Parameters<typeof photoScene.add>[0];
     const { sceneLibrary, createScene, openScene } = await import('/src/core/sceneLibrary.ts');
     const { photoScene, photoState } = await import('/src/core/photoState.ts');
-    const first = sceneLibrary.get().current.photo!;
+    const first = createScene('photo').id;
+    openScene(first);
     photoScene.add(chair(0));
     photoScene.add(chair(1));
     const second = createScene('photo', '寝室');

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 「家具を追加」のいちばん上に、3D を作れる残りの回数を出す（ui/walletBar.ts）。
@@ -9,6 +9,7 @@ import { openTab } from './helpers';
 async function openChooser(page: Page, auth: { anonymous: boolean }, wallet: { trialRemaining: number; credits: number; unmetered: boolean } | null): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async (auth) => {
     const { authState } = await import('/src/platform/auth.ts');
     authState.set({ ...authState.get(), status: 'ready', ...auth });

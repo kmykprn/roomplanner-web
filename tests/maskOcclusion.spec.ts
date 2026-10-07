@@ -1,3 +1,4 @@
+import { enterEditor } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -10,6 +11,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function setUp(page: Page, maskTop: number, maskBottom: number): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(
     async ({ maskTop, maskBottom }) => {
       const { photoState, setMaskUrl } = await import('/src/core/photoState.ts');

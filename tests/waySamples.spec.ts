@@ -1,3 +1,4 @@
+import { enterEditor } from './helpers';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -7,6 +8,7 @@ import { expect, test } from '@playwright/test';
 test('2D の行は切り抜き、3D の行は回る 3D の見本を出し、画面を閉じると 3D の描画を片付ける', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.locator('.manage__add').click();
   await page.locator('.page .thumb__button').first().click();
   const rows = page.locator('.lib__chooser .way');

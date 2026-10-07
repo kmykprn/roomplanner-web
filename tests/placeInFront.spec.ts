@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 新しく置いた家具は、写真の物（背景）の奥に入って隠れないようにする。
@@ -15,6 +15,7 @@ import { openTab } from './helpers';
 async function setUpPhoto(page: Page, blocks: Array<{ x: [number, number]; y: [number, number] }>): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async (blocks) => {
     const { photoState, setMaskUrl } = await import('/src/core/photoState.ts');
     const canvas = document.createElement('canvas');

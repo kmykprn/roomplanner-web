@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 操作タブの一覧（何も選んでいないとき）は、どの端末でもタイルが 2 段そろって切れずに見える。
@@ -17,6 +17,7 @@ for (const [name, width, height] of SCREENS) {
     await page.setViewportSize({ width, height });
     await page.goto('/');
     await page.locator('.sheet').first().waitFor();
+    await enterEditor(page);
     await page.evaluate(async () => {
       const { activeScene } = await import('/src/core/mode.ts');
       const scene = activeScene();
