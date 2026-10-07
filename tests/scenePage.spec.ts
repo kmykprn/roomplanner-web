@@ -24,7 +24,7 @@ async function createBackgroundWithChair(page: Page): Promise<void> {
 test('初めての起動も一覧から。＋ で編集に入り、何もせずに戻ると、その空の背景は一覧に残らない', async ({ page }) => {
   await expect(page.locator('.scenes')).toBeVisible();
   await expect(page.locator('.scenes__title')).toHaveText('背景');
-  await expect(page.locator('.scene-tile--add')).toHaveText(/背景を作る/);
+  await expect(page.locator('.scene-tile--add')).toHaveText(/新しい背景/);
   await expect(page.locator('.scene-tile__button')).toHaveCount(0);
   await page.locator('.scene-tile--add').click();
   await expect(page.locator('.scenes')).toBeHidden();
@@ -35,7 +35,7 @@ test('初めての起動も一覧から。＋ で編集に入り、何もせず�
   // 部屋のタブも、1 つも無ければ ＋ だけの一覧
   await page.locator('.scenes__tab', { hasText: '部屋' }).click();
   await expect(page.locator('.scenes__title')).toHaveText('部屋');
-  await expect(page.locator('.scene-tile--add')).toHaveText(/部屋を作る/);
+  await expect(page.locator('.scene-tile--add')).toHaveText(/新しい部屋/);
   await expect(page.locator('.scene-tile__button')).toHaveCount(0);
   await page.locator('.scene-tile--add').click();
   await expect(page.locator('.scene-header__name')).toHaveText(/^部屋 \d+\/\d+$/);

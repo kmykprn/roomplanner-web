@@ -40,8 +40,8 @@ export interface ScenePageHandlers {
 }
 
 const LABELS: Record<SceneKind, { title: string; add: string }> = {
-  photo: { title: '背景', add: '背景を作る' },
-  room: { title: '部屋', add: '部屋を作る' },
+  photo: { title: '背景', add: '新しい背景' },
+  room: { title: '部屋', add: '新しい部屋' },
 };
 
 export function createScenePage(handlers: ScenePageHandlers): ScenePage {
