@@ -373,10 +373,10 @@ applyBackground();
 
 // --- UI ---
 header.replaceChildren(createSceneHeader(() => void leaveEditor()));
-createBottomSheet(app);
+const bottomSheet = createBottomSheet(app);
 // 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときはいつも背景の一覧から
 // （1 つも無くても一覧。無いときに編集から始めると、どこにいるのか分かりにくかった）
-const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter });
+const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter, onFurniture: bottomSheet.openFurnitureLibrary });
 app.append(scenePage.element);
 scenePage.open('photo');
 

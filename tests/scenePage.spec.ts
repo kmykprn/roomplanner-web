@@ -112,3 +112,23 @@ test('ヘッダーの名前は真ん中にあり、‹ の押せる範囲と重�
   expect(Math.abs(r.nameCenter - r.headerCenter)).toBeLessThan(1);
   await expect(page.locator('.scene-header__name .ic')).toBeVisible();
 });
+
+test('下の「家具」タブで家具のページが開き、置くボタンは出ない。「×」で一覧に戻る', async ({ page }) => {
+  await page.locator('.scenes__tab', { hasText: '家具' }).click();
+  const furniture = page.getByRole('dialog', { name: '家具' });
+  await expect(furniture).toBeVisible();
+  // サンプルの家具を押すとメニューが出るが、置く先を開いていないので「背景に追加」は無い
+  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
+  await expect(page.locator('.tile-actions__name')).toBeVisible();
+  await expect(page.locator('.tile-actions__button')).toBeHidden();
+  await expect(page.locator('.tile-actions__edit')).toBeVisible();
+  await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
+  await page.getByRole('button', { name: '閉じる' }).click();
+  await expect(furniture).toBeHidden();
+  await expect(page.locator('.scenes')).toBeVisible();
+  // 編集の画面の「家具を追加」から開いたときは、置くボタンが戻っている
+  await page.locator('.scene-tile--add').click();
+  await page.locator('.manage__add').click();
+  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
+  await expect(page.locator('.tile-actions__button')).toHaveText('背景に追加');
+});

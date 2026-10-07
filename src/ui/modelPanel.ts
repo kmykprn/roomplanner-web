@@ -81,7 +81,17 @@ interface FailedItem {
   dismiss(): void;
 }
 
-export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HTMLElement; showHome(): void } {
+export interface ModelPanel {
+  element: HTMLElement;
+  showHome(): void;
+  /**
+   * 置けるかどうか。一覧の「家具」タブから開いたときは置く先（背景や部屋）を開いていないので、
+   * 「背景に追加」と置く形の選択肢を出さない（作る・編集・削除だけ）
+   */
+  setPlacing(enabled: boolean): void;
+}
+
+export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   const panel = document.createElement('div');
   panel.className = 'lib';
 
@@ -208,7 +218,9 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
   }
 
   // 家具を押したときに下から出すメニュー。大きな見本・置く形（2D / 3D）・「部屋に追加」（写真なら「背景に追加」）、見出しの右に［✎ 編集］
-  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
+  /** 置ける姿か（置く先を開いているか）。setPlacing で変える */
+  let placing = true;
+  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, canPlace: () => placing });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
@@ -363,7 +375,13 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): { element: HT
     normal.hidden = false;
   }
 
-  return { element: panel, showHome };
+  return {
+    element: panel,
+    showHome,
+    setPlacing(enabled) {
+      placing = enabled;
+    },
+  };
 }
 
 /** 「＋ 作る」のタイル。格子の先頭に置く */
@@ -765,6 +783,8 @@ function syncThumbs<T extends { id: string }>(
 function createTileActions(actions: {
   onPlace(model: GeneratedModel, facet: ModelFacet): void;
   onEdit(model: GeneratedModel): void;
+  /** 置ける姿か。置けないときは「背景に追加」と置く形の選択肢を出さない */
+  canPlace(): boolean;
 }): {
   element: HTMLElement;
   open(model: GeneratedModel): void;
@@ -860,10 +880,12 @@ function createTileActions(actions: {
       sheet.setAttribute('aria-label', model.name);
       // 開くたびに、いまの置き先の呼び名にする
       place.textContent = isPhotoMode() ? '背景に追加' : '部屋に追加';
+      const canPlace = actions.canPlace();
+      place.hidden = !canPlace;
       const hasFlat = model.imageKey !== null;
       const hasSolid = model.modelKey !== null;
-      // 選ぶものがあるときだけ選択肢を出す。片方しか無ければ、その形で置く
-      options.hidden = !(hasFlat && hasSolid);
+      // 選ぶものがあるときだけ選択肢を出す。片方しか無ければ、その形で置く。置けない姿では出さない
+      options.hidden = !(hasFlat && hasSolid) || !canPlace;
       makeModel.hidden = hasSolid;
       flatOption.showIcon(model);
       solidOption.showIcon(model);
