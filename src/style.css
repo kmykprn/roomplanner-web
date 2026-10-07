@@ -74,17 +74,16 @@ body {
 
 /* 編集の画面のヘッダー。左の「‹」で一覧に戻り、名前を押すと名前を変える */
 .scene-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
   align-items: center;
-  gap: 4px;
   min-width: 0;
   flex: 1;
+  margin: 0 -12px;
 }
 .scene-header__back {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  margin-left: -10px;
+  width: 48px;
+  height: 44px;
   padding: 0;
   border: none;
   background: none;
@@ -99,14 +98,14 @@ body {
 }
 .scene-header__name {
   min-width: 0;
-  padding: 6px 4px;
+  padding: 6px 8px;
   border: none;
   background: none;
   color: var(--text);
   font: inherit;
   font-size: 17px;
   font-weight: 600;
-  text-align: left;
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
