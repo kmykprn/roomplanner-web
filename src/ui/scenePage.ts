@@ -1,7 +1,7 @@
 /**
  * 保存した背景と部屋の一覧。アプリを開いたときの最初の画面（1 つも無くても一覧。＋ から作る）。
  *
- *   下のタブ       … 背景の一覧か、部屋の一覧か
+ *   下のタブ       … 背景の一覧か、部屋の一覧か。「家具」は家具のページ（作る・編集・削除）を上に開く
  *   ＋             … 新しい背景（または部屋）を作って編集へ。背景の写真は編集の画面で選ぶ
  *   タイル         … 押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
  *   タイルの ⋯     … 名前を変える・複製（複製したものを開く）・削除（確認は家具の削除と同じ文言）
@@ -37,6 +37,8 @@ export interface ScenePageHandlers {
   onOpen(entry: SceneEntry): void;
   /** ＋ を押した。新しく作って編集の画面へ */
   onCreate(kind: SceneKind): void;
+  /** 下の「家具」タブを押した。家具のページを一覧の上に開く */
+  onFurniture(): void;
 }
 
 const LABELS: Record<SceneKind, { title: string; add: string }> = {
@@ -82,6 +84,13 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     tabs.append(button);
     return button;
   });
+  // 「家具」。一覧ではなく家具のページ（作る・編集・削除）を上に開く
+  const furnitureTab = document.createElement('button');
+  furnitureTab.type = 'button';
+  furnitureTab.className = 'scenes__tab';
+  furnitureTab.append(createIcon('chair'), Object.assign(document.createElement('span'), { textContent: '家具' }));
+  furnitureTab.addEventListener('click', () => handlers.onFurniture());
+  tabs.append(furnitureTab);
 
   element.append(bar, body, tabs);
 

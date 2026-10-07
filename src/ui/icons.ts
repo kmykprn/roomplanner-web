@@ -12,7 +12,7 @@
 
 export type IconName =
   | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox' | 'more' | 'image'
-  | 'chevron-left' | 'copy' | 'grid';
+  | 'chevron-left' | 'copy' | 'grid' | 'chair';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -42,6 +42,8 @@ const PATHS: Record<IconName, string[]> = {
   'chevron-left': ['M14.5 5.5L8 12l6.5 6.5'],
   // 複製: 重なった四角
   copy: ['M9 9h11v11H9z', 'M15 9V4H4v11h5'],
+  // 家具: 椅子（背もたれ・座面・脚）
+  chair: ['M7 11V5h10v6', 'M5 11h14v4H5z', 'M7 15v4', 'M17 15v4'],
   // 一覧: 田の字
   grid: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'],
 };

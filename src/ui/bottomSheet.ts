@@ -141,7 +141,15 @@ const PHOTO_TABS: TabId[] = ['manage'];
  */
 const ANGLE_LIMITS = { min: -180, max: 180 };
 
-export function createBottomSheet(container: HTMLElement): void {
+export interface BottomSheet {
+  /**
+   * 家具のページを、置けない姿で開く（一覧の「家具」タブから。置く先の背景や部屋を開いていない）。
+   * 「×」で閉じると元の画面（一覧）に戻る
+   */
+  openFurnitureLibrary(): void;
+}
+
+export function createBottomSheet(container: HTMLElement): BottomSheet {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
   let activeTab: TabId = (isPhotoMode() ? PHOTO_TABS : ROOM_TABS)[0];
 
@@ -181,6 +189,8 @@ export function createBottomSheet(container: HTMLElement): void {
   function closeFurniturePage(): void {
     furniturePage.close();
     modelPanel.showHome();
+    // 次に「家具を追加」から開いたときは置ける姿に戻す
+    modelPanel.setPlacing(true);
   }
   const photoPanel = createPhotoPanel();
   const interiorPanel = createInteriorPanel();
@@ -772,6 +782,13 @@ export function createBottomSheet(container: HTMLElement): void {
   });
 
   render();
+
+  return {
+    openFurnitureLibrary() {
+      modelPanel.setPlacing(false);
+      furniturePage.open();
+    },
+  };
 }
 
 /** 置いた家具の形の札。3D モデルなら「3D」、切り抜きの板なら「2D」、どちらでもない（箱だけの古い記録）なら null */
