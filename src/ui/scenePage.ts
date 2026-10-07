@@ -1,7 +1,8 @@
 /**
- * 保存した背景と部屋の一覧。アプリを開いたときの最初の画面（1 つも無くても一覧。＋ から作る）。
+ * 保存した背景と部屋の一覧（ホーム）。アプリを開いたときの最初の画面（1 つも無くても一覧。＋ から作る）。
  *
- *   下のタブ       … 背景の一覧か、部屋の一覧か。「家具」は家具のページ（作る・編集・削除）を上に開く
+ *   右上の切り替え … 背景の一覧か、部屋の一覧か。暗い色で、選んでいる側が白
+ *   下のタブ       … 「ホーム」はこのページ。「家具」は家具のページ（作る・編集・削除）を上に開く
  *   ＋             … 新しい背景（または部屋）を作って編集へ。背景の写真は編集の画面で選ぶ
  *   タイル         … 押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
  *   タイルの ⋯     … 名前を変える・複製（複製したものを開く）・削除（確認は家具の削除と同じ文言）
@@ -56,11 +57,29 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   element.hidden = true;
   element.setAttribute('aria-label', '保存した背景と部屋');
 
+  // 見出し（左）と、背景 / 部屋の切り替え（右）。切り替えは暗い色で、選んでいる側が白
   const bar = document.createElement('div');
   bar.className = 'scenes__bar';
   const title = document.createElement('span');
   title.className = 'scenes__title';
-  bar.append(document.createElement('span'), title, document.createElement('span'));
+  const switcher = document.createElement('div');
+  switcher.className = 'scenes__switch';
+  switcher.setAttribute('role', 'group');
+  switcher.setAttribute('aria-label', '背景と部屋');
+  const switchButtons = (['photo', 'room'] as const).map((switchKind) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'scenes__switch-item';
+    button.textContent = LABELS[switchKind].title;
+    button.addEventListener('click', () => {
+      if (kind === switchKind) return;
+      kind = switchKind;
+      render();
+    });
+    switcher.append(button);
+    return button;
+  });
+  bar.append(title, switcher);
 
   const body = document.createElement('div');
   body.className = 'scenes__body';
@@ -68,36 +87,27 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   grid.className = 'scenes__grid';
   body.append(grid);
 
+  // 下のタブ。「ホーム」はこのページそのもの（いつも選ばれている）。「家具」は家具のページ（作る・編集・削除）を上に開く
   const tabs = document.createElement('nav');
   tabs.className = 'scenes__tabs';
-  tabs.setAttribute('aria-label', '背景と部屋');
-  const tabButtons = (['photo', 'room'] as const).map((tabKind) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'scenes__tab';
-    button.append(createIcon(tabKind === 'photo' ? 'image' : 'cube'), Object.assign(document.createElement('span'), { textContent: LABELS[tabKind].title }));
-    button.addEventListener('click', () => {
-      if (kind === tabKind) return;
-      kind = tabKind;
-      render();
-    });
-    tabs.append(button);
-    return button;
-  });
-  // 「家具」。一覧ではなく家具のページ（作る・編集・削除）を上に開く
+  tabs.setAttribute('aria-label', 'ホームと家具');
+  const homeTab = document.createElement('button');
+  homeTab.type = 'button';
+  homeTab.className = 'scenes__tab is-active';
+  homeTab.append(createIcon('grid'), Object.assign(document.createElement('span'), { textContent: 'ホーム' }));
   const furnitureTab = document.createElement('button');
   furnitureTab.type = 'button';
   furnitureTab.className = 'scenes__tab';
   furnitureTab.append(createIcon('chair'), Object.assign(document.createElement('span'), { textContent: '家具' }));
   furnitureTab.addEventListener('click', () => handlers.onFurniture());
-  tabs.append(furnitureTab);
+  tabs.append(homeTab, furnitureTab);
 
   element.append(bar, body, tabs);
 
   function render(): void {
     const labels = LABELS[kind];
     title.textContent = labels.title;
-    tabButtons.forEach((button, index) => button.classList.toggle('is-active', (['photo', 'room'] as const)[index] === kind));
+    switchButtons.forEach((button, index) => button.classList.toggle('is-active', (['photo', 'room'] as const)[index] === kind));
 
     const nodes: HTMLElement[] = [createAddTile(labels.add)];
     for (const entry of entriesOf(kind)) nodes.push(createTile(entry));

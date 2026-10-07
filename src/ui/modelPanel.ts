@@ -385,7 +385,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
 }
 
 /** 「＋ 作る」のタイル。格子の先頭に置く */
-function createAddTile(open: () => void, caption = '追加', label = '家具を追加'): HTMLElement {
+function createAddTile(open: () => void, caption = '新しい家具', label = '家具を追加'): HTMLElement {
   const thumb = createThumb(caption);
   thumb.image.classList.add('is-add');
   thumb.image.append(createIcon('plus'));

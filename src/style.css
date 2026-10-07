@@ -144,17 +144,39 @@ body {
 }
 .scenes__bar {
   flex: none;
-  display: grid;
-  grid-template-columns: 48px 1fr 48px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 52px;
-  padding: 0 4px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
 }
 .scenes__title {
-  text-align: center;
   font-size: 16px;
   font-weight: 700;
+}
+/* 背景 / 部屋の切り替え。画面の中でここだけ暗い色にして、切り替えだと一目で分かるようにする */
+.scenes__switch {
+  display: flex;
+  flex: none;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--text);
+}
+.scenes__switch-item {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #b8c0c4;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  touch-action: manipulation;
+}
+.scenes__switch-item.is-active {
+  background: #fff;
+  color: var(--text);
 }
 .scenes__body {
   flex: 1;
