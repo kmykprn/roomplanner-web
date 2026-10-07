@@ -155,28 +155,28 @@ body {
   font-size: 16px;
   font-weight: 700;
 }
-/* 背景 / 部屋の切り替え。画面の中でここだけ暗い色にして、切り替えだと一目で分かるようにする */
+/* 背景 / 部屋の切り替え。灰色の地に、選んでいる側が白（文字はメインカラー） */
 .scenes__switch {
   display: flex;
   flex: none;
-  padding: 3px;
+  padding: 2px;
   border-radius: 999px;
-  background: var(--text);
+  background: #e6e9ea;
 }
 .scenes__switch-item {
-  padding: 6px 14px;
+  padding: 6px 16px;
   border: none;
   border-radius: 999px;
   background: none;
-  color: #b8c0c4;
+  color: #5d6567;
   font: inherit;
   font-size: 14px;
   font-weight: 600;
   touch-action: manipulation;
 }
 .scenes__switch-item.is-active {
-  background: #fff;
-  color: var(--text);
+  background: var(--surface);
+  color: var(--primary);
 }
 .scenes__body {
   flex: 1;
