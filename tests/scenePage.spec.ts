@@ -32,8 +32,8 @@ test('初めての起動も一覧から。＋ で編集に入り、何もせず�
   await page.getByRole('button', { name: '一覧に戻る' }).click();
   await expect(page.locator('.scenes')).toBeVisible();
   await expect(page.locator('.scene-tile__button')).toHaveCount(0);
-  // 部屋のタブも、1 つも無ければ ＋ だけの一覧
-  await page.locator('.scenes__tab', { hasText: '部屋' }).click();
+  // 右上の切り替えで部屋にしても、1 つも無ければ ＋ だけの一覧
+  await page.locator('.scenes__switch-item', { hasText: '部屋' }).click();
   await expect(page.locator('.scenes__title')).toHaveText('部屋');
   await expect(page.locator('.scene-tile--add')).toHaveText(/新しい部屋/);
   await expect(page.locator('.scene-tile__button')).toHaveCount(0);
@@ -113,7 +113,8 @@ test('ヘッダーの名前は真ん中にあり、‹ の押せる範囲と重�
   await expect(page.locator('.scene-header__name .ic')).toBeVisible();
 });
 
-test('下の「家具」タブで家具のページが開き、置くボタンは出ない。「×」で一覧に戻る', async ({ page }) => {
+test('下の「家具」タブで家具のページが開き、置くボタンは出ない。「×」でホームに戻る', async ({ page }) => {
+  await expect(page.locator('.scenes__tab', { hasText: 'ホーム' })).toHaveClass(/is-active/);
   await page.locator('.scenes__tab', { hasText: '家具' }).click();
   const furniture = page.getByRole('dialog', { name: '家具' });
   await expect(furniture).toBeVisible();
