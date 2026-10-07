@@ -1,5 +1,5 @@
 /**
- * 編集の画面のヘッダー。左の「‹」で一覧に戻り、真ん中の名前を押すと名前を変える。
+ * 編集の画面のヘッダー。左の「‹」で一覧に戻り、真ん中の名前（右に鉛筆）を押すと名前を変える。
  * 名前は画面のど真ん中（左右 48px を空けた真ん中の欄）に置き、‹ の押せる範囲と重ねない。
  *
  * 名前は、いまのモード（背景か部屋か）で開いているものの名前。
@@ -22,10 +22,14 @@ export function createSceneHeader(onBack: () => void): HTMLElement {
   back.append(createIcon('chevron-left'));
   back.addEventListener('click', onBack);
 
+  // 名前と鉛筆は 1 つのボタン。鉛筆があるので、押すと名前を変えられると分かる
   const name = document.createElement('button');
   name.type = 'button';
   name.className = 'scene-header__name';
   name.setAttribute('aria-label', '名前を変える');
+  const label = document.createElement('span');
+  label.className = 'scene-header__label';
+  name.append(label, createIcon('pencil'));
   name.addEventListener('click', async () => {
     const entry = currentScene(modeState.get().mode);
     if (!entry) return;
@@ -37,7 +41,7 @@ export function createSceneHeader(onBack: () => void): HTMLElement {
 
   function render(): void {
     const entry = currentScene(modeState.get().mode);
-    name.textContent = entry?.name ?? '';
+    label.textContent = entry?.name ?? '';
   }
 
   render();

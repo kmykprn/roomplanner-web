@@ -125,4 +125,6 @@ test('ヘッダーの名前は真ん中にあり、‹ の押せる範囲と重�
   });
   expect(r.nameLeft).toBeGreaterThanOrEqual(r.backRight);
   expect(Math.abs(r.nameCenter - r.headerCenter)).toBeLessThan(1);
+  // 名前の右に鉛筆がある（押すと名前を変えられると分かる）
+  await expect(page.locator('.scene-header__name .ic')).toBeVisible();
 });
