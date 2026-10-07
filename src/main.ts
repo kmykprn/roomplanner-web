@@ -62,7 +62,6 @@ import {
   createScene,
   currentScene,
   deleteScenes,
-  entriesOf,
   openScene,
   restoreSceneLibrary,
   sceneLibrary,
@@ -375,12 +374,11 @@ applyBackground();
 // --- UI ---
 header.replaceChildren(createSceneHeader(() => void leaveEditor()));
 createBottomSheet(app);
-// 保存した背景と部屋の一覧。編集の画面の上に重ねる。
-// 背景が 1 つも無ければ（初めての起動、全部消したあと）、一覧ではなく新しい背景の編集から始める
+// 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときはいつも背景の一覧から
+// （1 つも無くても一覧。無いときに編集から始めると、どこにいるのか分かりにくかった）
 const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter });
 app.append(scenePage.element);
-if (entriesOf('photo').length === 0) enterScene(createScene('photo'));
-else scenePage.open('photo');
+scenePage.open('photo');
 
 /** 一覧のタイルを押した。それを開いて（モードも合わせて）編集の画面へ */
 function enterScene(entry: SceneEntry): void {
@@ -390,7 +388,7 @@ function enterScene(entry: SceneEntry): void {
 }
 
 /**
- * 一覧の ＋（と、1 つも無い種類のタブ）。新しく作って開く。
+ * 一覧の ＋。新しく作って開く。
  * 背景の写真は、編集の画面の真ん中の「背景の画像を選ぶ」から選ぶ（ここでは開かない。写真を選ばずに戻ったら消える）
  */
 function createAndEnter(kind: SceneKind): void {

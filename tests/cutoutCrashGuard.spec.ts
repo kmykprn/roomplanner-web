@@ -1,3 +1,4 @@
+import { enterEditor } from './helpers';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -19,6 +20,7 @@ async function disabled(page: import('@playwright/test').Page): Promise<boolean>
 test('何もなければ端末で切り抜く。切り抜き中の記録が残ったまま起動したら、以後はサーバーに頼み、落ちた写真を失敗として戻す', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   expect(await disabled(page)).toBe(false);
 
   // 端末で切り抜いている最中にアプリが落ちた状態（記録が残っている）
@@ -29,6 +31,7 @@ test('何もなければ端末で切り抜く。切り抜き中の記録が残�
   );
   await page.reload();
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   expect(await disabled(page)).toBe(true);
   const failed = await page.evaluate(async () => {
     const { cutoutState } = await import('/src/core/cutout.ts');
@@ -47,5 +50,6 @@ test('何もなければ端末で切り抜く。切り抜き中の記録が残�
   // 次の起動でも（印はもう無いが）サーバーに頼み続ける
   await page.reload();
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   expect(await disabled(page)).toBe(true);
 });

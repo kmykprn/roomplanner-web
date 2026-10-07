@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 上下のつまみは、選んだ家具の真上に出す。家具そのものを指で動かしている間は隠し、離したら戻す。
@@ -8,6 +8,7 @@ import { openTab } from './helpers';
 test('家具を動かしている間は上下のつまみを隠し、離したら戻す', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async () => {
     const { photoState, photoScene } = await import('/src/core/photoState.ts');
     // 写真があることにする（写真の解析は走らせない）。縦横比を決めないので、3D はキャンバス全体に描く
@@ -46,6 +47,7 @@ test('家具を動かしている間は上下のつまみを隠し、離した�
 test('操作タブに床からの高さのバーを出さない', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');
     const scene = activeScene();

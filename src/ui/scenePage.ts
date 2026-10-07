@@ -1,11 +1,10 @@
 /**
- * 保存した背景と部屋の一覧。アプリを開いたときの最初の画面（背景が 1 つも無いときだけは、新しい背景の編集から）。
+ * 保存した背景と部屋の一覧。アプリを開いたときの最初の画面（1 つも無くても一覧。＋ から作る）。
  *
- *   下のタブ       … 背景の一覧か、部屋の一覧か。1 つも無い種類は、空の一覧を見せずに新しく作って編集へ
+ *   下のタブ       … 背景の一覧か、部屋の一覧か
  *   ＋             … 新しい背景（または部屋）を作って編集へ。背景の写真は編集の画面で選ぶ
  *   タイル         … 押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
- *   タイルの ⋯     … 名前を変える・複製（複製したものを開く）
- *   選択して削除   … タイルに ✓ を付けて「削除」。件数は出さない。確認は家具の削除と同じ文言
+ *   タイルの ⋯     … 名前を変える・複製（複製したものを開く）・削除（確認は家具の削除と同じ文言）
  *
  * 編集の画面（写真と下のシート）はこのページの下にそのままあり、ページを隠すと見える。
  * 開くものの切り替えとモードの切り替えは呼ぶ側（main.ts）が行う。ここは一覧の表示と、押されたことを伝えるだけ
@@ -47,9 +46,6 @@ const LABELS: Record<SceneKind, { title: string; add: string }> = {
 
 export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   let kind: SceneKind = 'photo';
-  /** 選んで消している最中か */
-  let selecting = false;
-  const picked = new Set<string>();
   /** アイコンの画像の URL。読んだら覚えておき、消えたものは解放する */
   const thumbnails = new Map<string, string>();
 
@@ -66,27 +62,9 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
 
   const body = document.createElement('div');
   body.className = 'scenes__body';
-  const tools = document.createElement('div');
-  tools.className = 'scenes__tools';
-  const selectButton = document.createElement('button');
-  selectButton.type = 'button';
-  selectButton.className = 'manage__select';
-  selectButton.addEventListener('click', () => setSelecting(!selecting));
-  tools.append(selectButton);
   const grid = document.createElement('div');
   grid.className = 'scenes__grid';
-  body.append(tools, grid);
-
-  // 選んで消している間だけ出す「削除」
-  const actions = document.createElement('div');
-  actions.className = 'scenes__actions';
-  actions.hidden = true;
-  const removeButton = document.createElement('button');
-  removeButton.type = 'button';
-  removeButton.className = 'button is-danger is-small';
-  removeButton.textContent = '削除';
-  removeButton.addEventListener('click', () => void confirmRemove());
-  actions.append(removeButton);
+  body.append(grid);
 
   const tabs = document.createElement('nav');
   tabs.className = 'scenes__tabs';
@@ -97,54 +75,23 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     button.className = 'scenes__tab';
     button.append(createIcon(tabKind === 'photo' ? 'image' : 'cube'), Object.assign(document.createElement('span'), { textContent: LABELS[tabKind].title }));
     button.addEventListener('click', () => {
-      // 1 つも無い種類は、空の一覧を見せずに新しく作って編集へ
-      if (entriesOf(tabKind).length === 0) {
-        handlers.onCreate(tabKind);
-        return;
-      }
       if (kind === tabKind) return;
       kind = tabKind;
-      setSelecting(false);
       render();
     });
     tabs.append(button);
     return button;
   });
 
-  element.append(bar, body, actions, tabs);
-
-  function setSelecting(value: boolean): void {
-    selecting = value;
-    picked.clear();
-    render();
-  }
-
-  /** 「削除」。家具の削除と同じ確認を出してから消す */
-  async function confirmRemove(): Promise<void> {
-    if (picked.size === 0) return;
-    const ok = await confirmDelete(picked.size);
-    if (!ok) return;
-    await deleteScenes([...picked]);
-    setSelecting(false);
-  }
+  element.append(bar, body, tabs);
 
   function render(): void {
     const labels = LABELS[kind];
     title.textContent = labels.title;
     tabButtons.forEach((button, index) => button.classList.toggle('is-active', (['photo', 'room'] as const)[index] === kind));
-    element.classList.toggle('is-selecting', selecting);
-    selectButton.replaceChildren();
-    if (selecting) {
-      selectButton.textContent = 'キャンセル';
-    } else {
-      selectButton.append(createIcon('checkbox'), Object.assign(document.createElement('span'), { textContent: '選択して削除' }));
-    }
-    actions.hidden = !selecting;
-    removeButton.disabled = picked.size === 0;
 
-    const entries = entriesOf(kind);
     const nodes: HTMLElement[] = [createAddTile(labels.add)];
-    for (const entry of entries) nodes.push(createTile(entry));
+    for (const entry of entriesOf(kind)) nodes.push(createTile(entry));
     grid.replaceChildren(...nodes);
     // 無くなったもののアイコンは解放する
     const alive = new Set(sceneLibrary.get().entries.map((entry) => entry.id));
@@ -159,7 +106,6 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'scene-tile scene-tile--add';
-    tile.disabled = selecting;
     tile.append(createIcon('plus'), Object.assign(document.createElement('span'), { textContent: label }));
     tile.addEventListener('click', () => handlers.onCreate(kind));
     return tile;
@@ -169,67 +115,58 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     const tile = document.createElement('div');
     tile.className = 'scene-tile';
     tile.dataset.id = entry.id;
-    tile.classList.toggle('is-picked', picked.has(entry.id));
 
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'scene-tile__button';
-    button.setAttribute('aria-label', selecting ? `${entry.name} を選ぶ` : `${entry.name} を開く`);
+    button.setAttribute('aria-label', `${entry.name} を開く`);
     const image = document.createElement('span');
     image.className = 'scene-tile__img';
     applyThumbnail(entry.id, image);
     button.append(image);
-    if (selecting) {
-      const pick = document.createElement('span');
-      pick.className = 'thumb__pick';
-      pick.append(createIcon('check'));
-      button.append(pick);
-    }
-    button.addEventListener('click', () => {
-      if (!selecting) {
-        handlers.onOpen(entry);
-        return;
-      }
-      if (picked.has(entry.id)) picked.delete(entry.id);
-      else picked.add(entry.id);
-      render();
-    });
+    button.addEventListener('click', () => handlers.onOpen(entry));
 
     const name = document.createElement('span');
     name.className = 'scene-tile__name';
     name.textContent = entry.name;
-    tile.append(button, name);
 
-    if (!selecting) {
-      const more = document.createElement('button');
-      more.type = 'button';
-      more.className = 'scene-tile__more';
-      more.setAttribute('aria-label', `${entry.name} のメニュー`);
-      more.append(createIcon('more'));
-      const menu = createMenu(
-        [
-          {
-            icon: 'pencil',
-            label: '名前を変える',
-            run: async () => {
-              const value = await askName(entry.name);
-              if (value !== null) renameScene(entry.id, value);
-            },
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'scene-tile__more';
+    more.setAttribute('aria-label', `${entry.name} のメニュー`);
+    more.append(createIcon('more'));
+    const menu = createMenu(
+      [
+        {
+          icon: 'pencil',
+          label: '名前を変える',
+          run: async () => {
+            const value = await askName(entry.name);
+            if (value !== null) renameScene(entry.id, value);
           },
-          {
-            icon: 'copy',
-            label: '複製',
-            run: async () => {
-              const copy = await duplicateScene(entry.id);
-              if (copy) handlers.onOpen(copy);
-            },
+        },
+        {
+          icon: 'copy',
+          label: '複製',
+          run: async () => {
+            const copy = await duplicateScene(entry.id);
+            if (copy) handlers.onOpen(copy);
           },
-        ],
-        entry.name
-      );
-      more.addEventListener('click', menu.open);
-      tile.append(more, menu.element);
-    }
+        },
+        {
+          icon: 'trash',
+          label: '削除',
+          danger: true,
+          run: async () => {
+            if (await confirmDelete(entry.name)) await deleteScenes([entry.id]);
+          },
+        },
+      ],
+      entry.name
+    );
+    more.addEventListener('click', menu.open);
+
+    tile.append(button, name, more, menu.element);
     return tile;
   }
 
@@ -256,8 +193,6 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     element,
     open(nextKind) {
       kind = nextKind;
-      selecting = false;
-      picked.clear();
       // 開き直すたびにアイコンを読み直す（編集で変わっているため）
       for (const url of thumbnails.values()) URL.revokeObjectURL(url);
       thumbnails.clear();
@@ -271,8 +206,8 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   };
 }
 
-/** 削除の確認。家具の削除と同じ文言。消すなら true */
-function confirmDelete(count: number): Promise<boolean> {
+/** 削除の確認。何を消すかを名前で出す。文言は家具の削除と同じ。消すなら true */
+function confirmDelete(name: string): Promise<boolean> {
   return new Promise((resolve) => {
     const modal = document.createElement('div');
     modal.className = 'modal';
@@ -281,7 +216,7 @@ function confirmDelete(count: number): Promise<boolean> {
     box.className = 'modal__box';
     const title = document.createElement('p');
     title.className = 'modal__title';
-    title.textContent = count === 1 ? '選んだものを削除します' : '選んだものをまとめて削除します';
+    title.textContent = `「${name}」を削除します`;
     const note = document.createElement('p');
     note.className = 'hint is-error';
     note.textContent = 'この端末から完全に削除します。削除後は復元はできませんがよろしいですか？';

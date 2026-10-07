@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 端末で切り抜く途中でアプリが落ちた端末では、以後サーバーで切り抜いている（core/cutout.ts）。
@@ -10,6 +10,7 @@ const DISABLED_KEY = 'roomplanner.cutout.localDisabled';
 test('落ちた印がある端末では知らせが出て、「端末でもう一度試す」で印が消える', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
   // 落ちたことが無ければ出ない
@@ -18,6 +19,7 @@ test('落ちた印がある端末では知らせが出て、「端末でもう�
   await page.evaluate((key) => localStorage.setItem(key, '1'), DISABLED_KEY);
   await page.reload();
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
   const notice = page.locator('.lib__local');

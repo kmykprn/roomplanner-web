@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 家具のページの一覧では、2D と 3D を両方持つ家具も 1 枚のタイルにする。3D も持つ家具には右下に立方体の印。
@@ -10,6 +10,7 @@ import { openTab } from './helpers';
 async function openFurniturePage(page: Page): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
   await expect(page.locator('.page')).toBeVisible();

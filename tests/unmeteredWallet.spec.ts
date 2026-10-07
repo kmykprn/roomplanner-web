@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 回数を数えない利用者（開発者のテスト用。サーバーの config/unmetered_uids.json）は、
@@ -10,6 +10,7 @@ import { openTab } from './helpers';
 async function openFlatOnlyEditor(page: Page, wallet: { trialRemaining: number; credits: number; unmetered: boolean }): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async (wallet) => {
     const { walletState } = await import('/src/core/wallet.ts');
     walletState.set({ status: 'ready', noBanner: false, ...wallet });

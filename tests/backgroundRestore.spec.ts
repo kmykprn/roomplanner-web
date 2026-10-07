@@ -1,3 +1,4 @@
+import { enterEditor } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -9,6 +10,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function pickPhoto(page: Page): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async () => {
     const canvas = document.createElement('canvas');
     canvas.width = 1200;
@@ -51,6 +53,7 @@ async function reloadAndRecord(page: Page): Promise<string[]> {
   });
   await page.reload();
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await expect
     .poll(() => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().backgroundStatus), { timeout: 20000 })
     .not.toBe('restoring');

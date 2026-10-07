@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { enterEditor } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -57,6 +58,7 @@ test('写真を端末の中で切り抜き、Python で動かした結果と正�
   test.slow();
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   let serverCalls = 0;
   await page.route('**/cutout-jobs**', (route) => {
     serverCalls += 1;

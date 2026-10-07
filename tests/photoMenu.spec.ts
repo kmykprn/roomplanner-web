@@ -1,3 +1,4 @@
+import { enterEditor } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
@@ -8,6 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function open(page: Page, withPhoto: boolean): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   if (withPhoto) {
     await page.evaluate(async () => {
       const { photoState } = await import('/src/core/photoState.ts');
@@ -64,7 +66,7 @@ test('［⋯］を押すとメニューが出て、選んだ調整の画面が�
 test('メニューの外を押すと閉じ、「背景の画像を外す」で背景が無くなり［⋯］も消える', async ({ page }) => {
   await open(page, true);
   await more(page).click();
-  await page.locator('.bg-menu__dim').click({ position: { x: 20, y: 20 } });
+  await page.locator('.photo-menu .bg-menu__dim').click({ position: { x: 20, y: 20 } });
   await expect(menu(page)).toBeHidden();
   await more(page).click();
   await menu(page).getByRole('button', { name: '背景の画像を外す' }).click();

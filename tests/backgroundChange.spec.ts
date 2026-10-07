@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 背景の画像を変えたり、写真の解析の結果でカメラ（画角・傾き・撮った高さ）が変わったりしても、
@@ -28,6 +28,7 @@ async function openWithCamera(page: Page): Promise<void> {
   });
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await openTab(page, '操作');
 }
 

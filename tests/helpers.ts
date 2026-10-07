@@ -7,6 +7,7 @@ import type { Page } from '@playwright/test';
 export async function openWithTwoCutouts(page: Page): Promise<string[]> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   return page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');
     const scene = activeScene();
@@ -38,8 +39,7 @@ export async function openTab(page: Page, label: string): Promise<void> {
 }
 
 /**
- * 保存した背景と部屋の一覧（最初の画面）が出ていれば、開いているもののタイルを押して編集の画面へ。
- * 初めての起動は編集の画面から始まるので何もしない
+ * 保存した背景と部屋の一覧（最初の画面）が出ていれば、最初のタイル（無ければ ＋）を押して編集の画面へ
  */
 export async function enterEditor(page: Page): Promise<void> {
   const list = page.locator('.scenes');

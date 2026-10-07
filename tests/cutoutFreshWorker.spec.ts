@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { enterEditor } from './helpers';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -11,6 +12,7 @@ test('深度のあとに切り抜いても、ワーカーのメモリは切り�
   test.slow();
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   const photo = Array.from(readFileSync(new URL('./fixtures/chair-in-room.jpg', import.meta.url)));
   const r = await page.evaluate(async (bytes) => {
     const { lastHeapInfo } = await import('/src/core/onnxModel.ts');

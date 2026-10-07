@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 下のタブは、部屋モードなら「内装」「操作」の 2 つ（家具のタブは無い）。写真モードは操作だけで、タブの帯を出さない
@@ -10,6 +10,7 @@ import { openTab } from './helpers';
 async function open(page: Page, withPhoto: boolean): Promise<void> {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   if (withPhoto) {
     await page.evaluate(async () => {
       const { photoState } = await import('/src/core/photoState.ts');

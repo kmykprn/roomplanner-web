@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 操作タブのバーは、真ん中で吸い付かない。置いたときの姿（向きの 0°・大きさの 100%）へは、
@@ -9,6 +9,7 @@ test.describe('操作タブのバーの戻すボタン', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.locator('.sheet').first().waitFor();
+    await enterEditor(page);
     await page.evaluate(async () => {
       const { activeScene } = await import('/src/core/mode.ts');
       const scene = activeScene();
@@ -92,6 +93,7 @@ test.describe('操作タブのバーの戻すボタン', () => {
 test('拡大・縮小のバーの「1倍」で、倍率 1 に戻る', async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
   await page.evaluate(async () => {
     const { photoState } = await import('/src/core/photoState.ts');
     // 写真があることにする（写真の解析は走らせない）

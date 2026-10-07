@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openTab } from './helpers';
+import { openTab , enterEditor} from './helpers';
 
 /**
  * 家具を作り始めたとき（写真を送っている間・順番を待つ間）は、文言を「準備中」にし、円を少しずつ進める。
@@ -10,6 +10,7 @@ import { openTab } from './helpers';
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
 });
 
 test('3D: 押した瞬間から円が少し出て、順番待ちの間も進み、作業が始まっても戻らない', async ({ page }) => {
