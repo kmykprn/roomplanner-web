@@ -1,7 +1,7 @@
 /**
  * 保存した背景と部屋の一覧（ホーム）。アプリを開いたときの最初の画面（1 つも無くても一覧。＋ から作る）。
  *
- *   右上の切り替え … 背景の一覧か、部屋の一覧か。暗い色で、選んでいる側が白
+ *   右上の切り替え … 背景の一覧か、部屋の一覧か
  *   下のタブ       … 「ホーム」はこのページ。「家具」は家具のページ（作る・編集・削除）を上に開く
  *   ＋             … 新しい背景（または部屋）を作って編集へ。背景の写真は編集の画面で選ぶ
  *   タイル         … 押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
@@ -57,7 +57,7 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   element.hidden = true;
   element.setAttribute('aria-label', '保存した背景と部屋');
 
-  // 見出し（左）と、背景 / 部屋の切り替え（右）。切り替えは暗い色で、選んでいる側が白
+  // 見出し（左）と、背景 / 部屋の切り替え（右）
   const bar = document.createElement('div');
   bar.className = 'scenes__bar';
   const title = document.createElement('span');
