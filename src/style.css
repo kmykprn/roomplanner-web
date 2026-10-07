@@ -97,6 +97,10 @@ body {
   height: 26px;
 }
 .scene-header__name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-width: 0;
   padding: 6px 8px;
   border: none;
@@ -105,11 +109,19 @@ body {
   font: inherit;
   font-size: 17px;
   font-weight: 600;
-  text-align: center;
+  touch-action: manipulation;
+}
+.scene-header__label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  touch-action: manipulation;
+}
+.scene-header__name .ic {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
 }
 
 /*
