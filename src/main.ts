@@ -489,7 +489,7 @@ viewer.onFrame(() => {
 
 viewer.start();
 
-// 開いた直後のアイコンの画面（index.html）を消す。読み込みは済んでいるので、開いてから 1.5 秒たったら薄くして外す
+// 開いた直後の真っ白な画面（index.html）を消す。読み込みは済んでいるので、開いてから 1.5 秒たったら薄くして外す
 const splash = document.getElementById('splash');
 if (splash) {
   const SPLASH_MIN_MS = 1500;
