@@ -488,3 +488,16 @@ viewer.onFrame(() => {
 });
 
 viewer.start();
+
+// 開いた直後のアイコンの画面（index.html）を消す。読み込みは済んでいるので、開いてから 1.5 秒たったら薄くして外す
+const splash = document.getElementById('splash');
+if (splash) {
+  const SPLASH_MIN_MS = 1500;
+  const remaining = Math.max(0, SPLASH_MIN_MS - performance.now());
+  window.setTimeout(() => {
+    splash.classList.add('is-leaving');
+    splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+    // 動きを減らす設定では transition が起きないので、少し待って外す
+    window.setTimeout(() => splash.remove(), 400);
+  }, remaining);
+}
