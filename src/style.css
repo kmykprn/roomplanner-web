@@ -1,6 +1,10 @@
 /* カラーテーマは config/theme.ts と対応させる */
 :root {
-  --primary: #0a7ea4;
+  --primary: #6e9c11;
+  /* アイコンと同じ黄緑。白い地の上の印（＋ の枠、選んでいるタブの文字）に使う。ボタンの地には使わない（白い文字が読みにくい） */
+  --accent: #8bc516;
+  /* メインカラーの薄い地（＋ のタイルなど） */
+  --primary-tint: #f1f7e3;
   --text: #11181c;
   --background: #f5f5f5;
   --surface: #ffffff;
@@ -176,7 +180,7 @@ body {
 }
 .scenes__switch-item.is-active {
   background: var(--surface);
-  color: var(--primary);
+  color: var(--accent);
 }
 .scenes__body {
   flex: 1;
@@ -247,10 +251,10 @@ body {
   justify-content: center;
   gap: 6px;
   aspect-ratio: 3 / 4;
-  border: 1.5px dashed var(--primary);
+  border: 1.5px dashed var(--accent);
   border-radius: 12px;
-  background: #eaf5f9;
-  color: var(--primary);
+  background: var(--primary-tint);
+  color: var(--accent);
   font: inherit;
   font-size: 12px;
   touch-action: manipulation;
@@ -288,7 +292,7 @@ body {
   height: 24px;
 }
 .scenes__tab.is-active {
-  color: var(--primary);
+  color: var(--accent);
   font-weight: 700;
 }
 /* 名前を変える欄 */
@@ -1334,7 +1338,7 @@ body {
   box-sizing: border-box;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #eaf4f8;
+  background: var(--primary-tint);
 }
 .wallet-bar[hidden],
 .wallet-bar [hidden] {
@@ -1577,9 +1581,9 @@ body {
 
 /* 「＋ 作る」。破線の枠と主色で、置く家具とは別の物だと分かるように */
 .thumb__img.is-add {
-  border: 1.5px dashed var(--primary);
-  background: #eaf4f8;
-  color: var(--primary);
+  border: 1.5px dashed var(--accent);
+  background: var(--primary-tint);
+  color: var(--accent);
 }
 .thumb__img.is-add .ic {
   width: 28px;
@@ -2284,7 +2288,7 @@ body {
 .facet-option[aria-pressed='true'] {
   border: 2px solid var(--primary);
   padding: 6.5px;
-  background: #eaf4f8;
+  background: var(--primary-tint);
 }
 .facet-option b {
   display: block;
