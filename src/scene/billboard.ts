@@ -68,7 +68,7 @@ export async function loadBillboard(
 
   const outline = new THREE.LineSegments(
     new THREE.EdgesGeometry(plane.geometry),
-    new THREE.LineBasicMaterial({ color: 0x0a7ea4 })
+    new THREE.LineBasicMaterial({ color: 0x6e9c11 })
   );
   outline.position.y = height / 2;
   outline.name = 'outline';
