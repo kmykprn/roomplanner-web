@@ -21,7 +21,7 @@ async function openFlatOnlyEditor(page: Page, wallet: { trialRemaining: number; 
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
   await page.locator('.page .thumb__button', { hasText: '切り抜きだけ' }).click();
-  await page.getByRole('button', { name: '3D モデルを作る' }).click();
+  await page.locator('.tile-actions__edit').click();
   await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveText('家具の編集');
 }
 

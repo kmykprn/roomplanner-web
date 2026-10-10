@@ -27,6 +27,7 @@ import { preparingRatio, progressFor } from '@/core/progress';
 import {
   dismissError,
   generationState,
+  isMakingModel,
   startGenerationForModel,
   type GenerationJob,
 } from '@/core/generation';
@@ -216,7 +217,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   }
 
   // 家具を押したときに下から出すメニュー。大きな見本・置く形（2D / 3D）・「部屋に追加」（写真なら「背景に追加」）、見出しの右に［✎ 編集］
-  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
+  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, onMake: makeModelFromMenu });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
@@ -254,6 +255,24 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
       baseSize: [...item.size],
     });
     scene.select(id);
+  }
+
+  /**
+   * メニューの［＋ 3D モデルを作る］。その場で作り始める（編集の姿は経ない）。
+   * 3D 化にはログインが要るので、匿名なら追加画面のログインに送る。
+   * 残りの回数が 0 なら編集の姿を開く（使い切ったことと［購入］はそこに出ている）
+   */
+  function makeModelFromMenu(model: GeneratedModel): void {
+    if (authState.get().anonymous) {
+      openChooser();
+      chooser.requireLogin('ログイン後に、もう一度「3D モデルを作る」を押してください');
+      return;
+    }
+    if (remainingGenerations() === 0) {
+      openEditor(model);
+      return;
+    }
+    void startGenerationForModel(model);
   }
 
   /** 家具を、メニューで選んだ形で置く。2D なら切り抜きの板を、3D ならモデルを置く */
@@ -765,7 +784,8 @@ function syncThumbs<T extends { id: string }>(
  *   見出し   … 家具の名前と、右に控えめな［✎ 編集］
  *   見本     … 大きな見本（ui/furniturePreview.ts）。3D はゆっくり回り、2D は上下にゆっくり揺れる
  *   置く形   … 見本の付いた 2D と 3D の選択肢。両方ある家具は最初 3D。選ぶと見本も切り替わる。
- *              3D が無い家具は 2D を選んだ状態にし、3D の側は点線の［＋ 3D モデルを作る］にする（押すと編集の姿の、3D を作る欄へ）。
+ *              3D が無い家具は 2D を選んだ状態にし、3D の側は点線の［＋ 3D モデルを作る］にする（押すとその場で作り始める）。
+ *              作っている最中は［3D を作成中］にして押せなくする（同じ家具の 3D を 2 つ頼まないように）。
  *              列をいつも出すのは、2D だけの家具でも「2D が置かれる」と分かるようにするため
  *   追加     … 親指で押しやすい大きな［部屋に追加］（写真のときは［背景に追加］）。主な操作はこれ 1 つ
  *
@@ -778,6 +798,8 @@ function syncThumbs<T extends { id: string }>(
 function createTileActions(actions: {
   onPlace(model: GeneratedModel, facet: ModelFacet): void;
   onEdit(model: GeneratedModel): void;
+  /** ［＋ 3D モデルを作る］を押した */
+  onMake(model: GeneratedModel): void;
 }): {
   element: HTMLElement;
   open(model: GeneratedModel): void;
@@ -815,8 +837,7 @@ function createTileActions(actions: {
   options.setAttribute('aria-label', '置く形');
   const flatOption = createFacetOption('2D', '切り抜き', false);
   const solidOption = createFacetOption('3D', '立体', true);
-  // 3D が無い家具で、3D の選択肢の代わりに出す。「新しい家具」の ＋ と同じ点線の枠。
-  // 押すと編集の姿の、3D を作る欄へ（回数を使うので、ここでは作り始めない）
+  // 3D が無い家具で、3D の選択肢の代わりに出す。「新しい家具」の ＋ と同じ点線の枠。押すとその場で作り始める
   const makeModel = document.createElement('button');
   makeModel.type = 'button';
   makeModel.className = 'facet-option facet-option--make';
@@ -863,7 +884,7 @@ function createTileActions(actions: {
     closeThen((model) => actions.onPlace(model, chosen));
   });
   edit.addEventListener('click', () => closeThen(actions.onEdit));
-  makeModel.addEventListener('click', () => closeThen(actions.onEdit));
+  makeModel.addEventListener('click', () => closeThen(actions.onMake));
 
   return {
     element,
@@ -879,6 +900,10 @@ function createTileActions(actions: {
       flatOption.button.hidden = !hasFlat;
       solidOption.button.hidden = !hasSolid;
       makeModel.hidden = hasSolid;
+      // 作っている最中は押せない（タイルの上の円で進み具合が分かる）
+      const making = isMakingModel(model.id);
+      makeModel.disabled = making;
+      makeLabel.textContent = making ? '3D を作成中' : '3D モデルを作る';
       flatOption.showIcon(model);
       solidOption.showIcon(model);
       element.hidden = false;
