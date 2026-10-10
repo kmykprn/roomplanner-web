@@ -125,7 +125,11 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'scene-tile scene-tile--add';
-    tile.append(createIcon('plus'), Object.assign(document.createElement('span'), { textContent: label }));
+    // 点線の枠の中は ＋ だけ。名前はほかのタイルと同じく枠の下に出す
+    const box = document.createElement('span');
+    box.className = 'scene-tile__add-box';
+    box.append(createIcon('plus'));
+    tile.append(box, Object.assign(document.createElement('span'), { className: 'scene-tile__add-name', textContent: label }));
     tile.addEventListener('click', () => handlers.onCreate(kind));
     return tile;
   }

@@ -158,3 +158,27 @@ test('部屋を選んで「家具」タブから置くと「部屋に追加」�
   await expect(page.locator('.scenes__switch-item', { hasText: '部屋' })).toHaveClass(/is-active/);
   await expect(page.locator('.scene-tile__button')).toHaveCount(1);
 });
+
+test('追加のタイルは、点線の枠の中が ＋ だけで、名前は枠の下。地は白で、文字は濃い灰色', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const box = document.querySelector('.scene-tile__add-box')!;
+    const name = document.querySelector('.scene-tile__add-name')!;
+    const bs = getComputedStyle(box);
+    return {
+      boxBottom: box.getBoundingClientRect().bottom, nameTop: name.getBoundingClientRect().top,
+      boxBackground: bs.backgroundColor, boxBorder: bs.borderTopStyle, nameColor: getComputedStyle(name).color, nameText: name.textContent,
+    };
+  });
+  expect(r.nameText).toBe('新しい背景');
+  expect(r.nameTop).toBeGreaterThanOrEqual(r.boxBottom);
+  expect(r.boxBackground).toBe('rgb(255, 255, 255)');
+  expect(r.boxBorder).toBe('dashed');
+  expect(r.nameColor).toBe('rgb(17, 24, 28)');
+  // 編集の画面の「家具を追加」と、家具のページの「新しい家具」も同じ地と文字の色
+  await page.locator('.scene-tile--add').click();
+  const manage = await page.locator('.manage__add').evaluate((el) => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color, border: getComputedStyle(el).borderTopStyle }));
+  expect(manage).toEqual({ background: 'rgb(255, 255, 255)', color: 'rgb(17, 24, 28)', border: 'dashed' });
+  await page.locator('.manage__add').click();
+  const lib = await page.locator('.thumb__img.is-add').evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(lib).toBe('rgb(255, 255, 255)');
+});

@@ -123,6 +123,11 @@ function removeJob(id: string): void {
   setState({ jobs: generationState.get().jobs.filter((job) => job.id !== id) });
 }
 
+/** その家具の 3D を作っている最中か（失敗していない作成があるか） */
+export function isMakingModel(modelId: string): boolean {
+  return generationState.get().jobs.some((job) => job.targetModelId === modelId && job.phase !== 'failed');
+}
+
 /**
  * 切り抜き（2D）の家具から 3D を作る。
  *
@@ -132,6 +137,8 @@ function removeJob(id: string): void {
  */
 export async function startGenerationForModel(model: GeneratedModel): Promise<void> {
   if (!model.imageKey) return;
+  // 同じ家具の 3D を作っている最中なら、もう 1 つは頼まない（連打や二重の呼び出しで回数を 2 回使わないように）
+  if (isMakingModel(model.id)) return;
   const job: GenerationJob = {
     id: crypto.randomUUID(),
     jobId: null,

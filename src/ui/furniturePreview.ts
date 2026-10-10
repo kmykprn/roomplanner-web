@@ -8,7 +8,8 @@
  *
  * **3D はメニューを開いている間だけ描く。** 開くたびに小さな描画の枠を作り、閉じたら片付ける。
  * 開きっぱなしの描画の枠は電池を使い、端末によっては同時に持てる数にも限りがあるため。
- * 3D を読み込むまでは 2D の切り抜きを出しておく。動きを減らす設定の端末では、3D も回さない
+ * 3D を読み込むまでは 2D の切り抜きを出しておくが、出すのは FLAT_DELAY_MS 待ってから。
+ * 読み込みが速いと、切り抜きが一瞬見えてから 3D に変わってちらつくため。動きを減らす設定の端末では、3D も回さない
  */
 
 import * as THREE from 'three';
@@ -18,6 +19,8 @@ import { resolveModelUrl } from '@/platform/modelCache';
 import { loadFurnitureModel } from '@/scene/modelLoader';
 import { createPreviewImage } from '@/ui/previewImage';
 
+/** 3D を出すとき、切り抜きを出すまでに待つ時間（ms）。これより早く 3D が読めれば切り抜きは見せない */
+const FLAT_DELAY_MS = 300;
 /** 3D が 1 周するのにかける秒数 */
 const TURN_SECONDS = 9;
 /** 指でなぞった 1px あたりに回す角度（ラジアン） */
@@ -57,20 +60,29 @@ export function createFurniturePreview(): FurniturePreview {
   let solid: { stop(): void } | null = null;
   /** 開くたびに増やす。読み込みを待つ間に開き直されたら、古い読み込みは使わない */
   let showCount = 0;
+  /** 切り抜きを出すまでの待ち。3D が先に読めたら要らない */
+  let flatTimer: ReturnType<typeof setTimeout> | null = null;
 
   function stop(): void {
     showCount += 1;
     solid?.stop();
     solid = null;
-    element.classList.remove('is-solid');
+    if (flatTimer !== null) clearTimeout(flatTimer);
+    flatTimer = null;
+    element.classList.remove('is-solid', 'is-waiting');
   }
 
   function show(model: GeneratedModel, facet: ModelFacet): void {
     stop();
     const count = showCount;
-    // 3D を読み込むまでの間も、切り抜きを出しておく
     flatPreview.show({ cutoutKey: model.imageKey, previewKey: model.previewKey });
     if (facet !== 'solid' || !model.modelKey) return;
+    // 3D を読み込む間は切り抜きを隠しておき、FLAT_DELAY_MS 待っても読めなければ切り抜きを出す
+    element.classList.add('is-waiting');
+    flatTimer = setTimeout(() => {
+      flatTimer = null;
+      element.classList.remove('is-waiting');
+    }, FLAT_DELAY_MS);
     void resolveModelUrl(model.modelKey)
       .then((url) => (url ? loadFurnitureModel(url, [1, 1, 1]) : null))
       .then((loaded) => {
@@ -80,6 +92,12 @@ export function createFurniturePreview(): FurniturePreview {
       })
       .catch(() => {
         // 読めなければ切り抜きのまま
+      })
+      .finally(() => {
+        if (count !== showCount) return;
+        if (flatTimer !== null) clearTimeout(flatTimer);
+        flatTimer = null;
+        element.classList.remove('is-waiting');
       });
   }
 
