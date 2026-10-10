@@ -66,7 +66,10 @@ import { createTicketSheet } from '@/ui/ticketSheet';
 import { createWalletBar } from '@/ui/walletBar';
 
 export interface ModelPanelOptions {
-  /** モデルを置いた直後に呼ぶ。タブの移動を抑える判断に使う */
+  /**
+   * モデルを置く直前に呼ぶ（置き場に足す前）。タブの移動を抑える判断に使う。
+   * 置き先（背景や部屋）を開いていなければ、ここで開く（main.ts）。その後に置き場を取るので、開いたものに置かれる
+   */
   onPlaced(id: string): void;
 }
 
@@ -84,11 +87,6 @@ interface FailedItem {
 export interface ModelPanel {
   element: HTMLElement;
   showHome(): void;
-  /**
-   * 置けるかどうか。一覧の「家具」タブから開いたときは置く先（背景や部屋）を開いていないので、
-   * 「背景に追加」と置く形の選択肢を出さない（作る・編集・削除だけ）
-   */
-  setPlacing(enabled: boolean): void;
 }
 
 export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
@@ -218,9 +216,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   }
 
   // 家具を押したときに下から出すメニュー。大きな見本・置く形（2D / 3D）・「部屋に追加」（写真なら「背景に追加」）、見出しの右に［✎ 編集］
-  /** 置ける姿か（置く先を開いているか）。setPlacing で変える */
-  let placing = true;
-  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, canPlace: () => placing });
+  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
@@ -242,9 +238,10 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
 
   /** 押したモデルをいまのモードの空いている場所に置く。置いた直後は選択状態にする */
   function place(item: Omit<PlacedFurniture, 'id' | 'position' | 'rotationY'>): void {
-    const scene = activeScene();
     const id = crypto.randomUUID();
+    // 置き先を開くのは onPlaced の中。置き場はその後に取る
     onPlaced(id);
+    const scene = activeScene();
     scene.add({
       ...item,
       id,
@@ -378,9 +375,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   return {
     element: panel,
     showHome,
-    setPlacing(enabled) {
-      placing = enabled;
-    },
   };
 }
 
@@ -770,8 +764,9 @@ function syncThumbs<T extends { id: string }>(
  *
  *   見出し   … 家具の名前と、右に控えめな［✎ 編集］
  *   見本     … 大きな見本（ui/furniturePreview.ts）。3D はゆっくり回り、2D は上下にゆっくり揺れる
- *   置く形   … 2D と 3D を両方持つ家具だけ、見本の付いた 2 つの選択肢を出す。最初は 3D。選ぶと見本も切り替わる
- *              2D だけの家具には、代わりに「3D モデルを作る」を出す（押すと編集の姿の、3D を作る欄へ）
+ *   置く形   … 見本の付いた 2D と 3D の選択肢。両方ある家具は最初 3D。選ぶと見本も切り替わる。
+ *              3D が無い家具は 2D を選んだ状態にし、3D の側は点線の［＋ 3D モデルを作る］にする（押すと編集の姿の、3D を作る欄へ）。
+ *              列をいつも出すのは、2D だけの家具でも「2D が置かれる」と分かるようにするため
  *   追加     … 親指で押しやすい大きな［部屋に追加］（写真のときは［背景に追加］）。主な操作はこれ 1 つ
  *
  * 選択肢を文字だけの切り替えにしないのは、どちらを選ぶと何が置かれるのかが見て分からないため。
@@ -783,8 +778,6 @@ function syncThumbs<T extends { id: string }>(
 function createTileActions(actions: {
   onPlace(model: GeneratedModel, facet: ModelFacet): void;
   onEdit(model: GeneratedModel): void;
-  /** 置ける姿か。置けないときは「背景に追加」と置く形の選択肢を出さない */
-  canPlace(): boolean;
 }): {
   element: HTMLElement;
   open(model: GeneratedModel): void;
@@ -822,21 +815,21 @@ function createTileActions(actions: {
   options.setAttribute('aria-label', '置く形');
   const flatOption = createFacetOption('2D', '切り抜き', false);
   const solidOption = createFacetOption('3D', '立体', true);
-  options.append(flatOption.button, solidOption.button);
-
-  // 2D だけの家具に出す。押すと編集の姿の、3D を作る欄へ（回数を使うので、ここでは作り始めない）
+  // 3D が無い家具で、3D の選択肢の代わりに出す。「新しい家具」の ＋ と同じ点線の枠。
+  // 押すと編集の姿の、3D を作る欄へ（回数を使うので、ここでは作り始めない）
   const makeModel = document.createElement('button');
   makeModel.type = 'button';
-  makeModel.className = 'tile-actions__make';
+  makeModel.className = 'facet-option facet-option--make';
   const makeLabel = document.createElement('span');
   makeLabel.textContent = '3D モデルを作る';
-  makeModel.append(createIcon('cube'), makeLabel);
+  makeModel.append(createIcon('plus'), makeLabel);
+  options.append(flatOption.button, solidOption.button, makeModel);
 
   const place = document.createElement('button');
   place.type = 'button';
   place.className = 'button tile-actions__button';
 
-  sheet.append(head, preview.element, options, makeModel, place);
+  sheet.append(head, preview.element, options, place);
   element.append(dim, sheet);
 
   let current: GeneratedModel | null = null;
@@ -880,12 +873,11 @@ function createTileActions(actions: {
       sheet.setAttribute('aria-label', model.name);
       // 開くたびに、いまの置き先の呼び名にする
       place.textContent = isPhotoMode() ? '背景に追加' : '部屋に追加';
-      const canPlace = actions.canPlace();
-      place.hidden = !canPlace;
       const hasFlat = model.imageKey !== null;
       const hasSolid = model.modelKey !== null;
-      // 選ぶものがあるときだけ選択肢を出す。片方しか無ければ、その形で置く。置けない姿では出さない
-      options.hidden = !(hasFlat && hasSolid) || !canPlace;
+      // 2D は切り抜きができる前の記録だけ無い。3D が無ければ、その場所に［＋ 3D モデルを作る］
+      flatOption.button.hidden = !hasFlat;
+      solidOption.button.hidden = !hasSolid;
       makeModel.hidden = hasSolid;
       flatOption.showIcon(model);
       solidOption.showIcon(model);

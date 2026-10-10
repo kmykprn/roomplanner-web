@@ -373,10 +373,10 @@ applyBackground();
 
 // --- UI ---
 header.replaceChildren(createSceneHeader(() => void leaveEditor()));
-const bottomSheet = createBottomSheet(app);
+const bottomSheet = createBottomSheet(app, { beforePlace: enterSceneForPlacing });
 // 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときはいつも背景の一覧から
 // （1 つも無くても一覧。無いときに編集から始めると、どこにいるのか分かりにくかった）
-const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter, onFurniture: bottomSheet.openFurnitureLibrary });
+const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter, onFurniture: openFurnitureFromHome });
 app.append(scenePage.element);
 scenePage.open('photo');
 
@@ -385,6 +385,27 @@ function enterScene(entry: SceneEntry): void {
   openScene(entry.id);
   setMode(entry.kind);
   scenePage.close();
+}
+
+/**
+ * 一覧の「家具」タブ。家具のページは「家具を追加」と同じもので、「背景に追加」で置ける。
+ * 置き先は右上で選んでいる種類なので、先にモードを合わせておく（メニューの文言と置き場がその種類になる）
+ */
+function openFurnitureFromHome(kind: SceneKind): void {
+  setMode(kind);
+  bottomSheet.openFurnitureLibrary();
+}
+
+/**
+ * 一覧の「家具」タブから家具を置く直前。まだ背景や部屋を開いていないので、
+ * その種類の最後に開いていたものを開く。1 つも無ければ新しく作る。編集の画面を開いていれば何もしない
+ */
+function enterSceneForPlacing(): void {
+  if (!scenePage.isOpen()) return;
+  const kind = modeState.get().mode;
+  const entry = currentScene(kind);
+  if (entry) enterScene(entry);
+  else createAndEnter(kind);
 }
 
 /**

@@ -2298,6 +2298,22 @@ body {
   font-size: 12px;
   color: #687076;
 }
+.facet-option[hidden] {
+  display: none;
+}
+/* 3D が無い家具の、3D の側に出す［＋ 3D モデルを作る］。「新しい家具」の ＋ と同じ点線の枠。主の［追加］の塗りとは分ける */
+.facet-option--make {
+  justify-content: center;
+  gap: 6px;
+  border: 1.5px dashed var(--accent);
+  color: var(--primary);
+  font-weight: 700;
+}
+.facet-option--make .ic {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
 .facet-option__mini {
   position: relative;
   flex: none;
@@ -2311,29 +2327,6 @@ body {
 .facet-option__mini .solid-mark {
   right: -4px;
   bottom: -4px;
-  width: 18px;
-  height: 18px;
-}
-
-/* 2D だけの家具に出す「3D モデルを作る」。文字のボタンで控えめに */
-.tile-actions__make {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-}
-.tile-actions__make[hidden] {
-  display: none;
-}
-.tile-actions__make .ic {
   width: 18px;
   height: 18px;
 }

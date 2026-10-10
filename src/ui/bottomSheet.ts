@@ -149,7 +149,15 @@ export interface BottomSheet {
   openFurnitureLibrary(): void;
 }
 
-export function createBottomSheet(container: HTMLElement): BottomSheet {
+export interface BottomSheetOptions {
+  /**
+   * 家具を置く直前に呼ぶ。一覧（ホーム）の「家具」タブから置いたときは、まだ背景や部屋を開いていないので、
+   * ここで置き先を開いて編集の画面にする（main.ts）
+   */
+  beforePlace(): void;
+}
+
+export function createBottomSheet(container: HTMLElement, { beforePlace }: BottomSheetOptions): BottomSheet {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
   let activeTab: TabId = (isPhotoMode() ? PHOTO_TABS : ROOM_TABS)[0];
 
@@ -173,6 +181,8 @@ export function createBottomSheet(container: HTMLElement): BottomSheet {
   // 置いたら家具のページを閉じ、「操作」タブを出す。置いた家具がすぐ見え、向きや大きさをすぐ変えられる
   const modelPanel = createModelPanel({
     onPlaced: (id) => {
+      // 置き先を開くとモードが変わり、下のタブが最初のものに戻る。その後で「操作」にする
+      beforePlace();
       justPlacedId = id;
       closeFurniturePage();
       activeTab = 'manage';
@@ -189,8 +199,6 @@ export function createBottomSheet(container: HTMLElement): BottomSheet {
   function closeFurniturePage(): void {
     furniturePage.close();
     modelPanel.showHome();
-    // 次に「家具を追加」から開いたときは置ける姿に戻す
-    modelPanel.setPlacing(true);
   }
   const photoPanel = createPhotoPanel();
   const interiorPanel = createInteriorPanel();
@@ -785,7 +793,6 @@ export function createBottomSheet(container: HTMLElement): BottomSheet {
 
   return {
     openFurnitureLibrary() {
-      modelPanel.setPlacing(false);
       furniturePage.open();
     },
   };
