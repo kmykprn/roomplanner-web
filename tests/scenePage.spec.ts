@@ -113,23 +113,48 @@ test('ヘッダーの名前は真ん中にあり、‹ の押せる範囲と重�
   await expect(page.locator('.scene-header__name .ic')).toBeVisible();
 });
 
-test('下の「家具」タブで家具のページが開き、置くボタンは出ない。「×」でホームに戻る', async ({ page }) => {
+test('下の「家具」タブの家具のページは「家具を追加」と同じ。「背景に追加」で最後に開いていた背景に置いて編集へ', async ({ page }) => {
+  await createBackgroundWithChair(page);
+  await page.locator('.scene-header__back').click();
+  await expect(page.locator('.scene-tile__button')).toHaveCount(1);
+  const name = await page.locator('.scene-tile__name').textContent();
   await expect(page.locator('.scenes__tab', { hasText: 'ホーム' })).toHaveClass(/is-active/);
   await page.locator('.scenes__tab', { hasText: '家具' }).click();
   const furniture = page.getByRole('dialog', { name: '家具' });
   await expect(furniture).toBeVisible();
-  // サンプルの家具を押すとメニューが出るが、置く先を開いていないので「背景に追加」は無い
+  // サンプルの家具を押すと、編集の画面の「家具を追加」と同じメニュー（置く形と「背景に追加」付き）
   await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
-  await expect(page.locator('.tile-actions__name')).toBeVisible();
-  await expect(page.locator('.tile-actions__button')).toBeHidden();
-  await expect(page.locator('.tile-actions__edit')).toBeVisible();
-  await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
+  await expect(page.getByRole('group', { name: '置く形' })).toBeVisible();
+  await expect(page.locator('.tile-actions__button')).toHaveText('背景に追加');
+  await page.locator('.tile-actions__button').click();
+  // その背景を開いて置き、編集の画面に移る
+  await expect(furniture).toBeHidden();
+  await expect(page.locator('.scenes')).toBeHidden();
+  await expect(page.locator('.scene-header__name')).toHaveText(name!);
+  const names = await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().furniture.map((f) => f.name));
+  expect(names).toEqual(['椅子', 'サンプル 1']);
+  // 置いた家具を選んだ状態（操作の行）になっている
+  await expect(page.getByRole('button', { name: '画面から削除' })).toBeVisible();
+  // 「×」で閉じたときはホームのまま
+  await page.locator('.scene-header__back').click();
+  await page.locator('.scenes__tab', { hasText: '家具' }).click();
   await page.getByRole('button', { name: '閉じる' }).click();
   await expect(furniture).toBeHidden();
   await expect(page.locator('.scenes')).toBeVisible();
-  // 編集の画面の「家具を追加」から開いたときは、置くボタンが戻っている
-  await page.locator('.scene-tile--add').click();
-  await page.locator('.manage__add').click();
+});
+
+test('部屋を選んで「家具」タブから置くと「部屋に追加」。部屋が 1 つも無ければ新しく作ってそこに置く', async ({ page }) => {
+  await page.locator('.scenes__switch-item', { hasText: '部屋' }).click();
+  await expect(page.locator('.scene-tile__button')).toHaveCount(0);
+  await page.locator('.scenes__tab', { hasText: '家具' }).click();
   await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
-  await expect(page.locator('.tile-actions__button')).toHaveText('背景に追加');
+  await expect(page.locator('.tile-actions__button')).toHaveText('部屋に追加');
+  await page.locator('.tile-actions__button').click();
+  await expect(page.locator('.scenes')).toBeHidden();
+  await expect(page.locator('.scene-header__name')).toHaveText(/^部屋 \d+\/\d+$/);
+  const names = await page.evaluate(async () => (await import('/src/core/appState.ts')).appState.get().furniture.map((f) => f.name));
+  expect(names).toEqual(['サンプル 1']);
+  await page.locator('.scene-header__back').click();
+  await expect(page.locator('.scenes__switch-item', { hasText: '部屋' })).toHaveClass(/is-active/);
+  await expect(page.locator('.scene-tile__button')).toHaveCount(1);
 });

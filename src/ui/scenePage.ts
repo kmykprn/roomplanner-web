@@ -38,8 +38,8 @@ export interface ScenePageHandlers {
   onOpen(entry: SceneEntry): void;
   /** ＋ を押した。新しく作って編集の画面へ */
   onCreate(kind: SceneKind): void;
-  /** 下の「家具」タブを押した。家具のページを一覧の上に開く */
-  onFurniture(): void;
+  /** 下の「家具」タブを押した。家具のページを一覧の上に開く。kind は右上で選んでいる種類（置き先になる） */
+  onFurniture(kind: SceneKind): void;
 }
 
 const LABELS: Record<SceneKind, { title: string; add: string }> = {
@@ -99,7 +99,7 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   furnitureTab.type = 'button';
   furnitureTab.className = 'scenes__tab';
   furnitureTab.append(createIcon('chair'), Object.assign(document.createElement('span'), { textContent: '家具' }));
-  furnitureTab.addEventListener('click', () => handlers.onFurniture());
+  furnitureTab.addEventListener('click', () => handlers.onFurniture(kind));
   tabs.append(homeTab, furnitureTab);
 
   element.append(bar, body, tabs);
