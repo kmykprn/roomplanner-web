@@ -3,16 +3,18 @@
  *
  * **写真や部屋とは別のページにする。** 家具の一覧・追加・3D を作る・編集は、どれも縦に長い。
  * 下のパネルの中では 1〜2 列しか見えず、家具が増えるとスクロールばかりになった。
- * ページの中身は家具タブだったもの（modelPanel）をそのまま使い、上に見出し、下に帯、右下に浮かぶ ＋（新しい家具）を足す。
+ * ページの中身は家具タブだったもの（modelPanel）をそのまま使い、上に見出し（左に ‹）、右下に浮かぶ ＋（新しい家具）を足す。
  *
- * 開き方で下の帯が変わる（ui/footerBar.ts）。
- *   placing … 編集の画面の「家具を追加」から。← だけの帯。家具を押すと「背景に追加」（部屋に追加）で置ける
- *   browse  … 下のタブの「家具」から。ホームと同じ帯（背景・部屋・＋・家具。「家具」が選ばれた状態）。置き先を開いていないので置くボタンは出ない
- * ← は、一覧以外の姿（3D を作る・編集・高さの入力）を開いていればその姿だけ閉じ、一覧ならページを閉じる（onBack で呼ぶ側が決める）。
+ * 開き方で変わる（ui/footerBar.ts）。
+ *   placing … 編集の画面の「家具を追加」から。ヘッダーの左に ‹（編集の画面と同じ）、下の帯は無い。家具を押すと「背景に追加」（部屋に追加）で置ける
+ *   browse  … 下のタブの「家具」から。下の帯はホームと同じ（背景・部屋・＋・家具。「家具」が選ばれた状態）。置き先を開いていないので置くボタンは出ない。
+ *              ‹ は一覧以外の姿を開いている間だけ出す（一覧ではタブで移る。style.css）
+ * ‹ は、一覧以外の姿（3D を作る・編集・高さの入力）を開いていればその姿だけ閉じ、一覧ならページを閉じる（onBack で呼ぶ側が決める）。
  * 一覧以外の姿では浮かぶ ＋ を出さない（style.css）
  */
 
-import { createFloatingAdd, createFootBack, createFooterBar, createNavFooter, type NavFooterHandlers } from '@/ui/footerBar';
+import { createFloatingAdd, createNavFooter, type NavFooterHandlers } from '@/ui/footerBar';
+import { createIcon } from '@/ui/icons';
 
 export type FurniturePageMode = 'placing' | 'browse';
 
@@ -25,7 +27,7 @@ export interface FurniturePage {
 }
 
 export interface FurniturePageActions extends NavFooterHandlers {
-  /** placing の ←。開いている姿を 1 つ戻す（一覧ならページを閉じる） */
+  /** ヘッダーの ‹。開いている姿を 1 つ戻す（一覧ならページを閉じる） */
   onBack(): void;
   /** 浮かぶ ＋。新しい家具を作る（「家具を追加」のメニューを開く） */
   onAdd(): void;
@@ -38,23 +40,28 @@ export function createFurniturePage(content: HTMLElement, actions: FurniturePage
   element.setAttribute('role', 'dialog');
   element.setAttribute('aria-label', '家具');
 
+  // 見出し。左に ‹（編集の画面のヘッダーと同じ見た目）、真ん中に題
   const bar = document.createElement('div');
   bar.className = 'page__bar';
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'page__back';
+  back.setAttribute('aria-label', '戻る');
+  back.append(createIcon('chevron-left'));
+  back.addEventListener('click', actions.onBack);
   const title = document.createElement('span');
   title.className = 'page__title';
   title.textContent = '家具';
-  bar.append(title);
+  bar.append(back, title);
 
   const body = document.createElement('div');
   body.className = 'page__body';
   body.append(content);
 
-  const backFoot = createFooterBar('戻る');
-  backFoot.left.append(createFootBack('戻る', actions.onBack));
   const navFoot = createNavFooter(actions);
   navFoot.setActive('furniture');
 
-  element.append(bar, body, createFloatingAdd('新しい家具', actions.onAdd), backFoot.element, navFoot.element, navFoot.menu.element);
+  element.append(bar, body, createFloatingAdd('新しい家具', actions.onAdd), navFoot.element, navFoot.menu.element);
 
   let current: FurniturePageMode | null = null;
 
@@ -62,7 +69,7 @@ export function createFurniturePage(content: HTMLElement, actions: FurniturePage
     element,
     open(mode) {
       current = mode;
-      backFoot.element.hidden = mode !== 'placing';
+      element.classList.toggle('is-browse', mode === 'browse');
       navFoot.element.hidden = mode !== 'browse';
       element.hidden = false;
     },

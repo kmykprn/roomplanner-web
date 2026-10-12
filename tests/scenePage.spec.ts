@@ -181,11 +181,11 @@ test('編集の画面に下の帯と浮かぶ ＋ は無い。置いた家具の
   await page.locator('.manage__add').click();
   const furniture = page.getByRole('dialog', { name: '家具' });
   await expect(furniture).toBeVisible();
-  await expect(page.locator('.page .foot:visible .foot__back')).toBeVisible();
+  await expect(page.locator('.page__back')).toBeVisible();
   await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
   await expect(page.locator('.tile-actions__button')).toHaveText('背景に追加');
   await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
-  await page.locator('.page .foot:visible .foot__back').click();
+  await page.locator('.page__back').click();
   await expect(furniture).toBeHidden();
   await placeChair(page);
   await leaveToHome(page);
@@ -200,10 +200,19 @@ test('ホームの「家具」タブで開いた家具のページは、帯が�
   const furniture = page.getByRole('dialog', { name: '家具' });
   await expect(furniture).toBeVisible();
   await expect(page.locator('.page .foot:visible .foot__tab', { hasText: '家具' })).toHaveClass(/is-active/);
-  await expect(page.locator('.page .foot:visible .foot__back')).toHaveCount(0);
+  // 一覧では ‹ を出さない（戻るのはタブ）。編集の姿を開くと ‹ が出て、その姿だけ閉じる
+  await expect(page.locator('.page__back')).toBeHidden();
   await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
   await expect(page.getByRole('group', { name: '置く形' })).toBeVisible();
   await expect(page.locator('.tile-actions__edit')).toBeVisible();
+  await page.locator('.tile-actions__edit').click();
+  await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveText('家具の編集');
+  await expect(page.locator('.page__back')).toBeVisible();
+  await page.locator('.page__back').click();
+  await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
+  await expect(page.locator('.page__back')).toBeHidden();
+  await expect(furniture).toBeVisible();
+  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
   await expect(page.locator('.tile-actions__button')).toBeHidden();
   await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
   // 「部屋」で閉じてホームの部屋の一覧へ。＋ の「新しい部屋」で作って編集へ
