@@ -15,7 +15,7 @@ test.describe('家具のページ', () => {
   /** 操作タブの［＋ 家具を追加］で、家具のページを開く */
   async function openFurniturePage(page: import('@playwright/test').Page): Promise<void> {
     await openTab(page, '操作');
-    await page.locator('.fab--editor').click();
+    await page.locator('.manage__add').click();
     await expect(page.locator('.page')).toBeVisible();
   }
 
@@ -65,7 +65,7 @@ test.describe('家具のページ', () => {
     await expect(page.locator('.page .fab')).toBeVisible();
     await page.locator('.page .foot__back').click();
     await expect(page.locator('.page')).toBeHidden();
-    await expect(page.locator('.foot--editor .foot__add')).toBeVisible();
+    await expect(page.locator('.manage__add')).toBeVisible();
     // もう一度開くと、編集の画面ではなく一覧に戻っている
     await openFurniturePage(page);
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);

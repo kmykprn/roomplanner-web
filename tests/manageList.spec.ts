@@ -42,7 +42,7 @@ test('選んでいない家具を動かしても、一覧のアイコンが消�
 test('一覧の中身が変わったら、一覧を描き直す', async ({ page }) => {
   const [id] = await openWithTwoCutouts(page);
   await openTab(page, '操作');
-  const tiles = page.locator('.manage__tile');
+  const tiles = page.locator('.manage__tile:not(.manage__add)');
   await expect(tiles).toHaveCount(2);
   await page.evaluate(async (renamedId) => {
     const { activeScene } = await import('/src/core/mode.ts');

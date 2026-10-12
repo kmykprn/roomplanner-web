@@ -111,7 +111,7 @@ test('手前の物の間に収まらない家具も、置いた直後は手前�
     { x: [0.58, 1], y: [0.45, 1] },
   ]);
   // 画面の操作で、サンプルのソファを置く
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   await page.locator('.page .thumb__button', { hasText: 'サンプル 2' }).first().click();
   await page.locator('.tile-actions__button', { hasText: '背景に追加' }).click();
   await expect(page.locator('.page')).toBeHidden();

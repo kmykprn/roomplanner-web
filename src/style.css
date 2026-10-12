@@ -78,11 +78,27 @@ body {
 
 /* 編集の画面のヘッダー。左の「‹」で一覧に戻り、名前を押すと名前を変える */
 .scene-header {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
   align-items: center;
   min-width: 0;
   flex: 1;
+  margin: 0 -12px;
+}
+.scene-header__back {
+  width: 48px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.scene-header__back .ic {
+  width: 26px;
+  height: 26px;
 }
 .scene-header__name {
   display: flex;
@@ -1174,6 +1190,29 @@ body {
 }
 
 /* 先頭の［＋ 家具を追加］。点線の枠とメインカラーで、ほかのタイルと見分ける */
+/* 置いた家具の一覧の先頭の「＋ 家具を追加」。白い地に黄緑の点線、文字は濃い灰色 */
+.manage__tile.manage__add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  border: 1.5px dashed var(--accent);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.manage__tile.manage__add .ic {
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+}
+.manage__tile.manage__add:disabled {
+  opacity: 0.35;
+}
+
 /* チェックを付けている間の、タイルの右上の丸。付いたらメインカラーで塗り、チェックの印を描く */
 .manage__check {
   position: absolute;
@@ -1251,7 +1290,25 @@ body {
   gap: 8px;
   margin-bottom: 2px;
 }
-.manage__head .manage__back {
+.manage__head /* 家具を選んでいる間の見出しの右の小さな ＋。白い丸に黄緑の線 */
+.manage__add-small {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--primary);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.manage__add-small .ic {
+  width: 20px;
+  height: 20px;
+}
+.manage__back {
   /* 文字の左端を、下のバーの見出し（向き・大きさ）の左端にそろえる */
   margin-left: 0;
   padding-left: 0;
@@ -2494,8 +2551,6 @@ body {
 /* 全画面: ヘッダーと下のシートと帯と写真の［⋯］を隠し、絵だけにする。ボタンは safe-area の分だけ上げる */
 #app.is-full .header,
 #app.is-full .sheet,
-#app.is-full .foot--editor,
-#app.is-full .fab--editor,
 #app.is-full .photo-menu {
   display: none;
 }

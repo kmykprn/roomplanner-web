@@ -57,8 +57,8 @@ export async function createFromHome(page: Page, kind: 'photo' | 'room'): Promis
   await page.locator('.popup:visible .popup__row', { hasText: kind === 'photo' ? '新しい背景' : '新しい部屋' }).click();
 }
 
-/** 編集の画面の下の帯の「背景」（部屋なら「部屋」）でホームへ。開いている種類のタブ（選ばれているもの）を押す */
+/** 編集の画面のヘッダーの ‹ でホームへ */
 export async function leaveToHome(page: Page): Promise<void> {
-  await page.locator('.foot--editor .foot__tab.is-active').click();
+  await page.locator('.scene-header__back').click();
   await page.locator('.scenes').waitFor();
 }

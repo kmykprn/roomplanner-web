@@ -161,36 +161,24 @@ test('一覧は 1 行 2 列。上の帯は無く、下の帯のタブと ＋ は
   expect(r.tabs).toEqual(['背景', '部屋', '家具']);
 });
 
-test('ヘッダーは名前（右に鉛筆）だけで真ん中にあり、高さは 53px', async ({ page }) => {
+test('ヘッダーは ‹ と名前（右に鉛筆）。名前は真ん中で ‹ の押せる範囲と重ならず、高さは 53px', async ({ page }) => {
   const r = await page.evaluate(() => {
+    const back = document.querySelector('.scene-header__back')!.getBoundingClientRect();
     const name = document.querySelector('.scene-header__name')!.getBoundingClientRect();
     const header = document.querySelector('.header')!.getBoundingClientRect();
-    return { nameCenter: (name.left + name.right) / 2, headerCenter: (header.left + header.right) / 2, height: header.height, buttons: document.querySelectorAll('.header button').length };
+    return { backRight: back.right, nameLeft: name.left, nameCenter: (name.left + name.right) / 2, headerCenter: (header.left + header.right) / 2, height: header.height };
   });
+  expect(r.nameLeft).toBeGreaterThanOrEqual(r.backRight);
   expect(Math.abs(r.nameCenter - r.headerCenter)).toBeLessThan(1);
   expect(r.height).toBeLessThanOrEqual(56);
-  expect(r.buttons).toBe(1);
   await expect(page.locator('.scene-header__name .ic')).toBeVisible();
 });
 
-test('編集の画面の下の帯はホームと同じ（開いている種類が選ばれた状態）。「家具を追加」は右下に浮かぶ白い丸', async ({ page }) => {
-  const r = await page.evaluate(() => {
-    const foot = document.querySelector('.foot--editor')!.getBoundingClientRect();
-    const tabs = Array.from(document.querySelectorAll('.foot--editor .foot__tab'), (el) => ({ text: el.textContent, active: el.classList.contains('is-active') }));
-    const add = document.querySelector('.fab--editor')!.getBoundingClientRect();
-    const s = getComputedStyle(document.querySelector('.fab--editor')!);
-    return { footHeight: foot.height, footBottom: foot.bottom, inner: window.innerHeight, tabs, addWidth: add.width, addRight: window.innerWidth - add.right, addGap: foot.top - add.bottom, addBackground: s.backgroundColor, addBorder: s.borderTopColor };
-  });
-  expect(r.footHeight).toBe(76);
-  expect(r.footBottom).toBe(r.inner);
-  expect(r.tabs).toEqual([{ text: '背景', active: true }, { text: '部屋', active: false }, { text: '家具', active: false }]);
-  expect(r.addWidth).toBe(56);
-  expect(r.addRight).toBe(16);
-  expect(r.addGap).toBe(16);
-  expect(r.addBackground).toBe('rgb(255, 255, 255)');
-  expect(r.addBorder).toBe('rgb(110, 156, 17)');
-  // 浮かぶ「家具を追加」で開くと ← の帯で、「背景に追加」で置ける
-  await page.locator('.fab--editor').click();
+test('編集の画面に下の帯と浮かぶ ＋ は無い。置いた家具の一覧の「＋ 家具を追加」で開くと ← の帯で「背景に追加」で置ける', async ({ page }) => {
+  await expect(page.locator('.foot--editor')).toHaveCount(0);
+  await expect(page.locator('.fab--editor')).toHaveCount(0);
+  await expect(page.locator('#app > .foot')).toHaveCount(0);
+  await page.locator('.manage__add').click();
   const furniture = page.getByRole('dialog', { name: '家具' });
   await expect(furniture).toBeVisible();
   await expect(page.locator('.page .foot:visible .foot__back')).toBeVisible();
@@ -199,17 +187,8 @@ test('編集の画面の下の帯はホームと同じ（開いている種類�
   await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
   await page.locator('.page .foot:visible .foot__back').click();
   await expect(furniture).toBeHidden();
-  // 帯の「家具」で開くと帯はホームと同じで、「背景に追加」は無い。「背景」で編集を終えてホームへ
-  await page.locator('.foot--editor .foot__tab', { hasText: '家具' }).click();
-  await expect(furniture).toBeVisible();
-  await expect(page.locator('.page .foot:visible .foot__tab', { hasText: '家具' })).toHaveClass(/is-active/);
-  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
-  await expect(page.locator('.tile-actions__name')).toBeVisible();
-  await expect(page.locator('.tile-actions__button')).toBeHidden();
-  await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
   await placeChair(page);
-  await page.locator('.page .foot:visible .foot__tab', { hasText: '背景' }).click();
-  await expect(furniture).toBeHidden();
+  await leaveToHome(page);
   await expect(page.locator('.scenes')).toBeVisible();
   await expect(page.locator('.scene-tile__button')).toHaveCount(1);
 });
@@ -237,7 +216,7 @@ test('ホームの「家具」タブで開いた家具のページは、帯が�
   await expect(furniture).toBeHidden();
   await expect(page.locator('.scenes')).toBeHidden();
   await expect(page.locator('.scene-header__name')).toHaveText(/^部屋 \d+\/\d+$/);
-  await expect(page.locator('.foot--editor .foot__tab', { hasText: '部屋' })).toHaveClass(/is-active/);
+  await expect(page.locator('.sheet__tab', { hasText: '内装' })).toBeVisible();
 });
 
 test('名前を変える欄は画面の上の方にあり、下端が画面の高さの半分より上（キーボードに隠れない）', async ({ page }) => {
@@ -259,7 +238,7 @@ test('名前を変える欄は画面の上の方にあり、下端が画面の�
   expect(Math.abs(c.center - c.inner / 2)).toBeLessThan(40);
 });
 
-test('絵の右下の全画面のボタンでヘッダー・シート・下の帯が隠れて絵が画面いっぱいになり、もう一度押すと戻る', async ({ page }) => {
+test('絵の右下の全画面のボタンでヘッダーとシートが隠れて絵が画面いっぱいになり、もう一度押すと戻る', async ({ page }) => {
   const button = page.locator('.view-full');
   await expect(button).toHaveAttribute('aria-label', '全画面');
   const before = await page.evaluate(() => {
@@ -276,14 +255,12 @@ test('絵の右下の全画面のボタンでヘッダー・シート・下の�
   await button.click();
   await expect(page.locator('.header')).toBeHidden();
   await expect(page.locator('.sheet')).toBeHidden();
-  await expect(page.locator('.foot--editor')).toBeHidden();
   await expect(button).toHaveAttribute('aria-label', '全画面をやめる');
   const full = await page.evaluate(() => ({ height: document.querySelector('#viewport')!.getBoundingClientRect().height, inner: window.innerHeight }));
   expect(full.height).toBe(full.inner);
   await button.click();
   await expect(page.locator('.header')).toBeVisible();
   await expect(page.locator('.sheet')).toBeVisible();
-  await expect(page.locator('.foot--editor')).toBeVisible();
   const after = await page.evaluate(() => document.querySelector('#viewport')!.getBoundingClientRect().height);
   expect(after).toBe(before.viewportHeight);
 });

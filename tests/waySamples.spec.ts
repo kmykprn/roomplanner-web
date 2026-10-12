@@ -9,7 +9,7 @@ test('2D の行は切り抜き、3D の行は回る 3D の見本を出し、画�
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   await page.locator('.page .fab').click();
   const rows = page.locator('.lib__chooser .way');
   await expect(rows).toHaveCount(2);

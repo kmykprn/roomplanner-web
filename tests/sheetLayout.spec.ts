@@ -36,10 +36,10 @@ test('部屋モードのタブは 2 つで家具のタブは無く、写真モ�
   await expect(page.locator('.sheet__tab')).toHaveText(['内装', '操作']);
 });
 
-test('下の帯の ＋ で家具のページを開く。家具を選んでいる間も同じ ＋ で開ける（見出しに ＋ は無い）', async ({ page }) => {
+test('操作タブの［＋ 家具を追加］と、家具を選んでいる間の見出しの右の［＋］で、家具のページを開く', async ({ page }) => {
   await open(page, true);
   await openTab(page, '操作');
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   await expect(page.locator('.page')).toBeVisible();
   await page.locator('.page .foot__back').click();
   await expect(page.locator('.page')).toBeHidden();
@@ -49,8 +49,7 @@ test('下の帯の ＋ で家具のページを開く。家具を選んでいる
     scene.add({ id: 'box', typeId: 'box', name: '箱', color: '#888888', size: [0.6, 0.8, 0.6], baseSize: [0.6, 0.8, 0.6], position: [0, 0, 0], rotationY: 0 });
     scene.select('box');
   });
-  await expect(page.locator('.manage__head').getByRole('button', { name: '家具を追加' })).toHaveCount(0);
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__head').getByRole('button', { name: '家具を追加' }).click();
   await expect(page.locator('.page')).toBeVisible();
 });
 

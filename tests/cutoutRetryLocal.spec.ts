@@ -12,7 +12,7 @@ test('落ちた印がある端末では知らせが出て、「端末でもう�
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
   await openTab(page, '操作');
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   // 落ちたことが無ければ出ない
   await expect(page.locator('.lib__local')).toBeHidden();
 
@@ -21,7 +21,7 @@ test('落ちた印がある端末では知らせが出て、「端末でもう�
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
   await openTab(page, '操作');
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   const notice = page.locator('.lib__local');
   await expect(notice).toBeVisible();
   await expect(notice).toContainText('サーバーで切り抜いています');

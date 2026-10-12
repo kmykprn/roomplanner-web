@@ -40,7 +40,6 @@ import { createScenePage } from '@/ui/scenePage';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createPhotoMenu } from '@/ui/photoMenu';
 import { createFullscreenButton } from '@/ui/fullscreenButton';
-import { createNavFooter } from '@/ui/footerBar';
 import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
@@ -383,20 +382,15 @@ applyMode();
 applyBackground();
 
 // --- UI ---
-header.replaceChildren(createSceneHeader());
-// 下の帯（背景・部屋・＋・家具）の処理。ホーム・編集の画面・タブから開いた家具のページで同じ
+// 編集の画面のヘッダー。‹ で編集を終えてホームの、開いている種類の一覧へ
+header.replaceChildren(createSceneHeader(() => void goHome(modeState.get().mode)));
+// 下の帯（背景・部屋・＋・家具）の処理。ホームと、タブから開いた家具のページで同じ
 const nav = {
   onKind: (kind: SceneKind) => void goHome(kind),
   onCreate: (kind: SceneKind) => void createAndEnter(kind),
   onFurniture: () => bottomSheet.openFurnitureLibrary(),
 };
 const bottomSheet = createBottomSheet(app, { nav });
-// 編集の画面の下の帯はホームと同じ。開いている種類のタブが選ばれた状態。「背景」「部屋」で編集を終えてホームへ
-const editorFoot = createNavFooter(nav);
-editorFoot.element.classList.add('foot--editor');
-app.append(editorFoot.element, editorFoot.menu.element);
-modeState.subscribe(() => editorFoot.setActive(modeState.get().mode));
-editorFoot.setActive(modeState.get().mode);
 // 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときは背景の一覧から。
 // 背景も部屋も 1 つも無ければ、一覧ではなく新しい背景の編集から始める（空の一覧から ＋ を押す手間を省く）
 const scenePage = createScenePage({ onOpen: enterScene, onCreate: (kind) => void createAndEnter(kind), onFurniture: openFurnitureFromHome });
@@ -431,7 +425,7 @@ async function createAndEnter(kind: SceneKind): Promise<void> {
 }
 
 /**
- * 下の帯の「背景」「部屋」。編集の画面を開いていれば片付けてから、ホームのその一覧へ。
+ * 編集の画面の ‹ と、下の帯の「背景」「部屋」。編集の画面を開いていれば片付けてから、ホームのその一覧へ。
  * 家具のページを開いていれば閉じる
  */
 async function goHome(kind: SceneKind): Promise<void> {
