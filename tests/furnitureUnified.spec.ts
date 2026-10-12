@@ -12,7 +12,7 @@ async function openFurniturePage(page: Page): Promise<void> {
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
   await openTab(page, '操作');
-  await page.locator('.manage__add').click();
+  await page.locator('.foot--editor .foot__add').click();
   await expect(page.locator('.page')).toBeVisible();
 }
 
@@ -100,10 +100,30 @@ test('2D だけの家具は 2D を選んだ状態で、3D の側は点線の「3
   expect(style.border).toBe('dashed');
   expect(style.background).not.toBe('rgb(110, 156, 17)');
   await expect(page.locator('.tile-actions__button')).toBeVisible();
-  // 押すと、編集の姿を開かずに作成が 1 件始まる
+  // 押すと、Wi-Fi 接続をすすめる確認が出る。キャンセルでは作成が始まらない
   await make.click();
   await expect(page.locator('.tile-actions')).toBeHidden();
+  const confirm = page.getByRole('dialog', { name: '3D モデルの作成の確認' });
+  await expect(confirm).toContainText('3D モデルの作成は Wi-Fi 接続時がおすすめです');
+  await expect(confirm).toContainText('モバイルデータ通信でも作成できますが、通信量を多く使います。');
+  await confirm.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(confirm).toBeHidden();
+  expect(await makingCount(page)).toBe(0);
+  // 「今後このメッセージを見せない」に付けて作成すると、編集の姿を開かずに作成が 1 件始まる。次からは確認なし
+  await tile.click();
+  await make.click();
+  await confirm.getByRole('checkbox').check();
+  await confirm.getByRole('button', { name: '作成する' }).click();
   await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
+  expect(await makingCount(page)).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('roomplanner.generation.skipDataWarning'))).toBe('1');
+  await page.evaluate(async () => {
+    const { generationState } = await import('/src/core/generation.ts');
+    generationState.set({ jobs: [] });
+  });
+  await tile.click();
+  await make.click();
+  await expect(confirm).toHaveCount(0);
   expect(await makingCount(page)).toBe(1);
 });
 
@@ -149,7 +169,7 @@ test('ログインしていなければ「3D モデルを作る」はログイ�
   await page.reload();
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
-  await page.locator('.manage__add').click();
+  await page.locator('.foot--editor .foot__add').click();
   await addFlatOnly(page, { anonymous: false }, { trialRemaining: 0, credits: 0, unmetered: false });
   await page.locator('.page .thumb__button', { hasText: '切り抜きだけ' }).click();
   await page.getByRole('button', { name: '3D モデルを作る' }).click();

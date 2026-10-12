@@ -189,7 +189,13 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
       render();
     },
   });
-  const furniturePage = createFurniturePage(modelPanel.element, { onClose: closeFurniturePage, onAdd: modelPanel.openAdd });
+  // 下の帯の ←。一覧以外の姿を開いていればその姿だけ閉じ、一覧ならページを閉じる
+  const furniturePage = createFurniturePage(modelPanel.element, {
+    onBack: () => {
+      if (!modelPanel.back()) closeFurniturePage();
+    },
+    onAdd: modelPanel.openAdd,
+  });
   container.appendChild(furniturePage.element);
 
   /**
@@ -374,13 +380,13 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
     checked = null;
 
     const { id } = selected;
-    // 見出し: 左に「‹ 戻る」（選ぶのをやめて、置いた家具の一覧に戻る）、右に［＋］（家具を選んでいる間も、続けて家具を置ける）。
+    // 見出し: 左に「‹ 戻る」（選ぶのをやめて、置いた家具の一覧に戻る）。家具を足すのは下の帯の ＋。
     // 家具の名前は出さない（どの家具を選んでいるかは、画面の中の枠で分かる）
     const head = document.createElement('div');
     head.className = 'manage__head';
     const back = createButton('‹ 戻る', () => scene.select(null), 'is-text is-small manage__back');
     back.setAttribute('aria-label', '家具の一覧に戻る');
-    head.append(back, createAddButton('small'));
+    head.append(back);
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
     // 実寸は「家具を追加」のページの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
@@ -507,27 +513,7 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
   }
 
   /**
-   * 家具を置くページを開くボタン。
-   * tile: 一覧の先頭のタイル（＋と「家具を追加」）。small: 家具を選んでいるときの見出しの右に置く小さな丸（＋だけ）
-   */
-  function createAddButton(kind: 'tile' | 'small'): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = kind === 'tile' ? 'manage__tile manage__add' : 'manage__add-small';
-    button.append(createIcon('plus'));
-    if (kind === 'tile') {
-      const label = document.createElement('span');
-      label.textContent = '家具を追加';
-      button.append(label);
-    } else {
-      button.setAttribute('aria-label', '家具を追加');
-    }
-    button.addEventListener('click', () => furniturePage.open());
-    return button;
-  }
-
-  /**
-   * 置いてある家具の一覧。何も選んでいないときに出す。横 4 つのタイルの格子で、先頭は［＋ 家具を追加］。
+   * 置いてある家具の一覧。何も選んでいないときに出す。横 4 つのタイルの格子（家具を足すのは下の帯の ＋）。
    *
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
    * 選べない。一覧からなら選べる。タイルを押すと選択になり、操作の行に切り替わる。
@@ -586,10 +572,6 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
 
     const grid = document.createElement('div');
     grid.className = 'manage__grid';
-    const add = createAddButton('tile');
-    // チェックを付けている間は押せない（押すと家具のページが開いて、付けたチェックの意味が分からなくなる）
-    add.disabled = checked !== null;
-    grid.append(add);
     for (const item of furniture) {
       const name = item.name ?? item.typeId;
       const tile = document.createElement('button');

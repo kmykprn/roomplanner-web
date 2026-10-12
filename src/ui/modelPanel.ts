@@ -55,6 +55,7 @@ import { refreshWallet, walletState, remainingGenerations } from '@/core/wallet'
 import { NO_CREDITS_MESSAGE } from '@/platform/api';
 import { pickImages } from '@/platform/picker';
 import { createHeightStep } from '@/ui/heightStep';
+import { confirmDataUsage } from '@/ui/dataWarning';
 import { createSizeField } from '@/ui/sizeField';
 import { placementSize, setModelHeight } from '@/core/furnitureHeight';
 import { createIcon } from '@/ui/icons';
@@ -90,6 +91,11 @@ export interface ModelPanel {
   showHome(): void;
   /** 「家具を追加」のメニュー（2D を作る / 3D モデルを作る）を一覧の上に出す。ページの下の帯の ＋ から */
   openAdd(): void;
+  /**
+   * ページの下の帯の ←。一覧以外の姿（高さの入力・3D を作る・編集）を開いていればそれを閉じて true、
+   * 一覧なら false（呼ぶ側がページを閉じる）
+   */
+  back(): boolean;
 }
 
 export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
@@ -170,13 +176,14 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
       normal.hidden = false;
     },
     // 3D 化にもログインが要る。匿名なら追加画面のログインに送る
-    onMakeModel: (model) => {
+    onMakeModel: async (model) => {
       if (authState.get().anonymous) {
         editor.close();
         openChooser();
         chooser.requireLogin('ログイン後に、もう一度「3D モデルを作成」を押してください');
         return;
       }
+      if (!(await confirmDataUsage())) return;
       void startGenerationForModel(model);
       editor.close();
     },
@@ -185,13 +192,14 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
     onClose: () => {
       normal.hidden = false;
     },
-    onStart: (model) => {
+    onStart: async (model) => {
       if (authState.get().anonymous) {
         maker.close();
         openChooser();
         chooser.requireLogin('ログイン後に、もう一度「3D モデルを作る」を選んでください');
         return;
       }
+      if (!(await confirmDataUsage())) return;
       void startGenerationForModel(model);
       maker.close();
     },
@@ -216,7 +224,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   }
 
   // 家具を押したときに下から出すメニュー。大きな見本・置く形（2D / 3D）・「部屋に追加」（写真なら「背景に追加」）、見出しの右に［✎ 編集］
-  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, onMake: makeModelFromMenu });
+  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, onMake: (model) => void makeModelFromMenu(model) });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
@@ -259,9 +267,10 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   /**
    * メニューの［＋ 3D モデルを作る］。その場で作り始める（編集の姿は経ない）。
    * 3D 化にはログインが要るので、匿名なら追加画面のログインに送る。
-   * 残りの回数が 0 なら編集の姿を開く（使い切ったことと［購入］はそこに出ている）
+   * 残りの回数が 0 なら編集の姿を開く（使い切ったことと［購入］はそこに出ている）。
+   * 始める直前に Wi-Fi 接続をすすめる確認を出す（ui/dataWarning.ts）
    */
-  function makeModelFromMenu(model: GeneratedModel): void {
+  async function makeModelFromMenu(model: GeneratedModel): Promise<void> {
     if (authState.get().anonymous) {
       openChooser();
       chooser.requireLogin('ログイン後に、もう一度「3D モデルを作る」を押してください');
@@ -271,6 +280,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
       openEditor(model);
       return;
     }
+    if (!(await confirmDataUsage())) return;
     void startGenerationForModel(model);
   }
 
@@ -376,7 +386,7 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   /**
    * 一覧（ホーム）に戻す。家具タブを離れたときに呼ぶ（bottomSheet.ts）。
    * 開いていた姿（家具を追加・3D モデルを作る・編集・高さの入力）はすべて閉じる。
-   * 編集の保存していない変更と、高さを聞いていた写真は、「‹ 戻る」と同じく捨てる
+   * 編集の保存していない変更と、高さを聞いていた写真は、下の帯の ← と同じく捨てる
    */
   function showHome(): void {
     homeCount += 1;
@@ -388,10 +398,28 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
     normal.hidden = false;
   }
 
+  /** 開いている姿を 1 つ戻す。高さの入力は取りやめ（切り抜きは始めない） */
+  function back(): boolean {
+    if (!heightStep.element.hidden) {
+      heightStep.cancel();
+      return true;
+    }
+    if (!maker.element.hidden) {
+      maker.close();
+      return true;
+    }
+    if (!editor.element.hidden) {
+      editor.close();
+      return true;
+    }
+    return false;
+  }
+
   return {
     element: panel,
     showHome,
     openAdd: openChooser,
+    back,
   };
 }
 
@@ -452,19 +480,13 @@ function createModelMaker({ onClose, onStart, onAddFlat }: ModelMakerActions): {
   element.className = 'lib__maker';
   element.hidden = true;
 
+  // 見出しだけ。戻るのはページの下の帯の ←（ui/furniturePage.ts）
   const head = document.createElement('div');
   head.className = 'edit__head';
-  const back = document.createElement('button');
-  back.type = 'button';
-  back.className = 'button is-text is-small';
-  back.textContent = '‹ 戻る';
-  back.addEventListener('click', close);
   const title = document.createElement('span');
   title.className = 'edit__title';
   title.textContent = '3D モデルを作る';
-  const headSpacer = document.createElement('span');
-  headSpacer.className = 'edit__spacer';
-  head.append(back, title, headSpacer);
+  head.append(title);
 
   const ask = document.createElement('p');
   ask.className = 'hint';
@@ -1030,18 +1052,12 @@ function createModelEditor({ onClose, onMakeModel }: ModelEditorActions): {
    */
   let facet: ModelFacet = 'flat';
 
+  // 見出しだけ。戻るのはページの下の帯の ←（ui/furniturePage.ts）
   const head = document.createElement('div');
   head.className = 'edit__head';
-  const back = document.createElement('button');
-  back.type = 'button';
-  back.className = 'button is-text is-small';
-  back.textContent = '‹ 戻る';
-  back.addEventListener('click', close);
   const title = document.createElement('span');
   title.className = 'edit__title';
-  const headSpacer = document.createElement('span');
-  headSpacer.className = 'edit__spacer';
-  head.append(back, title, headSpacer);
+  head.append(title);
 
   // アイコン。ほかの欄と同じく、見出しの下に画像を出す（切り抜きがあればそれ。previewImage.ts）
   const iconField = document.createElement('div');

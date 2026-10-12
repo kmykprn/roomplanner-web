@@ -19,7 +19,7 @@ async function openFlatOnlyEditor(page: Page, wallet: { trialRemaining: number; 
     modelLibrary.set({ models: [...modelLibrary.get().models, { ...sample, id: 'flat-only', name: '切り抜きだけ', modelKey: null }] });
   }, wallet);
   await openTab(page, '操作');
-  await page.locator('.manage__add').click();
+  await page.locator('.foot--editor .foot__add').click();
   await page.locator('.page .thumb__button', { hasText: '切り抜きだけ' }).click();
   await page.locator('.tile-actions__edit').click();
   await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveText('家具の編集');

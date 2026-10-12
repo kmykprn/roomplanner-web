@@ -18,6 +18,9 @@ import {
   type PhotoView,
 } from '@/core/photoView';
 
+/** 写真の敷き方。cover: 覆って切り落とす（ふだん）、contain: 全体を収める（全画面） */
+export type PhotoFit = 'cover' | 'contain';
+
 export interface Viewer {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
@@ -50,6 +53,11 @@ export interface Viewer {
    * ずれない。どれだけはみ出たかは core/photoView.ts の setPhotoFrame に入れる
    */
   setContentAspect(aspect: number | null): void;
+  /**
+   * 写真の敷き方。cover は入れ物を覆うように敷いてはみ出た分を切り落とす（ふだん）。
+   * contain は写真の全体が収まる大きさで描き、余った所は入れ物の地のまま（全画面）。寄せは使わない
+   */
+  setFit(fit: PhotoFit): void;
 
   /**
    * 写真のどこを、どれだけ寄って見るかを決める。null で全体に戻す。
@@ -135,6 +143,8 @@ export function createViewer(container: HTMLElement): Viewer {
 
   /** 描画範囲の縦横比。null なら入れ物いっぱいに描く */
   let contentAspect: number | null = null;
+  /** 写真の敷き方（setFit） */
+  let fit: PhotoFit = 'cover';
   /** 写真のどこを見ているか。null なら切り取らない（部屋モード） */
   let photoView: PhotoView | null = null;
   /** いま描いている大きさ（CSS ピクセル）。写真をずらす量の計算に要る */
@@ -148,14 +158,21 @@ export function createViewer(container: HTMLElement): Viewer {
     const height = container.clientHeight;
     if (width === 0 || height === 0) return;
 
-    // いつも入れ物いっぱいに描く。写真は画面を覆うように敷き、はみ出た分は切り落とす
-    drawWidth = width;
-    drawHeight = height;
-    // 倍率 1 のとき、写真の幅と高さのどれだけが画面に入るか。
-    // 画面のほうが横長なら写真の上下が、縦長なら左右がはみ出る
     const screenAspect = width / height;
-    const frameX = contentAspect && screenAspect < contentAspect ? screenAspect / contentAspect : 1;
-    const frameY = contentAspect && screenAspect > contentAspect ? contentAspect / screenAspect : 1;
+    const contain = fit === 'contain' && contentAspect !== null;
+    if (contain && contentAspect) {
+      // 全画面: 写真の全体が収まる大きさで描き、入れ物の真ん中に寄せる。切り落としは無し
+      drawWidth = screenAspect > contentAspect ? height * contentAspect : width;
+      drawHeight = screenAspect > contentAspect ? height : width / contentAspect;
+    } else {
+      // ふだんは入れ物いっぱいに描く。写真は画面を覆うように敷き、はみ出た分は切り落とす
+      drawWidth = width;
+      drawHeight = height;
+    }
+    // 倍率 1 のとき、写真の幅と高さのどれだけが画面に入るか。
+    // 画面のほうが横長なら写真の上下が、縦長なら左右がはみ出る（全体を収めるときは全部入る）
+    const frameX = !contain && contentAspect && screenAspect < contentAspect ? screenAspect / contentAspect : 1;
+    const frameY = !contain && contentAspect && screenAspect > contentAspect ? contentAspect / screenAspect : 1;
     setPhotoFrame(frameX, frameY);
 
     renderer.setSize(drawWidth, drawHeight, false);
@@ -176,9 +193,10 @@ export function createViewer(container: HTMLElement): Viewer {
     overlayLayer.width = Math.round(drawWidth * pixelRatio);
     overlayLayer.height = Math.round(drawHeight * pixelRatio);
 
-    // カメラは写真の全体に合わせる（縦横比も画角も写真のもの）。見える範囲は applyPhotoView で切り取る
+    // カメラは写真の全体に合わせる（縦横比も画角も写真のもの）。見える範囲は applyPhotoView で切り取る。
+    // 既定の画角は「写真の高さ全体が入れ物の高さに入ったとき」が基準。全体を収めるときは描く高さがそのまま写真の高さ
     camera.aspect = contentAspect ?? drawWidth / drawHeight;
-    camera.fov = photoFov ?? fovForDrawHeight(drawHeight / frameY, height);
+    camera.fov = photoFov ?? fovForDrawHeight(drawHeight / frameY, contain ? drawHeight : height);
     applyPhotoView();
   }
 
@@ -189,8 +207,9 @@ export function createViewer(container: HTMLElement): Viewer {
    * **どちらも同じ値から出す。**別々に持つと、寄ったときだけ家具が写真からずれる
    */
   function applyPhotoView(): void {
-    // 写真があれば、寄っていなくても切り取る（画面を覆うためにはみ出た分を落とす）
-    const view = photoView ?? (contentAspect ? DEFAULT_PHOTO_VIEW : null);
+    // 写真があれば、寄っていなくても切り取る（画面を覆うためにはみ出た分を落とす）。
+    // 全体を収めるときは寄せを使わず、写真の全体（既定の見え方）を出す
+    const view = fit === 'contain' && contentAspect ? DEFAULT_PHOTO_VIEW : (photoView ?? (contentAspect ? DEFAULT_PHOTO_VIEW : null));
     if (!view) {
       camera.clearViewOffset(); // updateProjectionMatrix も中で呼ばれる
       setImageFit(photoLayer, '', '');
@@ -267,6 +286,11 @@ export function createViewer(container: HTMLElement): Viewer {
       photoView = view;
       // ピンチの間ずっと呼ばれる。入れ物の大きさは変わらないので測り直さない
       applyPhotoView();
+    },
+    setFit(next) {
+      if (fit === next) return;
+      fit = next;
+      resize();
     },
     onFrame(callback) {
       frameCallbacks.push(callback);

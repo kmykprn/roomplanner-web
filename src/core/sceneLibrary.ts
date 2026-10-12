@@ -38,7 +38,7 @@ export interface SceneEntry {
   name: string;
   /** 作った日時（epoch ms） */
   createdAt: number;
-  /** 最後に中身を保存した日時（epoch ms）。一覧はこの新しい順 */
+  /** 最後に中身を保存した日時（epoch ms）。一覧の並びには使わない（作った順で固定。開いたものが先頭に動くと分かりにくいため） */
   updatedAt: number;
 }
 
@@ -133,7 +133,7 @@ export function entriesOf(kind: SceneKind): SceneEntry[] {
   return sceneLibrary
     .get()
     .entries.filter((entry) => entry.kind === kind)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    .sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function sceneById(id: string): SceneEntry | null {

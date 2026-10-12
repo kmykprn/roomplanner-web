@@ -15,8 +15,8 @@ async function openChooser(page: Page, auth: { anonymous: boolean }, wallet: { t
     authState.set({ ...authState.get(), status: 'ready', ...auth });
   }, auth);
   await openTab(page, '操作');
-  await page.locator('.manage__add').click();
-  await page.locator('.page__add').click();
+  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.page .foot__add').click();
   await expect(page.locator('.lib__chooser')).toBeVisible();
   // 開いたときに残高を取りに行く（テストではサーバーが無いので失敗する）。そのあとで写しを入れる
   if (wallet) {
@@ -68,4 +68,26 @@ test('ログインしていなければ、お試しの回数と［ログイン�
   await expect(page.locator('.lib__login-hint')).toHaveCount(0);
   await bar(page).getByRole('button', { name: 'ログイン' }).click();
   await expect(page.locator('.lib__chooser .login')).toBeVisible();
+});
+
+test('残りの回数を知っていれば、開くたびの取り直しで帯を消さない（2 行と一緒に出る）', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.sheet').first().waitFor();
+  await enterEditor(page);
+  await page.evaluate(async () => {
+    const { authState } = await import('/src/platform/auth.ts');
+    authState.set({ ...authState.get(), status: 'ready', anonymous: false });
+    const { walletState } = await import('/src/core/wallet.ts');
+    walletState.set({ status: 'ready', noBanner: false, trialRemaining: 2, credits: 1, unmetered: false });
+  });
+  await openTab(page, '操作');
+  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.page .foot__add').click();
+  // 開いた直後から帯が出ていて、取り直し（テストではサーバーが無く失敗する）のあとも消えない
+  const bar = page.locator('.wallet-bar');
+  await expect(bar).toBeVisible();
+  await expect(bar).toContainText('3');
+  await page.waitForTimeout(800);
+  await expect(bar).toBeVisible();
+  expect(await page.evaluate(async () => (await import('/src/core/wallet.ts')).walletState.get().status)).toBe('ready');
 });

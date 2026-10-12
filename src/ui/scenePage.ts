@@ -1,12 +1,12 @@
 /**
- * 保存した背景と部屋の一覧（ホーム）。アプリを開いたときの最初の画面（1 つも無くても一覧。＋ から作る）。
+ * 保存した背景と部屋の一覧（ホーム）。アプリを開いたときの最初の画面（背景も部屋も 1 つも無ければ、新しい背景の編集から。main.ts）。
  *
- *   右上の切り替え … 背景の一覧か、部屋の一覧か
- *   下のタブ       … 「ホーム」はこのページ。「家具」は家具のページ（作る・編集・削除）を上に開く
- *   ＋             … 新しい背景（または部屋）を作って編集へ。背景の写真は編集の画面で選ぶ
- *   タイル         … 押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
+ *   下の帯         … 左に「背景」「部屋」のタブ（どちらの一覧か）、真ん中に黄緑の ＋、右に「家具」（家具のページを上に開く）
+ *   ＋             … 「新しく作る」のメニュー（新しい背景 / 新しい部屋）が下から出る。選ぶと作って編集へ。背景の写真は編集の画面で選ぶ
+ *   タイル         … 1 行 2 列。押すとそれを開いて編集の画面へ。アイコンは保存したときの画面の縮小、下は名前だけ
  *   タイルの ⋯     … 名前を変える・複製（複製したものを開く）・削除（確認は家具の削除と同じ文言）
  *
+ * 上の帯は無い（題は要らず、タブで何の一覧か分かる）。
  * 編集の画面（写真と下のシート）はこのページの下にそのままあり、ページを隠すと見える。
  * 開くものの切り替えとモードの切り替えは呼ぶ側（main.ts）が行う。ここは一覧の表示と、押されたことを伝えるだけ
  */
@@ -21,9 +21,11 @@ import {
   type SceneEntry,
   type SceneKind,
 } from '@/core/sceneLibrary';
+import { createFootAdd, createFootTab, createFooterBar } from '@/ui/footerBar';
 import { createIcon } from '@/ui/icons';
 import { askName } from '@/ui/nameDialog';
 import { createMenu } from '@/ui/photoMenu';
+import { createPopupMenu } from '@/ui/popupMenu';
 
 export interface ScenePage {
   element: HTMLElement;
@@ -38,14 +40,9 @@ export interface ScenePageHandlers {
   onOpen(entry: SceneEntry): void;
   /** ＋ を押した。新しく作って編集の画面へ */
   onCreate(kind: SceneKind): void;
-  /** 下の「家具」タブを押した。家具のページを一覧の上に開く。kind は右上で選んでいる種類（置き先になる） */
+  /** 下の「家具」タブを押した。家具のページを一覧の上に開く。kind は下のタブで選んでいる種類（置き先になる） */
   onFurniture(kind: SceneKind): void;
 }
-
-const LABELS: Record<SceneKind, { title: string; add: string }> = {
-  photo: { title: '背景', add: '新しい背景' },
-  room: { title: '部屋', add: '新しい部屋' },
-};
 
 export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   let kind: SceneKind = 'photo';
@@ -57,61 +54,34 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   element.hidden = true;
   element.setAttribute('aria-label', '保存した背景と部屋');
 
-  // 見出し（左）と、背景 / 部屋の切り替え（右）
-  const bar = document.createElement('div');
-  bar.className = 'scenes__bar';
-  const title = document.createElement('span');
-  title.className = 'scenes__title';
-  const switcher = document.createElement('div');
-  switcher.className = 'scenes__switch';
-  switcher.setAttribute('role', 'group');
-  switcher.setAttribute('aria-label', '背景と部屋');
-  const switchButtons = (['photo', 'room'] as const).map((switchKind) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'scenes__switch-item';
-    button.textContent = LABELS[switchKind].title;
-    button.addEventListener('click', () => {
-      if (kind === switchKind) return;
-      kind = switchKind;
-      render();
-    });
-    switcher.append(button);
-    return button;
-  });
-  bar.append(title, switcher);
-
   const body = document.createElement('div');
   body.className = 'scenes__body';
   const grid = document.createElement('div');
   grid.className = 'scenes__grid';
   body.append(grid);
 
-  // 下のタブ。「ホーム」はこのページそのもの（いつも選ばれている）。「家具」は家具のページ（作る・編集・削除）を上に開く
-  const tabs = document.createElement('nav');
-  tabs.className = 'scenes__tabs';
-  tabs.setAttribute('aria-label', 'ホームと家具');
-  const homeTab = document.createElement('button');
-  homeTab.type = 'button';
-  homeTab.className = 'scenes__tab is-active';
-  homeTab.append(createIcon('grid'), Object.assign(document.createElement('span'), { textContent: 'ホーム' }));
-  const furnitureTab = document.createElement('button');
-  furnitureTab.type = 'button';
-  furnitureTab.className = 'scenes__tab';
-  furnitureTab.append(createIcon('chair'), Object.assign(document.createElement('span'), { textContent: '家具' }));
-  furnitureTab.addEventListener('click', () => handlers.onFurniture(kind));
-  tabs.append(homeTab, furnitureTab);
+  // 下の帯。左に「背景」「部屋」（どちらの一覧か）、真ん中に ＋（新しく作る）、右に「家具」（家具のページを上に開く）
+  const foot = createFooterBar('背景・部屋・家具');
+  const tabs = (['photo', 'room'] as const).map((tabKind) =>
+    createFootTab(tabKind === 'photo' ? 'image' : 'cube', tabKind === 'photo' ? '背景' : '部屋', () => {
+      if (kind === tabKind) return;
+      kind = tabKind;
+      render();
+    })
+  );
+  foot.left.append(...tabs);
+  const createMenuSheet = createPopupMenu('新しく作る', [
+    { icon: 'image', label: '新しい背景', run: () => handlers.onCreate('photo') },
+    { icon: 'cube', label: '新しい部屋', run: () => handlers.onCreate('room') },
+  ]);
+  foot.center.append(createFootAdd('新しく作る', createMenuSheet.open));
+  foot.right.append(createFootTab('chair', '家具', () => handlers.onFurniture(kind)));
 
-  element.append(bar, body, tabs);
+  element.append(body, foot.element, createMenuSheet.element);
 
   function render(): void {
-    const labels = LABELS[kind];
-    title.textContent = labels.title;
-    switchButtons.forEach((button, index) => button.classList.toggle('is-active', (['photo', 'room'] as const)[index] === kind));
-
-    const nodes: HTMLElement[] = [createAddTile(labels.add)];
-    for (const entry of entriesOf(kind)) nodes.push(createTile(entry));
-    grid.replaceChildren(...nodes);
+    tabs.forEach((tab, index) => tab.classList.toggle('is-active', (['photo', 'room'] as const)[index] === kind));
+    grid.replaceChildren(...entriesOf(kind).map(createTile));
     // 無くなったもののアイコンは解放する
     const alive = new Set(sceneLibrary.get().entries.map((entry) => entry.id));
     for (const [id, url] of thumbnails) {
@@ -119,19 +89,6 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
       URL.revokeObjectURL(url);
       thumbnails.delete(id);
     }
-  }
-
-  function createAddTile(label: string): HTMLElement {
-    const tile = document.createElement('button');
-    tile.type = 'button';
-    tile.className = 'scene-tile scene-tile--add';
-    // 点線の枠の中は ＋ だけ。名前はほかのタイルと同じく枠の下に出す
-    const box = document.createElement('span');
-    box.className = 'scene-tile__add-box';
-    box.append(createIcon('plus'));
-    tile.append(box, Object.assign(document.createElement('span'), { className: 'scene-tile__add-name', textContent: label }));
-    tile.addEventListener('click', () => handlers.onCreate(kind));
-    return tile;
   }
 
   function createTile(entry: SceneEntry): HTMLElement {
@@ -223,6 +180,7 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
       element.hidden = false;
     },
     close() {
+      createMenuSheet.close();
       element.hidden = true;
     },
     isOpen: () => !element.hidden,
