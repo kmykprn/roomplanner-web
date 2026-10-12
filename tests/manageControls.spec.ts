@@ -34,7 +34,7 @@ async function contrastOf(page: Page, selector: string): Promise<number> {
   return 1.05 / (lum + 0.05);
 }
 
-test('見出しは「‹ 戻る」だけで、家具の名前は出さない。「‹ 戻る」で一覧に戻る', async ({ page }) => {
+test('見出しは「‹ 戻る」と［＋］で、家具の名前は出さない。「‹ 戻る」で一覧に戻る', async ({ page }) => {
   const head = page.locator('.manage__head');
   await expect(head.getByRole('button', { name: '家具の一覧に戻る' })).toHaveText('‹ 戻る');
   await expect(head.getByText('サンプル 2')).toHaveCount(0);

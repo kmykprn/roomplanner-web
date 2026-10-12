@@ -15,7 +15,7 @@ import { isBillboard, type PlacedFurniture } from '@/config/furniture';
 import type { EditableScene } from '@/core/furnitureScene';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createFurniturePage } from '@/ui/furniturePage';
-import { createFloatingAdd, type NavFooterHandlers } from '@/ui/footerBar';
+import type { NavFooterHandlers } from '@/ui/footerBar';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel, isAdjustingPhoto } from '@/ui/photoPanel';
@@ -145,7 +145,7 @@ const ANGLE_LIMITS = { min: -180, max: 180 };
 export interface BottomSheet {
   /**
    * 家具のページを、置けない姿で開く（下のタブの「家具」から。帯はホームと同じで、置くボタンは出ない）。
-   * 編集の画面から置くのは、シートの右下の浮かぶ「家具を追加」
+   * 編集の画面から置くのは、置いた家具の一覧の「＋ 家具を追加」のタイルと、家具を選んでいる間の見出しの ＋
    */
   openFurnitureLibrary(): void;
   /** 家具のページを閉じる（タブで別の画面へ移るとき） */
@@ -199,12 +199,6 @@ export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOp
   });
   container.appendChild(furniturePage.element);
 
-  // シートの右下に浮かぶ「家具を追加」。押すと家具のページを置ける姿で開く。
-  // 背景の調整の画面を出している間と全画面（style.css）は出さない
-  const addFurniture = createFloatingAdd('家具を追加', () => openFurniturePage('placing'));
-  addFurniture.classList.add('fab--editor');
-  container.appendChild(addFurniture);
-
   /** 家具のページを開く。placing なら「背景に追加」で置ける、browse（タブから）なら置けない */
   function openFurniturePage(mode: 'placing' | 'browse'): void {
     modelPanel.setPlacing(mode === 'placing');
@@ -228,8 +222,6 @@ export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOp
   }
 
   function render(): void {
-    // 背景の調整の画面（拡大・縮小 / 寸法 / 家具を隠す範囲）を出している間は、家具を足す場面ではないので隠す
-    addFurniture.hidden = isPhotoMode() && isAdjustingPhoto();
     const tabs = visibleTabs();
 
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
@@ -396,13 +388,13 @@ export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOp
     checked = null;
 
     const { id } = selected;
-    // 見出し: 左に「‹ 戻る」（選ぶのをやめて、置いた家具の一覧に戻る）。家具を足すのは下の帯の ＋。
+    // 見出し: 左に「‹ 戻る」（選ぶのをやめて、置いた家具の一覧に戻る）、右に［＋］（家具を選んでいる間も、続けて家具を置ける）。
     // 家具の名前は出さない（どの家具を選んでいるかは、画面の中の枠で分かる）
     const head = document.createElement('div');
     head.className = 'manage__head';
     const back = createButton('‹ 戻る', () => scene.select(null), 'is-text is-small manage__back');
     back.setAttribute('aria-label', '家具の一覧に戻る');
-    head.append(back);
+    head.append(back, createAddButton('small'));
 
     // ふだん使う行: 向き（板なら傾き）と大きさ。
     // 実寸は「家具を追加」のページの編集で決める。ここの大きさは、置いたこの 1 つだけを実寸の何 % で見せるか
@@ -529,7 +521,27 @@ export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOp
   }
 
   /**
-   * 置いてある家具の一覧。何も選んでいないときに出す。横 4 つのタイルの格子（家具を足すのは下の帯の ＋）。
+   * 家具を置くページを開くボタン（置ける姿で開く）。
+   * tile: 一覧の先頭のタイル（＋と「家具を追加」）。small: 家具を選んでいるときの見出しの右に置く小さな丸（＋だけ）
+   */
+  function createAddButton(kind: 'tile' | 'small'): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = kind === 'tile' ? 'manage__tile manage__add' : 'manage__add-small';
+    button.append(createIcon('plus'));
+    if (kind === 'tile') {
+      const label = document.createElement('span');
+      label.textContent = '家具を追加';
+      button.append(label);
+    } else {
+      button.setAttribute('aria-label', '家具を追加');
+    }
+    button.addEventListener('click', () => openFurniturePage('placing'));
+    return button;
+  }
+
+  /**
+   * 置いてある家具の一覧。何も選んでいないときに出す。横 4 つのタイルの格子で、先頭は［＋ 家具を追加］。
    *
    * 画面の外に出てしまった家具や、大きくしすぎて掴めない家具は、画面をタップしても
    * 選べない。一覧からなら選べる。タイルを押すと選択になり、操作の行に切り替わる。
@@ -588,6 +600,10 @@ export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOp
 
     const grid = document.createElement('div');
     grid.className = 'manage__grid';
+    const add = createAddButton('tile');
+    // チェックを付けている間は押せない（押すと家具のページが開いて、付けたチェックの意味が分からなくなる）
+    add.disabled = checked !== null;
+    grid.append(add);
     for (const item of furniture) {
       const name = item.name ?? item.typeId;
       const tile = document.createElement('button');

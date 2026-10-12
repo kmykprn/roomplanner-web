@@ -15,7 +15,7 @@ async function openChooser(page: Page, auth: { anonymous: boolean }, wallet: { t
     authState.set({ ...authState.get(), status: 'ready', ...auth });
   }, auth);
   await openTab(page, '操作');
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   await page.locator('.page .fab').click();
   await expect(page.locator('.lib__chooser')).toBeVisible();
   // 開いたときに残高を取りに行く（テストではサーバーが無いので失敗する）。そのあとで写しを入れる
@@ -81,7 +81,7 @@ test('残りの回数を知っていれば、開くたびの取り直しで帯�
     walletState.set({ status: 'ready', noBanner: false, trialRemaining: 2, credits: 1, unmetered: false });
   });
   await openTab(page, '操作');
-  await page.locator('.fab--editor').click();
+  await page.locator('.manage__add').click();
   await page.locator('.page .fab').click();
   // 開いた直後から帯が出ていて、取り直し（テストではサーバーが無く失敗する）のあとも消えない
   const bar = page.locator('.wallet-bar');
