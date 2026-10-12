@@ -9,8 +9,8 @@ test('2D の行は切り抜き、3D の行は回る 3D の見本を出し、画�
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
-  await page.locator('.foot--editor .foot__add').click();
-  await page.locator('.page .foot__add').click();
+  await page.locator('.fab--editor').click();
+  await page.locator('.page .fab').click();
   const rows = page.locator('.lib__chooser .way');
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText('2D（切り抜き）を作る');

@@ -54,11 +54,11 @@ export async function enterEditor(page: Page): Promise<void> {
 /** ホームの ＋ から「新しい背景」（部屋なら「新しい部屋」）を選んで作る */
 export async function createFromHome(page: Page, kind: 'photo' | 'room'): Promise<void> {
   await page.locator('.scenes .foot__add').click();
-  await page.locator('.popup__row', { hasText: kind === 'photo' ? '新しい背景' : '新しい部屋' }).click();
+  await page.locator('.popup:visible .popup__row', { hasText: kind === 'photo' ? '新しい背景' : '新しい部屋' }).click();
 }
 
-/** 編集の画面の下の帯の ← でホームへ */
+/** 編集の画面の下の帯の「背景」（部屋なら「部屋」）でホームへ。開いている種類のタブ（選ばれているもの）を押す */
 export async function leaveToHome(page: Page): Promise<void> {
-  await page.locator('.foot--editor .foot__back').click();
+  await page.locator('.foot--editor .foot__tab.is-active').click();
   await page.locator('.scenes').waitFor();
 }

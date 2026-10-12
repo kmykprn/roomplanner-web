@@ -2207,9 +2207,41 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-/* 一覧以外の姿（3D を作る・編集・高さの入力）では、下の帯の ＋ を出さない（それぞれの姿の中で作るため）。← は残る */
-.page:has(.lib__normal[hidden]) .foot__add {
+/*
+ * 一覧の右下に浮かぶ「家具を追加」「新しい家具」（ui/footerBar.ts の createFloatingAdd）。
+ * 白い地に黄緑の線。帯の黄緑の塗りの ＋（新しく作る）とは意味が違うので、色と場所で見分ける。帯の 16px 上、右から 16px
+ */
+.fab {
+  position: absolute;
+  right: 16px;
+  bottom: calc(76px + env(safe-area-inset-bottom) + 16px);
+  z-index: 5;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1.5px solid var(--primary);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.fab .ic {
+  width: 28px;
+  height: 28px;
+}
+.fab[hidden] {
   display: none;
+}
+/* 一覧以外の姿（3D を作る・編集・高さの入力）では、浮かぶ ＋ を出さない（それぞれの姿の中で作るため）。← は残る */
+.page:has(.lib__normal[hidden]) .fab {
+  display: none;
+}
+/* 最後のタイルが浮かぶ ＋ に隠れないよう、一覧の下に余白 */
+.page__body {
+  padding-bottom: 88px;
 }
 
 .page__title {
@@ -2459,10 +2491,11 @@ body {
   width: 22px;
   height: 22px;
 }
-/* 全画面: ヘッダーと下のシートと写真の［⋯］を隠し、絵だけにする。ボタンは safe-area の分だけ上げる */
+/* 全画面: ヘッダーと下のシートと帯と写真の［⋯］を隠し、絵だけにする。ボタンは safe-area の分だけ上げる */
 #app.is-full .header,
 #app.is-full .sheet,
 #app.is-full .foot--editor,
+#app.is-full .fab--editor,
 #app.is-full .photo-menu {
   display: none;
 }

@@ -96,6 +96,11 @@ export interface ModelPanel {
    * 一覧なら false（呼ぶ側がページを閉じる）
    */
   back(): boolean;
+  /**
+   * 置けるかどうか。下のタブの「家具」から開いたときは置く先（背景や部屋）を開いていないので、
+   * 「背景に追加」を出さない（2D/3D の列・3D を作る・編集・削除はそのまま）
+   */
+  setPlacing(enabled: boolean): void;
 }
 
 export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
@@ -224,7 +229,9 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   }
 
   // 家具を押したときに下から出すメニュー。大きな見本・置く形（2D / 3D）・「部屋に追加」（写真なら「背景に追加」）、見出しの右に［✎ 編集］
-  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, onMake: (model) => void makeModelFromMenu(model) });
+  /** 置ける姿か（置く先を開いているか）。setPlacing で変える */
+  let placing = true;
+  const tileActions = createTileActions({ onPlace: placeGenerated, onEdit: openEditor, onMake: (model) => void makeModelFromMenu(model), canPlace: () => placing });
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
@@ -420,6 +427,9 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
     showHome,
     openAdd: openChooser,
     back,
+    setPlacing(enabled) {
+      placing = enabled;
+    },
   };
 }
 
@@ -817,6 +827,8 @@ function createTileActions(actions: {
   onEdit(model: GeneratedModel): void;
   /** ［＋ 3D モデルを作る］を押した */
   onMake(model: GeneratedModel): void;
+  /** 置ける姿か。置けないときは「背景に追加」を出さない */
+  canPlace(): boolean;
 }): {
   element: HTMLElement;
   open(model: GeneratedModel): void;
@@ -911,6 +923,7 @@ function createTileActions(actions: {
       sheet.setAttribute('aria-label', model.name);
       // 開くたびに、いまの置き先の呼び名にする
       place.textContent = isPhotoMode() ? '背景に追加' : '部屋に追加';
+      place.hidden = !actions.canPlace();
       const hasFlat = model.imageKey !== null;
       const hasSolid = model.modelKey !== null;
       // 2D は切り抜きができる前の記録だけ無い。3D が無ければ、その場所に［＋ 3D モデルを作る］

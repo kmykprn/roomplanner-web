@@ -21,11 +21,10 @@ import {
   type SceneEntry,
   type SceneKind,
 } from '@/core/sceneLibrary';
-import { createFootAdd, createFootTab, createFooterBar } from '@/ui/footerBar';
+import { createNavFooter } from '@/ui/footerBar';
 import { createIcon } from '@/ui/icons';
 import { askName } from '@/ui/nameDialog';
 import { createMenu } from '@/ui/photoMenu';
-import { createPopupMenu } from '@/ui/popupMenu';
 
 export interface ScenePage {
   element: HTMLElement;
@@ -40,7 +39,7 @@ export interface ScenePageHandlers {
   onOpen(entry: SceneEntry): void;
   /** ＋ を押した。新しく作って編集の画面へ */
   onCreate(kind: SceneKind): void;
-  /** 下の「家具」タブを押した。家具のページを一覧の上に開く。kind は下のタブで選んでいる種類（置き先になる） */
+  /** 下の「家具」タブを押した。家具のページを一覧の上に開く（置けない姿）。kind は下のタブで選んでいる種類 */
   onFurniture(kind: SceneKind): void;
 }
 
@@ -60,27 +59,21 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
   grid.className = 'scenes__grid';
   body.append(grid);
 
-  // 下の帯。左に「背景」「部屋」（どちらの一覧か）、真ん中に ＋（新しく作る）、右に「家具」（家具のページを上に開く）
-  const foot = createFooterBar('背景・部屋・家具');
-  const tabs = (['photo', 'room'] as const).map((tabKind) =>
-    createFootTab(tabKind === 'photo' ? 'image' : 'cube', tabKind === 'photo' ? '背景' : '部屋', () => {
+  // 下の帯（ホームと同じ帯。編集の画面と家具のページでも同じ）。「背景」「部屋」でどちらの一覧か、＋ で新しく作る、「家具」で家具のページ
+  const foot = createNavFooter({
+    onKind: (tabKind) => {
       if (kind === tabKind) return;
       kind = tabKind;
       render();
-    })
-  );
-  foot.left.append(...tabs);
-  const createMenuSheet = createPopupMenu('新しく作る', [
-    { icon: 'image', label: '新しい背景', run: () => handlers.onCreate('photo') },
-    { icon: 'cube', label: '新しい部屋', run: () => handlers.onCreate('room') },
-  ]);
-  foot.center.append(createFootAdd('新しく作る', createMenuSheet.open));
-  foot.right.append(createFootTab('chair', '家具', () => handlers.onFurniture(kind)));
+    },
+    onCreate: handlers.onCreate,
+    onFurniture: () => handlers.onFurniture(kind),
+  });
 
-  element.append(body, foot.element, createMenuSheet.element);
+  element.append(body, foot.element, foot.menu.element);
 
   function render(): void {
-    tabs.forEach((tab, index) => tab.classList.toggle('is-active', (['photo', 'room'] as const)[index] === kind));
+    foot.setActive(kind);
     grid.replaceChildren(...entriesOf(kind).map(createTile));
     // 無くなったもののアイコンは解放する
     const alive = new Set(sceneLibrary.get().entries.map((entry) => entry.id));
@@ -180,7 +173,7 @@ export function createScenePage(handlers: ScenePageHandlers): ScenePage {
       element.hidden = false;
     },
     close() {
-      createMenuSheet.close();
+      foot.menu.close();
       element.hidden = true;
     },
     isOpen: () => !element.hidden,

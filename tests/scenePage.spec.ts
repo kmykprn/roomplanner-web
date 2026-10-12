@@ -63,7 +63,7 @@ test('＋ を押すと「新しく作る」が下から出て、暗い所を押�
   const menu = page.getByRole('dialog', { name: '新しく作る' });
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('button')).toHaveText(['新しい背景›', '新しい部屋›']);
-  await page.locator('.popup__dim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.popup:visible .popup__dim').click({ position: { x: 10, y: 10 } });
   await expect(menu).toBeHidden();
   await createFromHome(page, 'photo');
   await expect(page.locator('.scenes')).toBeHidden();
@@ -173,69 +173,71 @@ test('ヘッダーは名前（右に鉛筆）だけで真ん中にあり、高�
   await expect(page.locator('.scene-header__name .ic')).toBeVisible();
 });
 
-test('編集の画面の下の帯は ← と ＋。← でホームへ、＋ で家具のページ', async ({ page }) => {
+test('編集の画面の下の帯はホームと同じ（開いている種類が選ばれた状態）。「家具を追加」は右下に浮かぶ白い丸', async ({ page }) => {
   const r = await page.evaluate(() => {
     const foot = document.querySelector('.foot--editor')!.getBoundingClientRect();
-    const back = document.querySelector('.foot--editor .foot__back')!;
-    const add = document.querySelector('.foot--editor .foot__add')!.getBoundingClientRect();
-    return { footHeight: foot.height, footBottom: foot.bottom, inner: window.innerHeight, backWidth: back.getBoundingClientRect().width, backIcon: back.querySelector('.ic')!.getBoundingClientRect().width, addWidth: add.width, addCenter: (add.left + add.right) / 2 };
+    const tabs = Array.from(document.querySelectorAll('.foot--editor .foot__tab'), (el) => ({ text: el.textContent, active: el.classList.contains('is-active') }));
+    const add = document.querySelector('.fab--editor')!.getBoundingClientRect();
+    const s = getComputedStyle(document.querySelector('.fab--editor')!);
+    return { footHeight: foot.height, footBottom: foot.bottom, inner: window.innerHeight, tabs, addWidth: add.width, addRight: window.innerWidth - add.right, addGap: foot.top - add.bottom, addBackground: s.backgroundColor, addBorder: s.borderTopColor };
   });
   expect(r.footHeight).toBe(76);
   expect(r.footBottom).toBe(r.inner);
-  expect(r.backWidth).toBe(64);
-  expect(r.backIcon).toBe(32);
-  expect(r.addWidth).toBe(64);
-  expect(Math.abs(r.addCenter - 250)).toBeLessThan(1);
-  await page.locator('.foot--editor .foot__add').click();
-  await expect(page.getByRole('dialog', { name: '家具' })).toBeVisible();
-  await page.locator('.page .foot__back').click();
+  expect(r.tabs).toEqual([{ text: '背景', active: true }, { text: '部屋', active: false }, { text: '家具', active: false }]);
+  expect(r.addWidth).toBe(56);
+  expect(r.addRight).toBe(16);
+  expect(r.addGap).toBe(16);
+  expect(r.addBackground).toBe('rgb(255, 255, 255)');
+  expect(r.addBorder).toBe('rgb(110, 156, 17)');
+  // 浮かぶ「家具を追加」で開くと ← の帯で、「背景に追加」で置ける
+  await page.locator('.fab--editor').click();
+  const furniture = page.getByRole('dialog', { name: '家具' });
+  await expect(furniture).toBeVisible();
+  await expect(page.locator('.page .foot:visible .foot__back')).toBeVisible();
+  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
+  await expect(page.locator('.tile-actions__button')).toHaveText('背景に追加');
+  await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
+  await page.locator('.page .foot:visible .foot__back').click();
+  await expect(furniture).toBeHidden();
+  // 帯の「家具」で開くと帯はホームと同じで、「背景に追加」は無い。「背景」で編集を終えてホームへ
+  await page.locator('.foot--editor .foot__tab', { hasText: '家具' }).click();
+  await expect(furniture).toBeVisible();
+  await expect(page.locator('.page .foot:visible .foot__tab', { hasText: '家具' })).toHaveClass(/is-active/);
+  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
+  await expect(page.locator('.tile-actions__name')).toBeVisible();
+  await expect(page.locator('.tile-actions__button')).toBeHidden();
+  await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
   await placeChair(page);
-  await leaveToHome(page);
+  await page.locator('.page .foot:visible .foot__tab', { hasText: '背景' }).click();
+  await expect(furniture).toBeHidden();
   await expect(page.locator('.scenes')).toBeVisible();
+  await expect(page.locator('.scene-tile__button')).toHaveCount(1);
 });
 
-test('下の「家具」タブの家具のページは「家具を追加」と同じ。「背景に追加」で最後に開いていた背景に置いて編集へ', async ({ page }) => {
+test('ホームの「家具」タブで開いた家具のページは、帯がホームと同じで「背景に追加」は出ない。2D/3D の列と編集は出る', async ({ page }) => {
   await placeChair(page);
   await leaveToHome(page);
-  await expect(page.locator('.scene-tile__button')).toHaveCount(1);
-  const name = await page.locator('.scene-tile__name').textContent();
   await page.locator('.scenes .foot__tab', { hasText: '家具' }).click();
   const furniture = page.getByRole('dialog', { name: '家具' });
   await expect(furniture).toBeVisible();
+  await expect(page.locator('.page .foot:visible .foot__tab', { hasText: '家具' })).toHaveClass(/is-active/);
+  await expect(page.locator('.page .foot:visible .foot__back')).toHaveCount(0);
   await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
   await expect(page.getByRole('group', { name: '置く形' })).toBeVisible();
-  await expect(page.locator('.tile-actions__button')).toHaveText('背景に追加');
-  await page.locator('.tile-actions__button').click();
+  await expect(page.locator('.tile-actions__edit')).toBeVisible();
+  await expect(page.locator('.tile-actions__button')).toBeHidden();
+  await page.locator('.tile-actions__dim').click({ position: { x: 10, y: 10 } });
+  // 「部屋」で閉じてホームの部屋の一覧へ。＋ の「新しい部屋」で作って編集へ
+  await page.locator('.page .foot:visible .foot__tab', { hasText: '部屋' }).click();
   await expect(furniture).toBeHidden();
-  await expect(page.locator('.scenes')).toBeHidden();
-  await expect(page.locator('.scene-header__name')).toHaveText(name!);
-  const names = await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().furniture.map((f) => f.name));
-  expect(names).toEqual(['椅子', 'サンプル 1']);
-  await expect(page.getByRole('button', { name: '画面から削除' })).toBeVisible();
-  // ← で閉じたときはホームのまま
-  await leaveToHome(page);
+  await expect(page.locator('.scenes .foot__tab', { hasText: '部屋' })).toHaveClass(/is-active/);
   await page.locator('.scenes .foot__tab', { hasText: '家具' }).click();
-  await page.locator('.page .foot__back').click();
+  await page.locator('.page .foot:visible .foot__add').click();
+  await page.locator('.popup:visible .popup__row', { hasText: '新しい部屋' }).click();
   await expect(furniture).toBeHidden();
-  await expect(page.locator('.scenes')).toBeVisible();
-});
-
-test('「部屋」を選んで「家具」タブから置くと「部屋に追加」。部屋が 1 つも無ければ新しく作ってそこに置く', async ({ page }) => {
-  await placeChair(page);
-  await leaveToHome(page);
-  await page.locator('.scenes .foot__tab', { hasText: '部屋' }).click();
-  await expect(page.locator('.scene-tile__button')).toHaveCount(0);
-  await page.locator('.scenes .foot__tab', { hasText: '家具' }).click();
-  await page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).click();
-  await expect(page.locator('.tile-actions__button')).toHaveText('部屋に追加');
-  await page.locator('.tile-actions__button').click();
   await expect(page.locator('.scenes')).toBeHidden();
   await expect(page.locator('.scene-header__name')).toHaveText(/^部屋 \d+\/\d+$/);
-  const names = await page.evaluate(async () => (await import('/src/core/appState.ts')).appState.get().furniture.map((f) => f.name));
-  expect(names).toEqual(['サンプル 1']);
-  await leaveToHome(page);
-  await expect(page.locator('.scenes .foot__tab', { hasText: '部屋' })).toHaveClass(/is-active/);
-  await expect(page.locator('.scene-tile__button')).toHaveCount(1);
+  await expect(page.locator('.foot--editor .foot__tab', { hasText: '部屋' })).toHaveClass(/is-active/);
 });
 
 test('名前を変える欄は画面の上の方にあり、下端が画面の高さの半分より上（キーボードに隠れない）', async ({ page }) => {

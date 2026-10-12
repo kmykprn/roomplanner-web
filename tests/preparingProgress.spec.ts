@@ -65,7 +65,7 @@ test('作成中の 3D のタイルは、送っている間も順番待ちも「�
     generationState.set({ ...generationState.get(), jobs: [job as never] });
   });
   await openTab(page, '操作');
-  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.fab--editor').click();
   const tile = page.locator('.page .thumb').filter({ has: page.locator('.ring') }).first();
   await expect(tile.locator('.thumb__name')).toHaveText('準備中');
   // 塗られている円の残り（strokeDashoffset）が、円周より短い＝少しでも塗られている

@@ -12,7 +12,7 @@ async function openFurniturePage(page: Page): Promise<void> {
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
   await openTab(page, '操作');
-  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.fab--editor').click();
   await expect(page.locator('.page')).toBeVisible();
 }
 
@@ -169,7 +169,7 @@ test('ログインしていなければ「3D モデルを作る」はログイ�
   await page.reload();
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
-  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.fab--editor').click();
   await addFlatOnly(page, { anonymous: false }, { trialRemaining: 0, credits: 0, unmetered: false });
   await page.locator('.page .thumb__button', { hasText: '切り抜きだけ' }).click();
   await page.getByRole('button', { name: '3D モデルを作る' }).click();

@@ -15,7 +15,7 @@ test.describe('家具のページ', () => {
   /** 操作タブの［＋ 家具を追加］で、家具のページを開く */
   async function openFurniturePage(page: import('@playwright/test').Page): Promise<void> {
     await openTab(page, '操作');
-    await page.locator('.foot--editor .foot__add').click();
+    await page.locator('.fab--editor').click();
     await expect(page.locator('.page')).toBeVisible();
   }
 
@@ -59,10 +59,10 @@ test.describe('家具のページ', () => {
     // 編集の姿に文字の「‹ 戻る」は無く、下の帯の ← で戻る。＋ は出さない
     await expect(page.locator('.page .lib__edit button', { hasText: '‹ 戻る' })).toHaveCount(0);
     await expect(page.locator('.page .foot__back')).toBeVisible();
-    await expect(page.locator('.page .foot__add')).toBeHidden();
+    await expect(page.locator('.page .fab')).toBeHidden();
     await page.locator('.page .foot__back').click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
-    await expect(page.locator('.page .foot__add')).toBeVisible();
+    await expect(page.locator('.page .fab')).toBeVisible();
     await page.locator('.page .foot__back').click();
     await expect(page.locator('.page')).toBeHidden();
     await expect(page.locator('.foot--editor .foot__add')).toBeVisible();
@@ -80,14 +80,14 @@ test.describe('家具のページ', () => {
 
   test('家具を追加する画面に、利用者 ID を出さない', async ({ page }) => {
     await openFurniturePage(page);
-    await page.locator('.page .foot__add').click();
+    await page.locator('.page .fab').click();
     await expect(page.locator('.lib__chooser-title')).toHaveText('家具を追加');
     await expect(page.getByText('利用者 ID')).toHaveCount(0);
   });
 
   test('下の帯の ＋ で「家具を追加」が一覧の上に下から出て、暗い所を押すと閉じ、一覧はそのまま残る', async ({ page }) => {
     await openFurniturePage(page);
-    await page.locator('.page .foot__add').click();
+    await page.locator('.page .fab').click();
     const chooser = page.locator('.lib__chooser');
     await expect(chooser).toBeVisible();
     // 一覧（後ろ）は隠れていない。× とつまみは無い
@@ -102,21 +102,24 @@ test.describe('家具のページ', () => {
     await page.locator('.lib__chooser-dim').click({ position: { x: 10, y: 10 } });
     await expect(chooser).toBeHidden();
     await expect(page.locator('.lib__normal')).toBeVisible();
-    await expect(page.locator('.page .foot')).toBeVisible();
+    await expect(page.locator('.page .foot:visible')).toHaveCount(1);
   });
 
-  test('下の帯は 76px。左端の ← は 64px の押せる範囲に 32px の矢印、真ん中に 64px の黄緑の丸い ＋', async ({ page }) => {
+  test('「家具を追加」から開くと下の帯は ← だけ（76px、← は 64px の押せる範囲に 32px の矢印）。「新しい家具」は右下に浮かぶ白い丸（56px、黄緑の線）', async ({ page }) => {
     await openFurniturePage(page);
     const r = await page.evaluate(() => {
-      const foot = document.querySelector('.page .foot')!.getBoundingClientRect();
-      const back = document.querySelector('.page .foot__back')!;
+      const foot = document.querySelector('.page .foot:not([hidden])')!.getBoundingClientRect();
+      const back = document.querySelector('.page .foot:not([hidden]) .foot__back')!;
       const backIcon = back.querySelector('.ic')!.getBoundingClientRect();
-      const add = document.querySelector('.page .foot__add')!;
+      const add = document.querySelector('.page .fab')!;
       const a = add.getBoundingClientRect();
+      const s = getComputedStyle(add);
       return {
-        footHeight: foot.height, footBottom: foot.bottom, inner: window.innerHeight,
+        footHeight: foot.height, footBottom: foot.bottom, inner: window.innerWidth && window.innerHeight,
         backLeft: back.getBoundingClientRect().left, backWidth: back.getBoundingClientRect().width, iconWidth: backIcon.width,
-        addWidth: a.width, addCenter: (a.left + a.right) / 2, addBackground: getComputedStyle(add).backgroundColor, addRadius: getComputedStyle(add).borderRadius,
+        footAdd: document.querySelectorAll('.page .foot:not([hidden]) .foot__add').length,
+        addWidth: a.width, addRight: window.innerWidth - a.right, addGap: foot.top - a.bottom,
+        addBackground: s.backgroundColor, addBorder: s.borderTopColor, addColor: s.color, addRadius: s.borderRadius,
         addText: add.textContent?.trim(), closeButtons: document.querySelectorAll('.page__bar button').length,
       };
     });
@@ -125,9 +128,13 @@ test.describe('家具のページ', () => {
     expect(r.backLeft).toBeLessThan(16);
     expect(r.backWidth).toBe(64);
     expect(r.iconWidth).toBe(32);
-    expect(r.addWidth).toBe(64);
-    expect(Math.abs(r.addCenter - 250)).toBeLessThan(1);
-    expect(r.addBackground).toBe('rgb(110, 156, 17)');
+    expect(r.footAdd).toBe(0);
+    expect(r.addWidth).toBe(56);
+    expect(r.addRight).toBe(16);
+    expect(r.addGap).toBe(16);
+    expect(r.addBackground).toBe('rgb(255, 255, 255)');
+    expect(r.addBorder).toBe('rgb(110, 156, 17)');
+    expect(r.addColor).toBe('rgb(110, 156, 17)');
     expect(r.addRadius).toBe('50%');
     expect(r.addText).toBe('');
     // 上の帯に × は無く、一覧に「新しい家具」のタイルも無い
