@@ -12,7 +12,7 @@
 
 export type IconName =
   | 'trash' | 'check' | 'plus' | 'camera' | 'link' | 'cube' | 'frame' | 'ruler' | 'layers' | 'pencil' | 'checkbox' | 'more' | 'image'
-  | 'chevron-left' | 'copy' | 'grid' | 'chair';
+  | 'chevron-left' | 'copy' | 'grid' | 'chair' | 'arrow-left' | 'expand' | 'shrink';
 
 /** 24px グリッド。線は 1.9px、端と角は丸（CSS の .ic で指定） */
 const PATHS: Record<IconName, string[]> = {
@@ -40,6 +40,11 @@ const PATHS: Record<IconName, string[]> = {
   checkbox: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M8 12l3 3 5-6'],
   // 一覧に戻る: 左向きの山
   'chevron-left': ['M14.5 5.5L8 12l6.5 6.5'],
+  // 家具のページの下の帯の「戻る」
+  'arrow-left': ['M19 12H5', 'M12 5l-7 7 7 7'],
+  // 全画面にする / 戻す。YouTube の全画面ボタンと同じ、左上へ と 右下へ の斜めの矢印（戻すは内向き）
+  expand: ['M10 4H4v6', 'M4 4l6 6', 'M14 20h6v-6', 'M20 20l-6-6'],
+  shrink: ['M4 4l6 6', 'M10 4v6H4', 'M20 20l-6-6', 'M14 20v-6h6'],
   // 複製: 重なった四角
   copy: ['M9 9h11v11H9z', 'M15 9V4H4v11h5'],
   // 家具: 椅子（背もたれ・座面・脚）

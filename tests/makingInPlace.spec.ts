@@ -26,8 +26,8 @@ test('3D を作っている間は、元の家具のタイルの上で円が回�
   });
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
-  // 追加・サンプル 2 つ・ソファの 4 枚だけ（作成中の別のタイルは無い）
-  await expect(page.locator('.page .tiles > .thumb')).toHaveCount(4);
+  // サンプル 2 つ・ソファの 3 枚だけ（作成中の別のタイルは無い）
+  await expect(page.locator('.page .tiles > .thumb')).toHaveCount(3);
   const tile = page.locator('.page .thumb__button', { hasText: '準備中' });
   await expect(tile).toHaveCount(1);
   await expect(tile.locator('.ring')).toBeVisible();

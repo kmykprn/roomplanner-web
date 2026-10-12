@@ -16,7 +16,7 @@ async function openChooser(page: Page, auth: { anonymous: boolean }, wallet: { t
   }, auth);
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
-  await page.locator('.page .thumb__button').first().click();
+  await page.locator('.page__add').click();
   await expect(page.locator('.lib__chooser')).toBeVisible();
   // 開いたときに残高を取りに行く（テストではサーバーが無いので失敗する）。そのあとで写しを入れる
   if (wallet) {
