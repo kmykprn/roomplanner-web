@@ -40,7 +40,7 @@ import { createScenePage } from '@/ui/scenePage';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createPhotoMenu } from '@/ui/photoMenu';
 import { createFullscreenButton } from '@/ui/fullscreenButton';
-import { createFootAdd, createFootBack, createFooterBar } from '@/ui/footerBar';
+import { createNavFooter } from '@/ui/footerBar';
 import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
@@ -384,18 +384,24 @@ applyBackground();
 
 // --- UI ---
 header.replaceChildren(createSceneHeader());
-const bottomSheet = createBottomSheet(app, { beforePlace: enterSceneForPlacing });
-// 編集の画面の下の帯。左端の ← で一覧へ、真ん中の ＋ で家具のページ（置く・作る）
-const editorFoot = createFooterBar('戻ると家具を追加');
+// 下の帯（背景・部屋・＋・家具）の処理。ホーム・編集の画面・タブから開いた家具のページで同じ
+const nav = {
+  onKind: (kind: SceneKind) => void goHome(kind),
+  onCreate: (kind: SceneKind) => void createAndEnter(kind),
+  onFurniture: () => bottomSheet.openFurnitureLibrary(),
+};
+const bottomSheet = createBottomSheet(app, { nav });
+// 編集の画面の下の帯はホームと同じ。開いている種類のタブが選ばれた状態。「背景」「部屋」で編集を終えてホームへ
+const editorFoot = createNavFooter(nav);
 editorFoot.element.classList.add('foot--editor');
-editorFoot.left.append(createFootBack('一覧に戻る', () => void leaveEditor()));
-editorFoot.center.append(createFootAdd('家具を追加', bottomSheet.openFurnitureLibrary));
-app.append(editorFoot.element);
+app.append(editorFoot.element, editorFoot.menu.element);
+modeState.subscribe(() => editorFoot.setActive(modeState.get().mode));
+editorFoot.setActive(modeState.get().mode);
 // 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときは背景の一覧から。
 // 背景も部屋も 1 つも無ければ、一覧ではなく新しい背景の編集から始める（空の一覧から ＋ を押す手間を省く）
-const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter, onFurniture: openFurnitureFromHome });
+const scenePage = createScenePage({ onOpen: enterScene, onCreate: (kind) => void createAndEnter(kind), onFurniture: openFurnitureFromHome });
 app.append(scenePage.element);
-if (entriesOf('photo').length === 0 && entriesOf('room').length === 0) createAndEnter('photo');
+if (entriesOf('photo').length === 0 && entriesOf('room').length === 0) void createAndEnter('photo');
 else scenePage.open('photo');
 
 /** 一覧のタイルを押した。それを開いて（モードも合わせて）編集の画面へ */
@@ -406,8 +412,8 @@ function enterScene(entry: SceneEntry): void {
 }
 
 /**
- * 一覧の「家具」タブ。家具のページは「家具を追加」と同じもので、「背景に追加」で置ける。
- * 置き先は右上で選んでいる種類なので、先にモードを合わせておく（メニューの文言と置き場がその種類になる）
+ * 一覧の「家具」タブ。家具のページを置けない姿で開く（置き先を開いていないので「背景に追加」は出ない）。
+ * 閉じたあとの表示が選んでいるタブと合うよう、モードは合わせておく
  */
 function openFurnitureFromHome(kind: SceneKind): void {
   setMode(kind);
@@ -415,40 +421,38 @@ function openFurnitureFromHome(kind: SceneKind): void {
 }
 
 /**
- * 一覧の「家具」タブから家具を置く直前。まだ背景や部屋を開いていないので、
- * その種類の最後に開いていたものを開く。1 つも無ければ新しく作る。編集の画面を開いていれば何もしない
- */
-function enterSceneForPlacing(): void {
-  if (!scenePage.isOpen()) return;
-  const kind = modeState.get().mode;
-  const entry = currentScene(kind);
-  if (entry) enterScene(entry);
-  else createAndEnter(kind);
-}
-
-/**
- * 一覧の ＋。新しく作って開く。
+ * 下の帯の ＋ の「新しい背景」「新しい部屋」。編集の画面を開いていればそれを片付けてから、新しく作って開く。
  * 背景の写真は、編集の画面の真ん中の「背景の画像を選ぶ」から選ぶ（ここでは開かない。写真を選ばずに戻ったら消える）
  */
-function createAndEnter(kind: SceneKind): void {
+async function createAndEnter(kind: SceneKind): Promise<void> {
+  bottomSheet.closeFurnitureLibrary();
+  if (!scenePage.isOpen()) await settleEditor();
   enterScene(createScene(kind));
 }
 
 /**
- * 編集の画面の下の帯の ←。開いているもののアイコンを作ってから一覧へ戻る。
+ * 下の帯の「背景」「部屋」。編集の画面を開いていれば片付けてから、ホームのその一覧へ。
+ * 家具のページを開いていれば閉じる
+ */
+async function goHome(kind: SceneKind): Promise<void> {
+  bottomSheet.closeFurnitureLibrary();
+  if (!scenePage.isOpen()) await settleEditor();
+  scenePage.open(kind);
+}
+
+/**
+ * 編集の画面を離れるときの片付け。開いているもののアイコンを作る。
  * 写真も家具も無い背景は、作っただけで何もしなかったものなので一覧に残さない
  */
-async function leaveEditor(): Promise<void> {
+async function settleEditor(): Promise<void> {
   const kind = modeState.get().mode;
   const entry = currentScene(kind);
   flushSaves();
-  if (entry) {
-    const { backgroundStatus, furniture } = photoState.get();
-    const untouched = kind === 'photo' && backgroundStatus === 'idle' && furniture.length === 0;
-    if (untouched) await deleteScenes([entry.id]);
-    else await snapshotScene(entry.id);
-  }
-  scenePage.open(kind);
+  if (!entry) return;
+  const { backgroundStatus, furniture } = photoState.get();
+  const untouched = kind === 'photo' && backgroundStatus === 'idle' && furniture.length === 0;
+  if (untouched) await deleteScenes([entry.id]);
+  else await snapshotScene(entry.id);
 }
 
 // 編集の画面のままアプリを閉じたり裏に回したりしたときも、アイコンを最新にしておく

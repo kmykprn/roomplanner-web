@@ -15,6 +15,7 @@ import { isBillboard, type PlacedFurniture } from '@/config/furniture';
 import type { EditableScene } from '@/core/furnitureScene';
 import { createModelPanel } from '@/ui/modelPanel';
 import { createFurniturePage } from '@/ui/furniturePage';
+import { createFloatingAdd, type NavFooterHandlers } from '@/ui/footerBar';
 import { createPreviewImage } from '@/ui/previewImage';
 import { createProductLink } from '@/ui/productLink';
 import { createPhotoPanel, isAdjustingPhoto } from '@/ui/photoPanel';
@@ -143,21 +144,22 @@ const ANGLE_LIMITS = { min: -180, max: 180 };
 
 export interface BottomSheet {
   /**
-   * 家具のページを、置けない姿で開く（一覧の「家具」タブから。置く先の背景や部屋を開いていない）。
-   * 「×」で閉じると元の画面（一覧）に戻る
+   * 家具のページを、置けない姿で開く（下のタブの「家具」から。帯はホームと同じで、置くボタンは出ない）。
+   * 編集の画面から置くのは、シートの右下の浮かぶ「家具を追加」
    */
   openFurnitureLibrary(): void;
+  /** 家具のページを閉じる（タブで別の画面へ移るとき） */
+  closeFurnitureLibrary(): void;
+  /** 家具のページを開いているか */
+  isFurnitureLibraryOpen(): boolean;
 }
 
 export interface BottomSheetOptions {
-  /**
-   * 家具を置く直前に呼ぶ。一覧（ホーム）の「家具」タブから置いたときは、まだ背景や部屋を開いていないので、
-   * ここで置き先を開いて編集の画面にする（main.ts）
-   */
-  beforePlace(): void;
+  /** 家具のページをタブから開いたときの帯（背景・部屋・＋）の処理。main.ts */
+  nav: NavFooterHandlers;
 }
 
-export function createBottomSheet(container: HTMLElement, { beforePlace }: BottomSheetOptions): BottomSheet {
+export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOptions): BottomSheet {
   // 起動時のタブは、起動時のモードの最初のタブ（写真モードなら「背景」）
   let activeTab: TabId = (isPhotoMode() ? PHOTO_TABS : ROOM_TABS)[0];
 
@@ -181,22 +183,33 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
   // 置いたら家具のページを閉じ、「操作」タブを出す。置いた家具がすぐ見え、向きや大きさをすぐ変えられる
   const modelPanel = createModelPanel({
     onPlaced: (id) => {
-      // 置き先を開くとモードが変わり、下のタブが最初のものに戻る。その後で「操作」にする
-      beforePlace();
       justPlacedId = id;
       closeFurniturePage();
       activeTab = 'manage';
       render();
     },
   });
-  // 下の帯の ←。一覧以外の姿を開いていればその姿だけ閉じ、一覧ならページを閉じる
+  // ← は、一覧以外の姿を開いていればその姿だけ閉じ、一覧ならページを閉じる
   const furniturePage = createFurniturePage(modelPanel.element, {
     onBack: () => {
       if (!modelPanel.back()) closeFurniturePage();
     },
     onAdd: modelPanel.openAdd,
+    ...nav,
   });
   container.appendChild(furniturePage.element);
+
+  // シートの右下に浮かぶ「家具を追加」。押すと家具のページを置ける姿で開く。
+  // 背景の調整の画面を出している間と全画面（style.css）は出さない
+  const addFurniture = createFloatingAdd('家具を追加', () => openFurniturePage('placing'));
+  addFurniture.classList.add('fab--editor');
+  container.appendChild(addFurniture);
+
+  /** 家具のページを開く。placing なら「背景に追加」で置ける、browse（タブから）なら置けない */
+  function openFurniturePage(mode: 'placing' | 'browse'): void {
+    modelPanel.setPlacing(mode === 'placing');
+    furniturePage.open(mode);
+  }
 
   /**
    * 家具のページを閉じる。開いていた姿（追加・3D モデルを作る・編集・高さの入力）はすべて閉じて一覧に戻す。
@@ -205,6 +218,7 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
   function closeFurniturePage(): void {
     furniturePage.close();
     modelPanel.showHome();
+    modelPanel.setPlacing(true);
   }
   const photoPanel = createPhotoPanel();
   const interiorPanel = createInteriorPanel();
@@ -214,6 +228,8 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
   }
 
   function render(): void {
+    // 背景の調整の画面（拡大・縮小 / 寸法 / 家具を隠す範囲）を出している間は、家具を足す場面ではないので隠す
+    addFurniture.hidden = isPhotoMode() && isAdjustingPhoto();
     const tabs = visibleTabs();
 
     // モードを変えた直後は、前のモードにしか無いタブを開いていることがある
@@ -775,8 +791,10 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
 
   return {
     openFurnitureLibrary() {
-      furniturePage.open();
+      openFurniturePage('browse');
     },
+    closeFurnitureLibrary: closeFurniturePage,
+    isFurnitureLibraryOpen: () => furniturePage.mode() !== null,
   };
 }
 

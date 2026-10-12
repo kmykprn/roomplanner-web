@@ -39,7 +39,7 @@ test('部屋モードのタブは 2 つで家具のタブは無く、写真モ�
 test('下の帯の ＋ で家具のページを開く。家具を選んでいる間も同じ ＋ で開ける（見出しに ＋ は無い）', async ({ page }) => {
   await open(page, true);
   await openTab(page, '操作');
-  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.fab--editor').click();
   await expect(page.locator('.page')).toBeVisible();
   await page.locator('.page .foot__back').click();
   await expect(page.locator('.page')).toBeHidden();
@@ -50,7 +50,7 @@ test('下の帯の ＋ で家具のページを開く。家具を選んでいる
     scene.select('box');
   });
   await expect(page.locator('.manage__head').getByRole('button', { name: '家具を追加' })).toHaveCount(0);
-  await page.locator('.foot--editor .foot__add').click();
+  await page.locator('.fab--editor').click();
   await expect(page.locator('.page')).toBeVisible();
 });
 
