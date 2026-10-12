@@ -88,6 +88,8 @@ interface FailedItem {
 export interface ModelPanel {
   element: HTMLElement;
   showHome(): void;
+  /** 「家具を追加」のメニュー（2D を作る / 3D モデルを作る）を一覧の上に出す。ページの下の帯の ＋ から */
+  openAdd(): void;
 }
 
 export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
@@ -129,15 +131,12 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
 
   normal.append(grid, failureDetail, localNotice);
 
-  // --- 作り方を選ぶ姿。＋ を押すと一覧と入れ替わりに出る ---
+  // --- 「家具を追加」のメニュー。下の帯の ＋ を押すと、一覧の上に下から出る ---
   const chooser = createChooser({
     cutout: () => void pickAndStart(),
     model: () => {
       chooser.close();
       openMaker();
-    },
-    onClose: () => {
-      normal.hidden = false;
     },
   });
 
@@ -221,8 +220,8 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
 
   panel.append(normal, chooser.element, heightStep.element, maker.element, editor.element, tileActions.element);
 
+  /** 「家具を追加」のメニューを出す。一覧はそのまま後ろに残る */
   function openChooser(): void {
-    normal.hidden = true;
     chooser.open();
   }
 
@@ -328,7 +327,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
     const shown: ModelItem[] = [...models].reverse().map((model) => ({ id: model.id, model, making: making.get(model.id) ?? null }));
 
     const ordered: HTMLElement[] = [];
-    ordered.push(addTile);
     ordered.push(...syncThumbs(cutoutNodes, cutting, createCutoutThumb));
     ordered.push(...syncThumbs(jobNodes, running, createJobThumb));
     ordered.push(...syncThumbs(failedNodes, failures, (item) => createFailedThumb(item, toggleFailure)));
@@ -348,7 +346,6 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   const jobNodes = new Map<string, ThumbNode<GenerationJob>>();
   const failedNodes = new Map<string, ThumbNode<FailedItem>>();
   const modelNodes = new Map<string, ThumbNode<ModelItem>>();
-  const addTile = createAddTile(openChooser);
 
   render();
   generationState.subscribe(render);
@@ -394,11 +391,12 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
   return {
     element: panel,
     showHome,
+    openAdd: openChooser,
   };
 }
 
-/** 「＋ 作る」のタイル。格子の先頭に置く */
-function createAddTile(open: () => void, caption = '新しい家具', label = '家具を追加'): HTMLElement {
+/** 「＋ 作る」のタイル。3D を作る姿の格子の先頭に置く（「＋ 2D を作る」） */
+function createAddTile(open: () => void, caption: string, label: string): HTMLElement {
   const thumb = createThumb(caption);
   thumb.image.classList.add('is-add');
   thumb.image.append(createIcon('plus'));
@@ -584,24 +582,21 @@ function createPickThumb(model: GeneratedModel, pick: (id: string) => void): Thu
   return { element: thumb.element, update, dispose: preview.dispose };
 }
 
-function createChooser(actions: Record<Way, () => void> & { onClose(): void }): Chooser {
+function createChooser(actions: Record<Way, () => void>): Chooser {
+  // 画面全体に重ね、後ろ（一覧）を暗くして下から出す。暗い所を押すと閉じる（家具のタイルのメニューと同じ作り）
   const element = document.createElement('div');
   element.className = 'lib__chooser';
   element.hidden = true;
-
-  const head = document.createElement('div');
-  head.className = 'edit__head';
-  const back = document.createElement('button');
-  back.type = 'button';
-  back.className = 'button is-text is-small';
-  back.textContent = '‹ 戻る';
-  back.addEventListener('click', close);
-  const title = document.createElement('span');
-  title.className = 'edit__title';
+  element.setAttribute('role', 'dialog');
+  element.setAttribute('aria-label', '家具を追加');
+  const dim = document.createElement('div');
+  dim.className = 'lib__chooser-dim';
+  dim.addEventListener('click', close);
+  const sheet = document.createElement('div');
+  sheet.className = 'lib__chooser-sheet';
+  const title = document.createElement('p');
+  title.className = 'lib__chooser-title';
   title.textContent = '家具を追加';
-  const headSpacer = document.createElement('span');
-  headSpacer.className = 'edit__spacer';
-  head.append(back, title, headSpacer);
 
   /** 直前に押した行。ログインのあとに続きをするため */
   let pending: Way | null = null;
@@ -687,7 +682,8 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
     onBuy: ticketSheet.open,
   });
 
-  element.append(head, walletBar.element, menu, loginPanel.element, authNote, signedInNote, ticketSheet.element);
+  sheet.append(title, walletBar.element, menu, loginPanel.element, authNote, signedInNote, ticketSheet.element);
+  element.append(dim, sheet);
 
   function showSignedIn(error: string | null = null, note?: string): void {
     signedInNote.classList.toggle('is-error', error !== null);
@@ -729,7 +725,6 @@ function createChooser(actions: Record<Way, () => void> & { onClose(): void }): 
   function close(): void {
     element.hidden = true;
     for (const { preview } of samples) preview.stop();
-    actions.onClose();
   }
 
   authState.subscribe(renderState);

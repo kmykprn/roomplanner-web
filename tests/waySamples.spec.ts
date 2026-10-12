@@ -10,7 +10,7 @@ test('2D の行は切り抜き、3D の行は回る 3D の見本を出し、画�
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);
   await page.locator('.manage__add').click();
-  await page.locator('.page .thumb__button').first().click();
+  await page.locator('.page__add').click();
   const rows = page.locator('.lib__chooser .way');
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText('2D（切り抜き）を作る');
@@ -22,8 +22,8 @@ test('2D の行は切り抜き、3D の行は回る 3D の見本を出し、画�
   await expect(rows.nth(1).locator('.preview.is-mini .preview__canvas')).toHaveCount(1, { timeout: 15000 });
   // 押すと次へ進む行だと分かる印
   await expect(rows.nth(0).locator('.way__chevron')).toHaveText('›');
-  // 「‹ 戻る」で閉じると、3D の描画の枠を片付ける
-  await page.locator('.lib__chooser button', { hasText: '戻る' }).click();
+  // 暗い所を押して閉じると、3D の描画の枠を片付ける
+  await page.locator('.lib__chooser-dim').click({ position: { x: 10, y: 10 } });
   await expect(page.locator('.lib__chooser')).toBeHidden();
   await expect(page.locator('.lib__chooser .preview__canvas')).toHaveCount(0);
 });

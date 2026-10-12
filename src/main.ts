@@ -39,6 +39,7 @@ import { createSceneHeader } from '@/ui/sceneHeader';
 import { createScenePage } from '@/ui/scenePage';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createPhotoMenu } from '@/ui/photoMenu';
+import { createFullscreenButton } from '@/ui/fullscreenButton';
 import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
@@ -49,7 +50,7 @@ import {
   setLensSource,
   setPhotoPlacement,
 } from '@/core/photoState';
-import { isPhotoMode, modeState, setMode } from '@/core/mode';
+import { activeScene, isPhotoMode, modeState, setMode } from '@/core/mode';
 import {
   connectSceneLibrary,
   flushSaves,
@@ -101,6 +102,11 @@ const viewer = createViewer(viewport);
 viewport.append(createPhotoEmpty());
 // 写真の右上の［⋯］。押すと背景の操作のメニューが下から出る
 viewport.append(createPhotoMenu());
+// 絵の右下の全画面のボタン。全画面にしたら、選んでいる家具は外す（見るための姿なので）
+const fullscreen = createFullscreenButton(app, (full) => {
+  if (full) activeScene().select(null);
+});
+viewport.append(fullscreen.element);
 // 床を合わせている間の目安のバー。キャンバスの上に重ねる
 const { room } = appState.get();
 
@@ -137,8 +143,8 @@ const furnitureDrag = createFurnitureDrag(
         { scene: photoScene, layer: photoFurniture, surface: 'level' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
-  // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す
-  () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto
+  // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す。全画面の間は家具を動かさない
+  () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto && !fullscreen.isFullscreen()
 );
 
 // 選んだ家具の真上のつまみ（上下の三角）。ドラッグすると家具がその場で上下に動く。家具そのものを動かしている間は隠す
@@ -151,7 +157,8 @@ createLiftHandle({
     !furnitureDrag.isMoving() &&
     !photoState.get().isMasking &&
     !photoState.get().isScaling &&
-    !photoState.get().isFramingPhoto,
+    !photoState.get().isFramingPhoto &&
+    !fullscreen.isFullscreen(),
   // 部屋は床より下へは行かない。写真には床の面が無い（奥行きで置いた家具の足元は 0 とは限らない）
   lowest: () => (isPhotoMode() ? -Infinity : 0),
   onFrame: (callback) => viewer.onFrame(callback),

@@ -189,7 +189,7 @@ export function createBottomSheet(container: HTMLElement, { beforePlace }: Botto
       render();
     },
   });
-  const furniturePage = createFurniturePage(modelPanel.element, closeFurniturePage);
+  const furniturePage = createFurniturePage(modelPanel.element, { onClose: closeFurniturePage, onAdd: modelPanel.openAdd });
   container.appendChild(furniturePage.element);
 
   /**

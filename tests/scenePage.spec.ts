@@ -138,7 +138,7 @@ test('下の「家具」タブの家具のページは「家具を追加」と�
   // 「×」で閉じたときはホームのまま
   await page.locator('.scene-header__back').click();
   await page.locator('.scenes__tab', { hasText: '家具' }).click();
-  await page.getByRole('button', { name: '閉じる' }).click();
+  await page.locator('.page__back').click();
   await expect(furniture).toBeHidden();
   await expect(page.locator('.scenes')).toBeVisible();
 });
@@ -174,11 +174,63 @@ test('追加のタイルは、点線の枠の中が ＋ だけで、名前は枠
   expect(r.boxBackground).toBe('rgb(255, 255, 255)');
   expect(r.boxBorder).toBe('dashed');
   expect(r.nameColor).toBe('rgb(17, 24, 28)');
-  // 編集の画面の「家具を追加」と、家具のページの「新しい家具」も同じ地と文字の色
+  // 編集の画面の「家具を追加」も同じ地と文字の色
   await page.locator('.scene-tile--add').click();
   const manage = await page.locator('.manage__add').evaluate((el) => ({ background: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color, border: getComputedStyle(el).borderTopStyle }));
   expect(manage).toEqual({ background: 'rgb(255, 255, 255)', color: 'rgb(17, 24, 28)', border: 'dashed' });
-  await page.locator('.manage__add').click();
-  const lib = await page.locator('.thumb__img.is-add').evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(lib).toBe('rgb(255, 255, 255)');
+});
+
+test('編集の画面のヘッダーは 53px（ホームの上の帯とほぼ同じ）', async ({ page }) => {
+  const home = await page.locator('.scenes__bar').evaluate((el) => el.getBoundingClientRect().height);
+  await page.locator('.scene-tile--add').click();
+  const header = await page.locator('.header').evaluate((el) => el.getBoundingClientRect().height);
+  expect(header).toBeLessThanOrEqual(56);
+  expect(Math.abs(header - home)).toBeLessThanOrEqual(2);
+});
+
+test('名前を変える欄は画面の上の方にあり、下端が画面の高さの半分より上（キーボードに隠れない）', async ({ page }) => {
+  await createBackgroundWithChair(page);
+  await page.locator('.scene-header__name').click();
+  const dialog = page.getByRole('dialog', { name: '名前を変える' });
+  await expect(dialog).toBeVisible();
+  const r = await dialog.locator('.modal__box').evaluate((el) => ({ bottom: el.getBoundingClientRect().bottom, inner: window.innerHeight }));
+  expect(r.bottom).toBeLessThan(r.inner / 2);
+  await dialog.getByRole('button', { name: 'キャンセル' }).click();
+  // 削除の確認は真ん中のまま
+  await page.locator('.scene-header__back').click();
+  await page.locator('.scene-tile__more').first().click();
+  await page.locator('.bg-menu__sheet:visible').getByRole('button', { name: '削除' }).click();
+  const c = await page.locator('.modal:visible .modal__box').evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    return { center: (b.top + b.bottom) / 2, inner: window.innerHeight };
+  });
+  expect(Math.abs(c.center - c.inner / 2)).toBeLessThan(40);
+});
+
+test('絵の右下の全画面のボタンでヘッダーとシートが隠れて絵が画面いっぱいになり、もう一度押すと戻る', async ({ page }) => {
+  await page.locator('.scene-tile--add').click();
+  const button = page.locator('.view-full');
+  await expect(button).toHaveAttribute('aria-label', '全画面');
+  const before = await page.evaluate(() => {
+    const b = document.querySelector('.view-full')!.getBoundingClientRect();
+    const v = document.querySelector('#viewport')!.getBoundingClientRect();
+    const s = getComputedStyle(document.querySelector('.view-full')!);
+    return { right: v.right - b.right, bottom: v.bottom - b.bottom, width: b.width, color: s.color, background: s.backgroundColor, viewportHeight: v.height };
+  });
+  expect(before.right).toBe(12);
+  expect(before.bottom).toBe(12);
+  expect(before.width).toBe(44);
+  expect(before.color).toBe('rgb(110, 156, 17)');
+  expect(before.background).toBe('rgba(255, 255, 255, 0.9)');
+  await button.click();
+  await expect(page.locator('.header')).toBeHidden();
+  await expect(page.locator('.sheet')).toBeHidden();
+  await expect(button).toHaveAttribute('aria-label', '全画面をやめる');
+  const full = await page.evaluate(() => ({ height: document.querySelector('#viewport')!.getBoundingClientRect().height, inner: window.innerHeight }));
+  expect(full.height).toBe(full.inner);
+  await button.click();
+  await expect(page.locator('.header')).toBeVisible();
+  await expect(page.locator('.sheet')).toBeVisible();
+  const after = await page.evaluate(() => document.querySelector('#viewport')!.getBoundingClientRect().height);
+  expect(after).toBe(before.viewportHeight);
 });

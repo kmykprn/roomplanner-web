@@ -25,8 +25,8 @@ const placedForms = (page: Page) =>
 
 test('2D と 3D を両方持つサンプルも、一覧では 1 枚ずつ。3D の印が付き、絞り込みは無い', async ({ page }) => {
   await openFurniturePage(page);
-  // 先頭の「追加」と、サンプル 2 つ
-  await expect(page.locator('.page .thumb__button')).toHaveCount(3);
+  // サンプル 2 つ（「新しい家具」は下の帯の ＋ なので、タイルには無い）
+  await expect(page.locator('.page .thumb__button')).toHaveCount(2);
   await expect(page.locator('.page .thumb__button', { hasText: 'サンプル 1' })).toHaveCount(1);
   await expect(page.locator('.page .thumb__button', { hasText: 'サンプル 1' }).locator('.solid-mark')).toBeVisible();
   await expect(page.getByRole('group', { name: '家具の絞り込み' })).toHaveCount(0);

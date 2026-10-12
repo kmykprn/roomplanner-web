@@ -7,7 +7,8 @@
 export function askName(current: string): Promise<string | null> {
   return new Promise((resolve) => {
     const modal = document.createElement('div');
-    modal.className = 'modal';
+    // 上に寄せる。真ん中だと iPhone のキーボード（画面の下 4〜5 割）に隠れる（style.css の .modal--top）
+    modal.className = 'modal modal--top';
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-label', '名前を変える');
     const box = document.createElement('form');
