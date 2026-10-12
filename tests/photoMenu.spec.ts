@@ -44,7 +44,7 @@ test('写真が無いときは［⋯］を出さず、写真があるときだ�
 test('写真モードの下のパネルにはタブが無く、置いた家具の一覧を出す', async ({ page }) => {
   await open(page, true);
   await expect(page.locator('.sheet__tabs')).toBeHidden();
-  await expect(page.locator('.manage__add')).toBeVisible();
+  await expect(page.locator('.manage__title')).toBeVisible();
   await expect(page.getByRole('button', { name: '背景の画像を変更' })).toHaveCount(0);
 });
 
@@ -57,9 +57,9 @@ test('［⋯］を押すとメニューが出て、選んだ調整の画面が�
   expect(await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().isScaling)).toBe(true);
   // 調整の画面に入っている間は、［⋯］と一覧を出さない
   await expect(more(page)).toBeHidden();
-  await expect(page.locator('.manage__add')).toHaveCount(0);
+  await expect(page.locator('.manage__title')).toHaveCount(0);
   await page.locator('.sub:visible button', { hasText: '戻る' }).click();
-  await expect(page.locator('.manage__add')).toBeVisible();
+  await expect(page.locator('.manage__title')).toBeVisible();
   await expect(more(page)).toBeVisible();
 });
 

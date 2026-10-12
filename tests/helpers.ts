@@ -39,13 +39,26 @@ export async function openTab(page: Page, label: string): Promise<void> {
 }
 
 /**
- * 保存した背景と部屋の一覧（最初の画面）が出ていれば、最初のタイル（無ければ ＋）を押して編集の画面へ
+ * 保存した背景と部屋の一覧（ホーム）が出ていれば、最初のタイル（無ければ ＋ から「新しい背景」）を押して編集の画面へ。
+ * 背景も部屋も無い初めての起動は、一覧を経ず編集の画面から始まるので何もしない
  */
 export async function enterEditor(page: Page): Promise<void> {
   const list = page.locator('.scenes');
   if (!(await list.isVisible())) return;
   const tile = list.locator('.scene-tile__button').first();
   if (await tile.count()) await tile.click();
-  else await list.locator('.scene-tile--add').click();
+  else await createFromHome(page, 'photo');
   await list.waitFor({ state: 'hidden' });
+}
+
+/** ホームの ＋ から「新しい背景」（部屋なら「新しい部屋」）を選んで作る */
+export async function createFromHome(page: Page, kind: 'photo' | 'room'): Promise<void> {
+  await page.locator('.scenes .foot__add').click();
+  await page.locator('.popup__row', { hasText: kind === 'photo' ? '新しい背景' : '新しい部屋' }).click();
+}
+
+/** 編集の画面の下の帯の ← でホームへ */
+export async function leaveToHome(page: Page): Promise<void> {
+  await page.locator('.foot--editor .foot__back').click();
+  await page.locator('.scenes').waitFor();
 }

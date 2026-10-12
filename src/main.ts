@@ -40,6 +40,7 @@ import { createScenePage } from '@/ui/scenePage';
 import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createPhotoMenu } from '@/ui/photoMenu';
 import { createFullscreenButton } from '@/ui/fullscreenButton';
+import { createFootAdd, createFootBack, createFooterBar } from '@/ui/footerBar';
 import { appState, roomScene } from '@/core/appState';
 import {
   depthPointAt,
@@ -62,6 +63,7 @@ import {
 import {
   createScene,
   currentScene,
+  entriesOf,
   deleteScenes,
   openScene,
   restoreSceneLibrary,
@@ -102,9 +104,11 @@ const viewer = createViewer(viewport);
 viewport.append(createPhotoEmpty());
 // 写真の右上の［⋯］。押すと背景の操作のメニューが下から出る
 viewport.append(createPhotoMenu());
-// 絵の右下の全画面のボタン。全画面にしたら、選んでいる家具は外す（見るための姿なので）
+// 絵の右下の全画面のボタン。全画面にしたら、選んでいる家具は外し（見るための姿なので）、
+// 写真は切り落とさず全体を収めて描く（余白はアプリの地の色。style.css の #app.is-full）
 const fullscreen = createFullscreenButton(app, (full) => {
   if (full) activeScene().select(null);
+  viewer.setFit(full ? 'contain' : 'cover');
 });
 viewport.append(fullscreen.element);
 // 床を合わせている間の目安のバー。キャンバスの上に重ねる
@@ -379,13 +383,20 @@ applyMode();
 applyBackground();
 
 // --- UI ---
-header.replaceChildren(createSceneHeader(() => void leaveEditor()));
+header.replaceChildren(createSceneHeader());
 const bottomSheet = createBottomSheet(app, { beforePlace: enterSceneForPlacing });
-// 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときはいつも背景の一覧から
-// （1 つも無くても一覧。無いときに編集から始めると、どこにいるのか分かりにくかった）
+// 編集の画面の下の帯。左端の ← で一覧へ、真ん中の ＋ で家具のページ（置く・作る）
+const editorFoot = createFooterBar('戻ると家具を追加');
+editorFoot.element.classList.add('foot--editor');
+editorFoot.left.append(createFootBack('一覧に戻る', () => void leaveEditor()));
+editorFoot.center.append(createFootAdd('家具を追加', bottomSheet.openFurnitureLibrary));
+app.append(editorFoot.element);
+// 保存した背景と部屋の一覧。編集の画面の上に重ねる。アプリを開いたときは背景の一覧から。
+// 背景も部屋も 1 つも無ければ、一覧ではなく新しい背景の編集から始める（空の一覧から ＋ を押す手間を省く）
 const scenePage = createScenePage({ onOpen: enterScene, onCreate: createAndEnter, onFurniture: openFurnitureFromHome });
 app.append(scenePage.element);
-scenePage.open('photo');
+if (entriesOf('photo').length === 0 && entriesOf('room').length === 0) createAndEnter('photo');
+else scenePage.open('photo');
 
 /** 一覧のタイルを押した。それを開いて（モードも合わせて）編集の画面へ */
 function enterScene(entry: SceneEntry): void {
@@ -424,7 +435,7 @@ function createAndEnter(kind: SceneKind): void {
 }
 
 /**
- * 編集の画面の「‹」。開いているもののアイコンを作ってから一覧へ戻る。
+ * 編集の画面の下の帯の ←。開いているもののアイコンを作ってから一覧へ戻る。
  * 写真も家具も無い背景は、作っただけで何もしなかったものなので一覧に残さない
  */
 async function leaveEditor(): Promise<void> {
@@ -494,7 +505,12 @@ async function captureSnapshot(photo: boolean): Promise<Blob | null> {
       image.src = url;
       try {
         await image.decode();
-        context.drawImage(image, ...place(viewer.photoLayer.getBoundingClientRect()));
+        // 画面と同じ切り取りで描く。写真の層は、写真を background-size の大きさに引き伸ばして
+        // background-position だけずらして敷いているので、そこから「箱に見えている範囲」を元の画素で求める。
+        // 写真全体を箱に押し込むと、横長の写真が潰れて（縦長なら伸びて）画面と形が変わる
+        const layerRect = viewer.photoLayer.getBoundingClientRect();
+        const source = visiblePhotoRegion(viewer.photoLayer, layerRect, image.naturalWidth, image.naturalHeight);
+        context.drawImage(image, source.x, source.y, source.width, source.height, ...place(layerRect));
       } catch {
         // 写真が読めなければ家具だけになる
       }
@@ -503,6 +519,29 @@ async function captureSnapshot(photo: boolean): Promise<Blob | null> {
   viewer.renderer.render(viewer.scene, viewer.camera);
   context.drawImage(viewer.canvas, ...place(viewer.canvas.getBoundingClientRect()));
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85));
+}
+
+/**
+ * 写真の層に見えている範囲を、元の画像の画素で返す。
+ * background-size / background-position（px）が無ければ、写真全体が層に収まっているとみなす
+ */
+function visiblePhotoRegion(
+  layer: HTMLElement,
+  layerRect: DOMRect,
+  naturalWidth: number,
+  naturalHeight: number
+): { x: number; y: number; width: number; height: number } {
+  const [sizeW, sizeH] = layer.style.backgroundSize.split(' ').map(parseFloat);
+  const [posX, posY] = layer.style.backgroundPosition.split(' ').map(parseFloat);
+  if (!(sizeW > 0 && sizeH > 0) || Number.isNaN(posX) || Number.isNaN(posY)) {
+    return { x: 0, y: 0, width: naturalWidth, height: naturalHeight };
+  }
+  return {
+    x: (-posX / sizeW) * naturalWidth,
+    y: (-posY / sizeH) * naturalHeight,
+    width: (layerRect.width / sizeW) * naturalWidth,
+    height: (layerRect.height / sizeH) * naturalHeight,
+  };
 }
 
 // --- 毎フレームの処理 ---

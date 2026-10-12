@@ -14,10 +14,10 @@ test.beforeEach(async ({ page }) => {
   await openTab(page, '操作');
 });
 
-test('タイルの格子で、先頭は［＋ 家具を追加］。タイルを押すとその家具を選ぶ', async ({ page }) => {
+test('タイルの格子は置いた家具だけ（追加は下の帯の ＋）。タイルを押すとその家具を選ぶ', async ({ page }) => {
   const tiles = page.locator('.manage__grid > .manage__tile');
-  await expect(tiles).toHaveCount(3);
-  await expect(tiles.first()).toHaveText('家具を追加');
+  await expect(tiles).toHaveCount(2);
+  await expect(page.locator('.foot--editor .foot__add')).toBeVisible();
   // 一覧の行ごとのゴミ箱は無い
   await expect(page.getByRole('button', { name: /を画面から削除$/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'テスト 2' }).click();
@@ -31,7 +31,6 @@ test('［☑ 選択して削除］でチェックを付け、［画面から削�
   // 押した時点で出ていて、まだ押せない
   await expect(removeChecked).toBeVisible();
   await expect(removeChecked).toBeDisabled();
-  await expect(page.locator('.manage__add')).toBeDisabled();
   await page.getByRole('button', { name: 'テスト 1' }).click();
   await page.getByRole('button', { name: 'テスト 2' }).click();
   await expect(page.getByRole('button', { name: 'テスト 1' })).toHaveAttribute('aria-pressed', 'true');
@@ -64,13 +63,13 @@ test('チェックを外すと数が減り、「キャンセル」でふだん�
   expect(await placedCount(page)).toBe(2);
 });
 
-test('家具が 1 つも無いときは、［＋ 家具を追加］だけを出す（［☑ 選択して削除］も一言も出さない）', async ({ page }) => {
+test('家具が 1 つも無いときは、格子は空で（［☑ 選択して削除］も一言も出さない）', async ({ page }) => {
   await page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');
     const scene = activeScene();
     for (const item of scene.state().furniture) scene.remove(item.id);
   });
-  await expect(page.locator('.manage__grid > .manage__tile')).toHaveCount(1);
+  await expect(page.locator('.manage__grid > .manage__tile')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '選択して削除' })).toHaveCount(0);
   await expect(page.locator('.manage .hint')).toHaveCount(0);
 });

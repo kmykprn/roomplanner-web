@@ -15,7 +15,7 @@ test.describe('家具のページ', () => {
   /** 操作タブの［＋ 家具を追加］で、家具のページを開く */
   async function openFurniturePage(page: import('@playwright/test').Page): Promise<void> {
     await openTab(page, '操作');
-    await page.locator('.manage__add').click();
+    await page.locator('.foot--editor .foot__add').click();
     await expect(page.locator('.page')).toBeVisible();
   }
 
@@ -52,17 +52,20 @@ test.describe('家具のページ', () => {
     expect(placed).toBe(1);
   });
 
-  test('［編集］で編集の画面を開くと下の帯は隠れる。閉じて「←」で閉じると元の一覧に戻る', async ({ page }) => {
+  test('［編集］で編集の画面を開くと、下の帯は ← だけ（＋ は無し）。← で編集だけ閉じ、もう一度 ← でページを閉じる', async ({ page }) => {
     await openFirstModel(page);
     await page.getByRole('button', { name: '編集' }).click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toBeVisible();
-    // 編集の姿には「‹ 戻る」があるので、下の帯（← と ＋）は出さない
-    await expect(page.locator('.page__foot')).toBeHidden();
-    await page.locator('.page .lib__edit button', { hasText: '‹ 戻る' }).click();
-    await expect(page.locator('.page__foot')).toBeVisible();
-    await page.locator('.page__back').click();
+    // 編集の姿に文字の「‹ 戻る」は無く、下の帯の ← で戻る。＋ は出さない
+    await expect(page.locator('.page .lib__edit button', { hasText: '‹ 戻る' })).toHaveCount(0);
+    await expect(page.locator('.page .foot__back')).toBeVisible();
+    await expect(page.locator('.page .foot__add')).toBeHidden();
+    await page.locator('.page .foot__back').click();
+    await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
+    await expect(page.locator('.page .foot__add')).toBeVisible();
+    await page.locator('.page .foot__back').click();
     await expect(page.locator('.page')).toBeHidden();
-    await expect(page.locator('.manage__add')).toBeVisible();
+    await expect(page.locator('.foot--editor .foot__add')).toBeVisible();
     // もう一度開くと、編集の画面ではなく一覧に戻っている
     await openFurniturePage(page);
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
@@ -77,14 +80,14 @@ test.describe('家具のページ', () => {
 
   test('家具を追加する画面に、利用者 ID を出さない', async ({ page }) => {
     await openFurniturePage(page);
-    await page.locator('.page__add').click();
+    await page.locator('.page .foot__add').click();
     await expect(page.locator('.lib__chooser-title')).toHaveText('家具を追加');
     await expect(page.getByText('利用者 ID')).toHaveCount(0);
   });
 
   test('下の帯の ＋ で「家具を追加」が一覧の上に下から出て、暗い所を押すと閉じ、一覧はそのまま残る', async ({ page }) => {
     await openFurniturePage(page);
-    await page.locator('.page__add').click();
+    await page.locator('.page .foot__add').click();
     const chooser = page.locator('.lib__chooser');
     await expect(chooser).toBeVisible();
     // 一覧（後ろ）は隠れていない。× とつまみは無い
@@ -99,16 +102,16 @@ test.describe('家具のページ', () => {
     await page.locator('.lib__chooser-dim').click({ position: { x: 10, y: 10 } });
     await expect(chooser).toBeHidden();
     await expect(page.locator('.lib__normal')).toBeVisible();
-    await expect(page.locator('.page__foot')).toBeVisible();
+    await expect(page.locator('.page .foot')).toBeVisible();
   });
 
   test('下の帯は 76px。左端の ← は 64px の押せる範囲に 32px の矢印、真ん中に 64px の黄緑の丸い ＋', async ({ page }) => {
     await openFurniturePage(page);
     const r = await page.evaluate(() => {
-      const foot = document.querySelector('.page__foot')!.getBoundingClientRect();
-      const back = document.querySelector('.page__back')!;
+      const foot = document.querySelector('.page .foot')!.getBoundingClientRect();
+      const back = document.querySelector('.page .foot__back')!;
       const backIcon = back.querySelector('.ic')!.getBoundingClientRect();
-      const add = document.querySelector('.page__add')!;
+      const add = document.querySelector('.page .foot__add')!;
       const a = add.getBoundingClientRect();
       return {
         footHeight: foot.height, footBottom: foot.bottom, inner: window.innerHeight,

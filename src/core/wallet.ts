@@ -39,20 +39,25 @@ export function remainingGenerations(state: WalletState = walletState.get()): nu
   return state.trialRemaining + state.credits;
 }
 
-/** サーバーの残高を取り直す。匿名なら何もしない */
+/**
+ * サーバーの残高を取り直す。匿名なら何もしない。
+ * すでに知っている値があれば出したまま取り直す（loading にしない）。「家具を追加」を開くたびに取り直すので、
+ * そのたびに帯が消えて返事のあとに出ると、2 行より遅れてずれて見えた
+ */
 export async function refreshWallet(): Promise<void> {
   const { status, anonymous } = authState.get();
   if (status !== 'ready' || anonymous) {
     walletState.set({ status: 'idle' });
     return;
   }
-  walletState.set({ status: 'loading' });
+  const known = walletState.get().status === 'ready';
+  if (!known) walletState.set({ status: 'loading' });
   try {
     const wallet = await getWallet();
     walletState.set({ status: 'ready', ...wallet });
   } catch {
-    // 残高が分からなくても作成は頼める（サーバーが最終判断をする）。画面は既定の案内に戻る
-    walletState.set({ status: 'failed' });
+    // 残高が分からなくても作成は頼める（サーバーが最終判断をする）。知っている値があればそのまま、無ければ既定の案内に戻る
+    if (!known) walletState.set({ status: 'failed' });
   }
 }
 

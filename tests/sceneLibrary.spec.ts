@@ -16,13 +16,12 @@ const chairAt = (x: number) => {
 };
 const CHAIR_SOURCE = chairAt.toString();
 
-test('初めての起動では背景も部屋も無く、作って開いてから置いた家具がその鍵に残る', async ({ page }) => {
+test('初めての起動では新しい背景が 1 つ作られて開き、置いた家具がその鍵に残る', async ({ page }) => {
   const r = await page.evaluate(async () => {
-    const { sceneLibrary, photoDataKey, entriesOf, createScene, openScene } = await import('/src/core/sceneLibrary.ts');
+    const { sceneLibrary, photoDataKey, entriesOf, currentScene } = await import('/src/core/sceneLibrary.ts');
     const { photoScene } = await import('/src/core/photoState.ts');
-    const atStart = { ...sceneLibrary.get().current, photos: entriesOf('photo').length, rooms: entriesOf('room').length };
-    const entry = createScene('photo');
-    openScene(entry.id);
+    const atStart = { room: sceneLibrary.get().current.room, photos: entriesOf('photo').length, rooms: entriesOf('room').length };
+    const entry = currentScene('photo')!;
     const size: [number, number, number] = [0.5, 0.9, 0.5];
     photoScene.add({ id: 'c1', typeId: 'box', name: '椅子', color: '#ccc', size, baseSize: size, position: [0, 0, 0], rotationY: 0 });
     const saved = JSON.parse(localStorage.getItem(photoDataKey(entry.id)) ?? '{}');
@@ -34,7 +33,7 @@ test('初めての起動では背景も部屋も無く、作って開いてか�
       index: JSON.parse(localStorage.getItem('roomplanner.scenes') ?? 'null'),
     };
   });
-  expect(r.atStart).toEqual({ photo: null, room: null, photos: 0, rooms: 0 });
+  expect(r.atStart).toEqual({ room: null, photos: 1, rooms: 0 });
   expect(r.name).toMatch(/^背景 \d+\/\d+$/);
   expect(r.current).toBeTruthy();
   expect(r.savedCount).toBe(1);

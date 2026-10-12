@@ -3,7 +3,7 @@
  *
  * 写真ごとに 1 枚ずつ、実際の高さ（cm）を聞く。空のまま進めてよい
  * （その場合は 1 m として置く。core/furnitureHeight.ts）。
- * 「‹ 戻る」はすべて取りやめで、切り抜きは始めない。
+ * 下の帯の ←（cancel）はすべて取りやめで、切り抜きは始めない。
  */
 
 import { REAL_HEIGHT_LIMITS } from '@/core/furnitureHeight';
@@ -12,10 +12,10 @@ export interface HeightStep {
   element: HTMLElement;
   /**
    * 写真ごとの高さ（m）を聞く。入れなかった写真は null。
-   * 「‹ 戻る」で取りやめたときは全体が null
+   * ← で取りやめたときは全体が null
    */
   ask(files: File[]): Promise<(number | null)[] | null>;
-  /** 聞いている途中なら取りやめる（「‹ 戻る」と同じ。ask は null を返す）。家具タブを離れたとき */
+  /** 聞いている途中なら取りやめる（ask は null を返す）。下の帯の ← と、家具タブを離れたとき */
   cancel(): void;
 }
 
@@ -30,18 +30,13 @@ export function createHeightStep(): HeightStep {
   element.className = 'lib__height';
   element.hidden = true;
 
+  // 見出しだけ。取りやめるのはページの下の帯の ←（cancel。ui/furniturePage.ts）
   const head = document.createElement('div');
   head.className = 'edit__head';
-  const back = document.createElement('button');
-  back.type = 'button';
-  back.className = 'button is-text is-small';
-  back.textContent = '‹ 戻る';
   const title = document.createElement('span');
   title.className = 'edit__title';
   title.textContent = '家具の大きさを入力';
-  const headSpacer = document.createElement('span');
-  headSpacer.className = 'edit__spacer';
-  head.append(back, title, headSpacer);
+  head.append(title);
 
   // 選んだ写真。何枚も選んだときは「2 / 3」のように、いま何枚目かを添える
   const photoRow = document.createElement('div');
@@ -92,7 +87,6 @@ export function createHeightStep(): HeightStep {
 
   /** いま聞いている 1 枚に答えたら呼ぶ。null は取りやめ */
   let answer: ((height: number | null | undefined) => void) | null = null;
-  back.addEventListener('click', () => answer?.(undefined));
   next.addEventListener('click', () => answer?.(parseHeight(input.value)));
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') next.click();

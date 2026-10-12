@@ -78,27 +78,11 @@ body {
 
 /* 編集の画面のヘッダー。左の「‹」で一覧に戻り、名前を押すと名前を変える */
 .scene-header {
-  display: grid;
-  grid-template-columns: 48px 1fr 48px;
+  display: flex;
+  justify-content: center;
   align-items: center;
   min-width: 0;
   flex: 1;
-  margin: 0 -12px;
-}
-.scene-header__back {
-  width: 48px;
-  height: 44px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--primary);
-  display: grid;
-  place-items: center;
-  touch-action: manipulation;
-}
-.scene-header__back .ic {
-  width: 26px;
-  height: 26px;
 }
 .scene-header__name {
   display: flex;
@@ -146,42 +130,6 @@ body {
 .scenes[hidden] {
   display: none;
 }
-.scenes__bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 52px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
-}
-.scenes__title {
-  font-size: 16px;
-  font-weight: 700;
-}
-/* 背景 / 部屋の切り替え。灰色の地に、選んでいる側が白（文字はメインカラー） */
-.scenes__switch {
-  display: flex;
-  flex: none;
-  padding: 2px;
-  border-radius: 999px;
-  background: #e6e9ea;
-}
-.scenes__switch-item {
-  padding: 6px 16px;
-  border: none;
-  border-radius: 999px;
-  background: none;
-  color: #5d6567;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  touch-action: manipulation;
-}
-.scenes__switch-item.is-active {
-  background: var(--surface);
-  color: var(--accent);
-}
 .scenes__body {
   flex: 1;
   min-height: 0;
@@ -190,8 +138,8 @@ body {
 }
 .scenes__grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
 }
 .scene-tile {
   position: relative;
@@ -244,48 +192,72 @@ body {
   height: 18px;
 }
 /* ＋ のタイル。家具を追加の ＋ と同じ破線の枠 */
-.scene-tile--add {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: center;
-  touch-action: manipulation;
-}
-.scene-tile--add:disabled {
-  opacity: 0.45;
-}
-/* 点線の枠（＋ だけ）。地は白のままにして、緑は枠と ＋ だけに使う */
-.scene-tile__add-box {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 3 / 4;
-  border: 1.5px dashed var(--accent);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--accent);
-}
-.scene-tile__add-box .ic {
-  width: 28px;
-  height: 28px;
-}
-.scene-tile__add-name {
-  font-size: 12px;
-}
-.scenes__tabs {
+/*
+ * 画面の下の帯（ui/footerBar.ts）。ホーム・家具のページ・編集の画面で同じ。
+ * 左右は 1fr ずつ（タブは中で均等に並ぶ、← は左端）、真ん中は 64px の黄緑の丸い ＋
+ */
+.foot {
   flex: none;
-  display: flex;
-  justify-content: space-around;
+  display: grid;
+  grid-template-columns: 1fr 64px 1fr;
+  align-items: center;
+  height: 76px;
+  padding: 0 8px env(safe-area-inset-bottom);
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
-.scenes__tab {
+.foot__side {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  min-width: 0;
+}
+/* ← を入れた側は左端に寄せる */
+.foot__side:has(.foot__back) {
+  justify-content: flex-start;
+}
+.foot__center {
+  display: grid;
+  place-items: center;
+}
+.foot__back {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.foot__back .ic {
+  width: 32px;
+  height: 32px;
+}
+.foot__add {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.foot__add .ic {
+  width: 32px;
+  height: 32px;
+}
+.foot__tab {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  width: 120px;
+  min-width: 64px;
   padding: 8px 0 10px;
   border: none;
   background: none;
@@ -294,14 +266,81 @@ body {
   font-size: 11px;
   touch-action: manipulation;
 }
-.scenes__tab .ic {
+.foot__tab .ic {
   width: 24px;
   height: 24px;
 }
-.scenes__tab.is-active {
+.foot__tab.is-active {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* 下から出る、題と行だけのメニュー（ui/popupMenu.ts）。暗い所を押すと閉じる */
+.popup {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+}
+.popup[hidden] {
+  display: none;
+}
+.popup__dim {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 28, 0.38);
+}
+.popup__sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: 10px;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+}
+.popup__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+.popup__rows {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.popup__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  touch-action: manipulation;
+}
+.popup__row:first-child {
+  border-top: none;
+}
+.popup__row .ic {
+  width: 26px;
+  height: 26px;
+  color: var(--accent);
+}
+.popup__chevron {
+  margin-left: auto;
+  color: #9aa1a5;
+}
+
 /* 名前を変える欄 */
 .name-dialog__input {
   width: 100%;
@@ -1135,28 +1174,6 @@ body {
 }
 
 /* 先頭の［＋ 家具を追加］。点線の枠とメインカラーで、ほかのタイルと見分ける */
-.manage__tile.manage__add {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 0;
-  border: 1.5px dashed var(--accent);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.manage__tile.manage__add .ic {
-  width: 24px;
-  height: 24px;
-  color: var(--accent);
-}
-.manage__tile.manage__add:disabled {
-  opacity: 0.35;
-}
-
 /* チェックを付けている間の、タイルの右上の丸。付いたらメインカラーで塗り、チェックの印を描く */
 .manage__check {
   position: absolute;
@@ -1828,6 +1845,10 @@ body {
 .edit__head {
   display: flex;
   align-items: center;
+  justify-content: center;
+}
+/* 「背景の調整」の画面は「‹ 戻る」と「保存」が残るので、両端に */
+.edit__head.sub__head {
   justify-content: space-between;
 }
 .edit__title {
@@ -2041,6 +2062,24 @@ body {
 .modal__title {
   font-size: 15px;
 }
+.modal__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.modal__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4a5054;
+}
+.modal__check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+}
 
 /* 何を消すのかを、アイコンと名前で出す。同じ名前の家具があっても取り違えないため */
 .confirm__what {
@@ -2168,54 +2207,9 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-/* 下の帯。左端に ←、真ん中に黄緑の丸い ＋ */
-.page__foot {
-  flex: none;
-  position: relative;
-  display: grid;
-  grid-template-columns: 64px 1fr 64px;
-  align-items: center;
-  height: 76px;
-  padding: 0 8px env(safe-area-inset-bottom);
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-}
-/* 一覧以外の姿（3D を作る・編集・高さの入力）では隠す。それぞれに「‹ 戻る」があるため */
-.page:has(.lib__normal[hidden]) .page__foot {
+/* 一覧以外の姿（3D を作る・編集・高さの入力）では、下の帯の ＋ を出さない（それぞれの姿の中で作るため）。← は残る */
+.page:has(.lib__normal[hidden]) .foot__add {
   display: none;
-}
-.page__back {
-  width: 64px;
-  height: 64px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text);
-  display: grid;
-  place-items: center;
-  touch-action: manipulation;
-}
-.page__back .ic {
-  width: 32px;
-  height: 32px;
-}
-.page__add {
-  justify-self: center;
-  width: 64px;
-  height: 64px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  display: grid;
-  place-items: center;
-  touch-action: manipulation;
-}
-.page__add .ic {
-  width: 32px;
-  height: 32px;
 }
 
 .page__title {
@@ -2468,8 +2462,13 @@ body {
 /* 全画面: ヘッダーと下のシートと写真の［⋯］を隠し、絵だけにする。ボタンは safe-area の分だけ上げる */
 #app.is-full .header,
 #app.is-full .sheet,
+#app.is-full .foot--editor,
 #app.is-full .photo-menu {
   display: none;
+}
+/* 全画面では写真を切り落とさず全体を収めるので、余った所は黒ではなくアプリの地の色 */
+#app.is-full .viewport--photo {
+  background-color: var(--background);
 }
 #app.is-full .view-full {
   right: 16px;
@@ -2562,20 +2561,3 @@ body {
 }
 
 /* 家具を選んでいるときの見出しの右の小さな［＋］（家具を追加） */
-.manage__add-small {
-  flex: none;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--primary);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--primary);
-  display: grid;
-  place-items: center;
-  touch-action: manipulation;
-}
-.manage__add-small .ic {
-  width: 20px;
-  height: 20px;
-}
