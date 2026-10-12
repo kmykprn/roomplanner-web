@@ -58,12 +58,12 @@ test.describe('家具のページ', () => {
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toBeVisible();
     // 編集の姿に文字の「‹ 戻る」は無く、下の帯の ← で戻る。＋ は出さない
     await expect(page.locator('.page .lib__edit button', { hasText: '‹ 戻る' })).toHaveCount(0);
-    await expect(page.locator('.page .foot__back')).toBeVisible();
+    await expect(page.locator('.page__back')).toBeVisible();
     await expect(page.locator('.page .fab')).toBeHidden();
-    await page.locator('.page .foot__back').click();
+    await page.locator('.page__back').click();
     await expect(page.locator('.page .edit__title').filter({ visible: true })).toHaveCount(0);
     await expect(page.locator('.page .fab')).toBeVisible();
-    await page.locator('.page .foot__back').click();
+    await page.locator('.page__back').click();
     await expect(page.locator('.page')).toBeHidden();
     await expect(page.locator('.manage__add')).toBeVisible();
     // もう一度開くと、編集の画面ではなく一覧に戻っている
@@ -102,43 +102,47 @@ test.describe('家具のページ', () => {
     await page.locator('.lib__chooser-dim').click({ position: { x: 10, y: 10 } });
     await expect(chooser).toBeHidden();
     await expect(page.locator('.lib__normal')).toBeVisible();
-    await expect(page.locator('.page .foot:visible')).toHaveCount(1);
+    await expect(page.locator('.page__back')).toBeVisible();
   });
 
-  test('「家具を追加」から開くと下の帯は ← だけ（76px、← は 64px の押せる範囲に 32px の矢印）。「新しい家具」は右下に浮かぶ白い丸（56px、黄緑の線）', async ({ page }) => {
+  test('「家具を追加」から開くと、戻るはヘッダーの ‹（編集の画面と同じ見た目）で下の帯は無い。「新しい家具」は右下に浮かぶ白い丸（56px、黄緑の線）', async ({ page }) => {
     await openFurniturePage(page);
     const r = await page.evaluate(() => {
-      const foot = document.querySelector('.page .foot:not([hidden])')!.getBoundingClientRect();
-      const back = document.querySelector('.page .foot:not([hidden]) .foot__back')!;
-      const backIcon = back.querySelector('.ic')!.getBoundingClientRect();
+      const back = document.querySelector('.page__back')!;
+      const b = back.getBoundingClientRect();
+      const bar = document.querySelector('.page__bar')!.getBoundingClientRect();
+      const title = document.querySelector('.page__title')!.getBoundingClientRect();
       const add = document.querySelector('.page .fab')!;
       const a = add.getBoundingClientRect();
       const s = getComputedStyle(add);
       return {
-        footHeight: foot.height, footBottom: foot.bottom, inner: window.innerWidth && window.innerHeight,
-        backLeft: back.getBoundingClientRect().left, backWidth: back.getBoundingClientRect().width, iconWidth: backIcon.width,
-        footAdd: document.querySelectorAll('.page .foot:not([hidden]) .foot__add').length,
-        addWidth: a.width, addRight: window.innerWidth - a.right, addGap: foot.top - a.bottom,
+        backVisible: getComputedStyle(back).visibility, backLeft: b.left, backWidth: b.width, backHeight: b.height, backColor: getComputedStyle(back).color,
+        backIcon: back.querySelector('.ic')!.getBoundingClientRect().width, titleCenter: (title.left + title.right) / 2, barCenter: (bar.left + bar.right) / 2,
+        foot: document.querySelectorAll('.page .foot:not([hidden])').length, inner: window.innerHeight,
+        addWidth: a.width, addRight: window.innerWidth - a.right, addBottom: window.innerHeight - a.bottom,
         addBackground: s.backgroundColor, addBorder: s.borderTopColor, addColor: s.color, addRadius: s.borderRadius,
         addText: add.textContent?.trim(), closeButtons: document.querySelectorAll('.page__bar button').length,
       };
     });
-    expect(r.footHeight).toBe(76);
-    expect(r.footBottom).toBe(r.inner);
+    // ‹ は編集の画面のヘッダーと同じ（48×44、黄緑、線は 26px）。題は真ん中
+    expect(r.backVisible).toBe('visible');
     expect(r.backLeft).toBeLessThan(16);
-    expect(r.backWidth).toBe(64);
-    expect(r.iconWidth).toBe(32);
-    expect(r.footAdd).toBe(0);
+    expect(r.backWidth).toBe(48);
+    expect(r.backHeight).toBe(44);
+    expect(r.backColor).toBe('rgb(110, 156, 17)');
+    expect(r.backIcon).toBe(26);
+    expect(Math.abs(r.titleCenter - r.barCenter)).toBeLessThan(1);
+    expect(r.foot).toBe(0);
     expect(r.addWidth).toBe(56);
     expect(r.addRight).toBe(16);
-    expect(r.addGap).toBe(16);
+    expect(r.addBottom).toBe(16);
     expect(r.addBackground).toBe('rgb(255, 255, 255)');
     expect(r.addBorder).toBe('rgb(110, 156, 17)');
     expect(r.addColor).toBe('rgb(110, 156, 17)');
     expect(r.addRadius).toBe('50%');
     expect(r.addText).toBe('');
-    // 上の帯に × は無く、一覧に「新しい家具」のタイルも無い
-    expect(r.closeButtons).toBe(0);
+    // 上の帯のボタンは ‹ だけ。一覧に「新しい家具」のタイルは無い
+    expect(r.closeButtons).toBe(1);
     await expect(page.locator('.thumb__img.is-add')).toHaveCount(0);
   });
 });

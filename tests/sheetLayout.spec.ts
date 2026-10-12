@@ -41,7 +41,7 @@ test('操作タブの［＋ 家具を追加］と、家具を選んでいる間�
   await openTab(page, '操作');
   await page.locator('.manage__add').click();
   await expect(page.locator('.page')).toBeVisible();
-  await page.locator('.page .foot__back').click();
+  await page.locator('.page__back').click();
   await expect(page.locator('.page')).toBeHidden();
   await page.evaluate(async () => {
     const { activeScene } = await import('/src/core/mode.ts');

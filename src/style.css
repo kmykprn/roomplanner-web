@@ -2258,10 +2258,31 @@ body {
 .page__bar {
   flex: none;
   display: grid;
+  grid-template-columns: 48px 1fr 48px;
   align-items: center;
   height: 52px;
   padding: 0 4px;
   border-bottom: 1px solid var(--border);
+}
+/* 見出しの左の ‹。編集の画面のヘッダーの ‹ と同じ見た目 */
+.page__back {
+  width: 48px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;
+}
+.page__back .ic {
+  width: 26px;
+  height: 26px;
+}
+/* タブから開いたときの一覧では、戻るのはタブなので ‹ を出さない（一覧以外の姿では出す） */
+.page.is-browse:not(:has(.lib__normal[hidden])) .page__back {
+  visibility: hidden;
 }
 
 /*
@@ -2271,7 +2292,7 @@ body {
 .fab {
   position: absolute;
   right: 16px;
-  bottom: calc(76px + env(safe-area-inset-bottom) + 16px);
+  bottom: calc(16px + env(safe-area-inset-bottom));
   z-index: 5;
   width: 56px;
   height: 56px;
@@ -2291,6 +2312,10 @@ body {
 }
 .fab[hidden] {
   display: none;
+}
+/* タブから開いたときは下に帯があるので、その分だけ上げる */
+.page.is-browse .fab {
+  bottom: calc(76px + env(safe-area-inset-bottom) + 16px);
 }
 /* 一覧以外の姿（3D を作る・編集・高さの入力）では、浮かぶ ＋ を出さない（それぞれの姿の中で作るため）。← は残る */
 .page:has(.lib__normal[hidden]) .fab {
