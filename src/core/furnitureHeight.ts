@@ -72,16 +72,17 @@ export function placementSize(model: GeneratedModel, facet: ModelFacet): Size {
   return height ? withHeight(base, height) : base;
 }
 
-/** 保管庫の項目の実際の高さを変え、置いてある同じ家具もすべてその高さにする */
+/**
+ * 保管庫の項目の実際の高さを変え、部屋に置いてある同じ家具もすべてその高さにする。
+ * 写真に置いた家具は変えない（写真では実寸で置かず、置いたときの大きさと操作タブのボタンで決める）
+ */
 export function setModelHeight(modelId: string, height: number): void {
   const model = modelLibrary.get().models.find((entry) => entry.id === modelId);
   if (!model) return;
   const clamped = clampHeight(height);
   updateModel(modelId, { height: clamped });
-  for (const scene of [roomScene, photoScene]) {
-    for (const item of scene.state().furniture) {
-      if (isCopyOf(item, model)) applyHeight(scene, item, clamped);
-    }
+  for (const item of roomScene.state().furniture) {
+    if (isCopyOf(item, model)) applyHeight(roomScene, item, clamped);
   }
 }
 
@@ -109,6 +110,8 @@ function applyHeight(scene: EditableScene, item: PlacedFurniture, height: number
  * 置いてある家具の箱は、中身の形に締める。見た目は変えない。
  * ただし実際の高さが決まっている項目なら、中身の高さがその値になるよう大きさを直す
  * （箱が 1 m の立方体のままだと「いちばん長い辺 = 高さ」になり、机の高さが合わない）。
+ * **写真に置いた家具は実寸に直さない。** 置いたときに画面に収まる大きさへ縮めてあるので、
+ * いちばん長い辺を保ったまま形だけ締める。
  * 形は保管庫の項目にも覚えさせ、次に置くときは最初から締まった箱で置く
  */
 export function learnShape(scene: EditableScene, id: string, bounds: Size): void {
@@ -123,7 +126,7 @@ export function learnShape(scene: EditableScene, id: string, bounds: Size): void
 
   const base = item.baseSize ?? item.size;
   const ratio = longestOf(item.size) / longestOf(base);
-  const height = model ? realHeightOf(model) : undefined;
+  const height = model && scene !== photoScene ? realHeightOf(model) : undefined;
   const nextBase = height ? withHeight(shape, height) : scaled(bounds, 1 / ratio);
   const size = scaled(nextBase, ratio);
   // 読み戻すたびに呼ばれる。すでに締まっていれば書き換えない（保存と再描画を省く）

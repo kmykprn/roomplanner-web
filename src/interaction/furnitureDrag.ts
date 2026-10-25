@@ -14,23 +14,12 @@
 import * as THREE from 'three';
 import type { CameraControls } from '@/interaction/cameraControls';
 import type { FurnitureLayer } from '@/scene/furniture';
+import { viewPlaneThrough } from '@/interaction/photoCamera';
 import { restingHeightAt, type EditableScene } from '@/core/furnitureScene';
 import { beginEdit, endEdit } from '@/core/editHistory';
 
 /** この距離（ピクセル）以内で指を離したらドラッグではなくタップとみなす */
 const TAP_THRESHOLD_PX = 8;
-
-/**
- * 水平な面を滑らせるとき、カメラからこれより遠くへは動かさない（m）。
- * 地平線の近くを指すと面との交点が急に遠くなり、家具が点になって見失う
- */
-const LEVEL_MAX_DISTANCE = 30;
-
-/**
- * 足元がカメラの高さからこれより上にある家具は、水平な面ではなく画面に沿って動かす（m）。
- * 目の高さに近い水平な面は、画面の中でほぼ 1 本の線に潰れ、少し指を動かすだけで遠くへ飛ぶ
- */
-const EYE_MARGIN = 0.2;
 
 /** 操作の対象。モードで入れ替わるので、その都度引き直す */
 export interface DragTarget {
@@ -40,18 +29,10 @@ export interface DragTarget {
    * 家具をどの面に沿って動かすか。
    *
    *   floor  … 床の上を滑る（部屋モード）。奥へ行けば小さく写る。何かの上に来たらその上面に載る
-   *   level  … 足元の高さの水平な面を滑る（写真モード）。奥へ行けばなめらかに小さく写り、高さは変わらない。
-   *            寸法を計算したあとは、足元は置いたときに写真の奥行きで決まっている。
-   *            ドラッグ中に写真の奥行きを拾い直さないのは、足元が物の縁をまたぐたびに
-   *            大きさが急に変わったため。
-   *            **寸法を計算する前もこの面を使う。** 前は画面に沿って動かしていたが、画面の上へ動かすと
-   *            奥へ行かずに宙に浮き、奥へ動かしたつもりで手前の家具の上に浮いていた（影が 2 つに見えた）。
-   *            高さを変えるのは ↕ の取っ手（interaction/liftHandle.ts）だけ
-   *   screen … 画面の面に沿って動く。左右と上下だけで、奥行きは変えない。
-   *            level で掴んだ家具の足元が目の高さより上にあるときだけ、代わりに使う
-   *            （水平な面が画面の下半分と交わらず、動かせなくなるため）
+   *   screen … 家具を通り、カメラに正対する面の上を滑る（写真モード）。画面の上へ動かしても奥へは行かず、
+   *            写る大きさは変わらない。大きさは操作タブのボタンで決める（写真の奥行きには合わせない）
    */
-  surface: 'floor' | 'level' | 'screen';
+  surface: 'floor' | 'screen';
 }
 
 export function createFurnitureDrag(
@@ -72,10 +53,8 @@ export function createFurnitureDrag(
   // 指の位置をこの面に投影して移動先を決める。向きと位置は掴んだときに決める。
   // **面は掴んだ家具を通す。** 家具から離れた面で追うと、指と家具がずれて
   // 狙ったところに置けない
-  const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  let dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const FLOOR_NORMAL = new THREE.Vector3(0, 1, 0);
-  /** 写真モードのカメラは正面（-Z）を向いているので、画面の面の法線は +Z */
-  const SCREEN_NORMAL = new THREE.Vector3(0, 0, 1);
   const hitPoint = new THREE.Vector3();
 
   /**
@@ -93,14 +72,6 @@ export function createFurnitureDrag(
   let cameraWasEnabled = true;
   /** 掴んだ点と家具の原点のズレ。これを保たないと家具が指の中心に飛ぶ */
   let grabOffset = new THREE.Vector3();
-  /**
-   * 水平な面（level）で掴んだとき、指から足元までの画面上のずれ（NDC）。
-   *
-   * **足元を指と同じだけ画面の上で動かす。** 指の先の床の点との差を保つやり方だと、家具の胴体を
-   * 掴んだとき、その床の点は足元よりずっと奥になる。奥ほど 1px あたりの距離が大きいので、
-   * 少し動かすだけで家具が何 m も奥へ飛んだ
-   */
-  const grabNdcOffset = new THREE.Vector2();
   let pressPosition = { x: 0, y: 0 };
   /** 掴んだ家具を、タップとみなさない距離まで動かしたか。動かしている間は上下のつまみを隠す */
   let moving = false;
@@ -147,9 +118,7 @@ export function createFurnitureDrag(
     if (!item) return;
 
     draggingId = furnitureId;
-    // 足元が目の高さより上にある家具は、水平な面では動かせないので、画面に沿って動かす
-    const aboveEye = target.surface === 'level' && item.position[1] > camera.position.y - EYE_MARGIN;
-    draggingTarget = aboveEye ? { ...target, surface: 'screen' } : target;
+    draggingTarget = target;
 
     // 家具を動かしている間はカメラを固定する。
     // **戻すのは true ではなく元の値。** 写真モードはカメラ操作を止めてあるので、
@@ -157,17 +126,15 @@ export function createFurnitureDrag(
     cameraWasEnabled = cameraControls.enabled;
     cameraControls.enabled = false;
 
-    // 平面は「法線・p + constant = 0」なので、家具を通す面は constant = -(法線方向の座標)
-    if (draggingTarget.surface === 'screen') {
-      dragPlane.set(SCREEN_NORMAL, -item.position[2]);
+    const origin = new THREE.Vector3(...item.position);
+    if (target.surface === 'screen') {
+      dragPlane = viewPlaneThrough(camera, origin);
     } else {
-      dragPlane.set(FLOOR_NORMAL, -item.position[1]);
+      // 平面は「法線・p + constant = 0」なので、家具を通す面は constant = -(法線方向の座標)
+      dragPlane = new THREE.Plane(FLOOR_NORMAL, -item.position[1]);
     }
-    if (draggingTarget.surface === 'level') {
-      const foot = new THREE.Vector3(...item.position).project(camera);
-      grabNdcOffset.set(foot.x - pointerNdc.x, foot.y - pointerNdc.y);
-    } else if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
-      grabOffset = new THREE.Vector3(...item.position).sub(hitPoint);
+    if (raycaster.ray.intersectPlane(dragPlane, hitPoint)) {
+      grabOffset = origin.sub(hitPoint);
     }
   }
 
@@ -180,34 +147,23 @@ export function createFurnitureDrag(
     if (Math.hypot(event.clientX - pressPosition.x, event.clientY - pressPosition.y) >= TAP_THRESHOLD_PX) moving = true;
     toNdc(event);
     const { scene, surface } = draggingTarget;
-    // 水平な面では、指から控えたずれだけ離れた画面の点（＝足元が来る点）の先を、足元の位置にする
-    if (surface === 'level') pointerNdc.add(grabNdcOffset);
     raycaster.setFromCamera(pointerNdc, camera);
     if (!raycaster.ray.intersectPlane(dragPlane, hitPoint)) return;
 
-    const next = surface === 'level' ? hitPoint : hitPoint.add(grabOffset);
+    const next = hitPoint.add(grabOffset);
     const item = scene.state().furniture.find((f) => f.id === draggingId);
     if (!item) return;
     // 動かし始めた姿を控える（ひとつ戻すで、ここへ戻る）。タップだけなら何も残らない
     beginEdit(scene);
-    // 水平な面では、地平線の近くを指しても遠くへ飛ばさない
-    if (surface === 'level' && next.distanceTo(camera.position) > LEVEL_MAX_DISTANCE) return;
 
     // 床の上では、動かした先で何かの上に載るなら、その上面の高さにする（机の上のランプなど）。
-    // 写真モードでは高さを変えない（水平な面なら足元の高さ、画面に沿うなら奥行きをそのまま保つ）。
+    // カメラに正対する面では、面の上の位置をそのまま使う（奥行きは面で決まっているので変わらない）。
     // 移動先の丸め方はモードが決める（部屋なら壁の内側と床の上、写真なら丸めない）
-    const [, y, z] = item.position;
     const moved: [number, number, number] =
       surface === 'floor'
         ? [next.x, restingHeightAt(scene.state().furniture, item, next.x, next.z), next.z]
-        : surface === 'level'
-          ? [next.x, y, next.z]
-          : [next.x, next.y, z];
-    scene.update(draggingId, {
-      position: scene.constrain(moved, item.size, item.rotationY),
-      // 置いた直後に手前に描いていた家具も、動かしたら奥行きで隠す判断に戻す
-      inFront: undefined,
-    });
+        : [next.x, next.y, next.z];
+    scene.update(draggingId, { position: scene.constrain(moved, item.size, item.rotationY) });
   }
 
   function onPointerUp(event: PointerEvent): void {

@@ -257,16 +257,17 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
     // 置き先を開くのは onPlaced の中。置き場はその後に取る
     onPlaced(id);
     const scene = activeScene();
+    // 写真では、置いた瞬間に画面に収まる大きさへ縮める（部屋では実寸のまま）
+    const size = scene.sizeForPlacement?.(item.size) ?? item.size;
     scene.add({
       ...item,
       id,
-      // 底面基準なので y = 0 が床置き。写真では、背景の物に隠れない場所を手前へ探す
-      position: scene.placementFor(item.size),
-      // 写真では、動かすまでは背景の物に隠さずに手前に描く（新しい家具は必ず見えるように）
-      ...(scene.newInFront ? { inFront: true } : {}),
+      size,
+      // 底面基準なので y = 0 が床置き
+      position: scene.placementFor(size),
       rotationY: 0,
-      // 「初期値に戻す」で戻す先。あとから大きさを変えても、ここは書き替えない
-      baseSize: [...item.size],
+      // 「100%」で戻す先は置いたときの大きさ。あとから大きさを変えても、ここは書き替えない
+      baseSize: [...size],
     });
     scene.select(id);
   }

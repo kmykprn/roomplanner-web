@@ -3,6 +3,7 @@
  *
  * 家具そのものをドラッグすると床の上を動く（画面の上へ動かすと奥へ進む）。棚の上の物や壁掛けの物を
  * 持ち上げたいときは、このつまみをドラッグする。**触る場所で動き方が決まる**ので、切り替えを置かずに済む。
+ * 部屋モードだけ。写真モードの家具は画面に沿って動くので、上へ動かすのと同じになる（main.ts の isEnabled）。
  *
  * つまみは画面の上の要素（キャンバスの外）なので、キャンバスの家具のドラッグやカメラ操作とは取り合わない。
  * 位置は毎フレーム、家具の上面の真ん中を画面に写して決める。家具そのものを動かしている間は隠す（isEnabled）。
@@ -47,10 +48,8 @@ export interface LiftHandleOptions {
   camera: THREE.PerspectiveCamera;
   /** いまのモードの家具の置き場 */
   scene(): EditableScene;
-  /** つまみを出してよいか（背景の調整の最中などは出さない） */
+  /** つまみを出してよいか（写真モードや、背景の調整の最中は出さない） */
   isEnabled(): boolean;
-  /** どこまで下げられるか（m）。部屋は床（0）、写真は下限なし */
-  lowest(): number;
   onFrame(callback: () => void): void;
 }
 
@@ -136,11 +135,10 @@ export function createLiftHandle(options: LiftHandleOptions): void {
     if (!item) return;
     const y = heightAt(event, new THREE.Vector3(...item.position));
     if (y === null) return;
-    const next = Math.max(options.lowest(), drag.startY + (y - drag.startHitY));
+    // 床（0）より下へは行かない
+    const next = Math.max(0, drag.startY + (y - drag.startHitY));
     drag.scene.update(item.id, {
       position: drag.scene.constrain([item.position[0], next, item.position[2]], item.size, item.rotationY),
-      // 置いた直後に手前に描いていた家具も、動かしたら奥行きで隠す判断に戻す
-      inFront: undefined,
     });
   });
 
