@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openTab , enterEditor} from './helpers';
+import { captureCamera, enterEditor, openTab } from './helpers';
 
 /**
  * 背景の画像を変えたり、写真の解析の結果でカメラ（画角・傾き・撮った高さ）が変わったりしても、
@@ -10,22 +10,9 @@ import { openTab , enterEditor} from './helpers';
  * 行くか、地平線より上なら置き直せずに画面の外に残った
  */
 
-/** 描いているカメラを捕まえる（three.js の開発者向けの合図で描画器を受け取り、render に渡るカメラを控える） */
+/** 描いているカメラを捕まえてから開く */
 async function openWithCamera(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    const devtools = new EventTarget();
-    (window as unknown as { __THREE_DEVTOOLS__: EventTarget }).__THREE_DEVTOOLS__ = devtools;
-    devtools.addEventListener('observe', (event) => {
-      const renderer = (event as CustomEvent).detail;
-      if (!renderer?.isWebGLRenderer || renderer.__wrapped) return;
-      renderer.__wrapped = true;
-      const render = renderer.render.bind(renderer);
-      renderer.render = (scene: unknown, camera: unknown) => {
-        (window as unknown as { __camera: unknown }).__camera = camera;
-        return render(scene, camera);
-      };
-    });
-  });
+  await captureCamera(page);
   await page.goto('/');
   await page.locator('.sheet').first().waitFor();
   await enterEditor(page);

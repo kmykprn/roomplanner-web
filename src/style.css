@@ -416,9 +416,9 @@ body {
   -webkit-mask-size: 100% 100%;
 }
 
-/* 指定している間だけ出す。家具を隠すのは、指定した物ごとの見えない板（core/maskRegions.ts）。
-   この層をいつも出すと、物の手前に置いた家具まで写真の下に隠れる */
-.viewport--photo .viewport__mask.has-mask.is-editing {
+/* 指定した範囲があればいつも出す。写真のその部分を家具の上に重ねるので、範囲に重なる家具はどれも写真の下に隠れる
+   （家具は写真の奥行きに合わせて置かないので、物の手前か奥かは見ない） */
+.viewport--photo .viewport__mask.has-mask {
   display: block;
 }
 
@@ -1034,6 +1034,38 @@ body {
 
 .slider-row__reset.is-idle {
   visibility: hidden;
+}
+
+/*
+ * ［−］［＋］のボタン（ui/stepperRow.ts）。2 つで、バーが占めていた幅を分け合う。
+ * 高さは戻すボタンと同じにして、行の高さがバーの行と変わらないようにする
+ */
+.stepper-row__button {
+  flex: 1;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--primary);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 押し続けている間に、文字の選択やページの長押しメニューが出ないように */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stepper-row__button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.stepper-row__button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /*

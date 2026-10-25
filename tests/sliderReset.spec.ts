@@ -61,28 +61,31 @@ test.describe('操作タブのバーの戻すボタン', () => {
     await expect(reset).toBeHidden();
   });
 
-  test('大きさは 100% のあいだ「100%」が見えず、動かすと出て、押すと 100% に戻る', async ({ page }) => {
-    const reset = row(page, '大きさ').getByRole('button', { name: '大きさを100%に戻す' });
+  test('大きさは 100% のあいだ「100%」が見えず、［＋］で変えると出て、押すと 100% に戻る', async ({ page }) => {
+    const scale = row(page, '大きさ');
+    const reset = scale.getByRole('button', { name: '大きさを100%に戻す' });
     await expect(reset).toBeHidden();
-    // 見えない間も場所は空けておく（行ごとにバーの長さが変わらない）
-    const widthOf = async (label: string) => (await row(page, label).locator('input[type=range]').boundingBox())!.width;
-    expect(Math.abs((await widthOf('大きさ')) - (await widthOf('向き')))).toBeLessThan(1);
-    const range = row(page, '大きさ').locator('input[type=range]');
-    await range.focus();
-    for (let i = 0; i < 20; i += 1) await page.keyboard.press('ArrowRight');
-    expect((await boxState(page)).scale).toBeGreaterThan(1.01);
+    // 見えない間も場所は空けておく（行ごとに右端がそろう）
+    const rightOf = async (label: string) => {
+      const box = (await row(page, label).locator('.slider-row__reset').boundingBox())!;
+      return box.x + box.width;
+    };
+    expect(Math.abs((await rightOf('大きさ')) - (await rightOf('向き')))).toBeLessThan(1);
+    await scale.getByRole('button', { name: '大きくする' }).click();
+    expect((await boxState(page)).scale).toBeCloseTo(1.1, 3);
     await expect(reset).toBeVisible();
     await reset.click();
     expect((await boxState(page)).scale).toBeCloseTo(1, 3);
     await expect(reset).toBeHidden();
   });
 
-  test('どのバーにも、いまの値の数字を出さない', async ({ page }) => {
-    // 両端の 50% / 200% と、戻す先を書いたボタン（100%）だけ
+  test('どの行にも、いまの値の数字を出さない', async ({ page }) => {
+    // 大きさの行は［−］［＋］と、戻す先を書いたボタン（100%）だけ。両端の目安も無い（上限も下限も無いので）
     const scale = row(page, '大きさ');
-    await expect(scale.locator('.slider-row__end')).toHaveText(['50%', '200%']);
+    await expect(scale.locator('.slider-row__end')).toHaveCount(0);
     await expect(scale.getByText('100%')).toHaveCount(1);
     await expect(scale.locator('.slider-row__reset')).toHaveText('100%');
+    await expect(row(page, '向き').locator('.slider-row__end')).toHaveText(['-180°', '+180°']);
   });
 });
 

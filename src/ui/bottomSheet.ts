@@ -22,6 +22,7 @@ import { createPhotoPanel, isAdjustingPhoto } from '@/ui/photoPanel';
 import { createInteriorPanel } from '@/ui/interiorPanel';
 import { createIcon } from '@/ui/icons';
 import { createSliderRow } from '@/ui/sliderRow';
+import { createStepperRow } from '@/ui/stepperRow';
 import { activeScene, isPhotoMode, modeState } from '@/core/mode';
 import { appState } from '@/core/appState';
 import { releaseFurnitureAssets } from '@/core/modelLibrary';
@@ -81,28 +82,18 @@ function signedDegrees(radians: number): number {
 }
 
 /**
- * 「大きさ」のバーの目盛りの数と、動かせる倍率（実寸に対する割合）。
- * バーの位置は倍率に正比例させず、掛け算で対応させる（50%〜200% を対数で）。
- * そうすると真ん中がちょうど 100%（実寸）になり、大きくするのも小さくするのも同じ手ざわりになる
+ * 「大きさ」のボタンを 1 回押したときに変わる割合。10% ずつ。
+ * 上限も下限も無い（押し続ければいくらでも大きく・小さくできる）。3 辺を同じ割合で変えるので比率は保たれる
  */
-const SCALE_STEPS = 1000;
-const SCALE_LIMITS = { min: 0.5, max: 2 };
+const SCALE_STEP = 1.1;
 
-function scaleToSlider(scale: number): number {
-  const { min, max } = SCALE_LIMITS;
-  const position = Math.log(scale / min) / Math.log(max / min);
-  return Math.round(Math.min(1, Math.max(0, position)) * SCALE_STEPS);
-}
-
-function sliderToScale(value: number): number {
-  const { min, max } = SCALE_LIMITS;
-  return min * (max / min) ** (value / SCALE_STEPS);
-}
-
-/** 置いた家具の、実寸（置いたときの大きさ）に対する割合。実寸を覚えていない古い記録は 100% とみなす */
+/** 置いた家具の、置いたときの大きさ（baseSize）に対する割合。覚えていない古い記録は 100% とみなす */
 function scaleOf(item: PlacedFurniture): number {
   return item.baseSize && item.baseSize[1] > 0 ? item.size[1] / item.baseSize[1] : 1;
 }
+
+/** 100% とみなす割合の幅。ボタンで 1.1 倍と 1/1.1 倍を繰り返すと、計算の丸めで 1 からわずかにずれる */
+const AT_RESET_TOLERANCE = 1e-6;
 
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
@@ -492,32 +483,47 @@ export function createBottomSheet(container: HTMLElement, { nav }: BottomSheetOp
   }
 
   /**
-   * 「大きさ」の行。置いたこの 1 つだけを、実寸の 50%〜200% で見せる。右のボタンで 100% に戻せる
-   * （バーの真ん中が 100% = 実寸。背景の写真で縮尺がずれて見えるときの調整用）
+   * 「大きさ」の行。［−］［＋］で置いたこの 1 つだけを 10% ずつ変える。上限も下限も無い。
+   * 右のボタンで置いたときの大きさ（100%）に戻せる。押し始めから離すまでを 1 回の操作として履歴に積む
    */
   function createScaleRow(id: string): { element: HTMLElement; refresh(item: PlacedFurniture): void } {
-    const row = createSliderRow({
+    const row = createStepperRow({
       label: '大きさ',
-      min: 0,
-      max: SCALE_STEPS,
-      ends: ['50%', '200%'],
-      // 100% = 実寸に戻すボタン
-      reset: { value: scaleToSlider(1), label: '100%' },
-      ...trackEdits({ onInput: (value: number) => setScale(id, sliderToScale(value)) }),
+      decreaseLabel: '小さくする',
+      increaseLabel: '大きくする',
+      reset: { label: '100%' },
+      onBegin: () => beginEdit(activeScene()),
+      onStep: (direction) => multiplyScale(id, direction > 0 ? SCALE_STEP : 1 / SCALE_STEP),
+      onEnd: () => endEdit(activeScene()),
+      onReset: () => {
+        beginEdit(activeScene());
+        setScale(id, 1);
+        endEdit(activeScene());
+      },
     });
     return {
       element: row.element,
-      refresh: (item) => row.setValue(scaleToSlider(scaleOf(item))),
+      refresh: (item) => row.setAtReset(Math.abs(scaleOf(item) - 1) < AT_RESET_TOLERANCE),
     };
   }
 
-  /** 置いたこの 1 つの大きさを、実寸に対する割合で決める。回した向きのまま置ける範囲へ押し戻す */
+  /** 置いたこの 1 つの大きさを、いまの大きさの factor 倍にする */
+  function multiplyScale(id: string, factor: number): void {
+    const item = activeScene().state().furniture.find((f) => f.id === id);
+    if (item) setScale(id, scaleOf(item) * factor);
+  }
+
+  /**
+   * 置いたこの 1 つの大きさを、置いたときの大きさ（baseSize）に対する割合で決める。
+   * 回した向きのまま置ける範囲へ押し戻す。baseSize を覚えていない古い記録は、いまの大きさを 100% とみなす
+   */
   function setScale(id: string, scale: number): void {
     const scene = activeScene();
     const item = scene.state().furniture.find((f) => f.id === id);
-    if (!item?.baseSize) return;
-    const size: [number, number, number] = [item.baseSize[0] * scale, item.baseSize[1] * scale, item.baseSize[2] * scale];
-    scene.update(id, { size, position: scene.constrain(item.position, size, item.rotationY) });
+    if (!item) return;
+    const base = item.baseSize ?? item.size;
+    const size: [number, number, number] = [base[0] * scale, base[1] * scale, base[2] * scale];
+    scene.update(id, { size, baseSize: base, position: scene.constrain(item.position, size, item.rotationY) });
   }
 
   /**
