@@ -4,21 +4,16 @@
  * **利用者がカメラを回すことはしない。** 写真は動かないので、カメラだけ自由に回ると嘘になる。
  * 動かすのは「写真を撮ったときの傾き」に合わせるときだけで、それが core/floorFit.ts の値。
  *
- * 高さは立って撮った高さ（1.4 m）。画角はここでは決めず viewer が持つ（core/viewer.ts）。
- *
- * **家具はカメラに正対する面の上に置く。** 写真の奥行きには合わせない。面はカメラから一定の距離にあり、
- * 家具を画面の上下に動かしても奥へ行かず、写る大きさは変わらない（大きさは利用者がボタンで決める）
+ * 高さは立って撮った高さ（1.4 m）。室内の寸法を計算したあとは、家具を写真の奥行きに合わせて置く
+ * （core/depthPlacement.ts）。画角はここでは決めず viewer が持つ（core/viewer.ts）。
  */
 
 import * as THREE from 'three';
 
 import type { FloorFit } from '@/core/floorFit';
 
-/** 床（y = 0）の上に立つ位置。前後の位置は、家具を置く場所が画面に入るように取る */
+/** 床（y = 0）の上に立つ位置。前後の位置は、家具を置く場所が画面に入るように取る。奥行きで置くときも使う */
 export const EYE_DISTANCE = 4;
-
-/** 家具を置く面までの距離（m）。カメラの正面にこれだけ離れた、カメラに正対する面に置く */
-export const PLACEMENT_DISTANCE = 4;
 
 /**
  * 写真モードのカメラを、床の傾きに合わせて置く。
@@ -37,34 +32,10 @@ export function applyPhotoCamera(camera: THREE.PerspectiveCamera, fit: FloorFit,
   camera.updateProjectionMatrix();
 }
 
-const raycaster = new THREE.Raycaster();
-
-/** カメラの正面の向き（単位ベクトル）。回したばかりのカメラでも正しい向きになるよう、行列を更新してから取る */
-function forwardOf(camera: THREE.Camera): THREE.Vector3 {
-  camera.updateMatrixWorld(true);
-  return camera.getWorldDirection(new THREE.Vector3());
-}
-
-/** その点を通り、カメラに正対する面。家具を指で動かすとき、この面の上を滑らせる */
-export function viewPlaneThrough(camera: THREE.Camera, point: THREE.Vector3): THREE.Plane {
-  return new THREE.Plane().setFromNormalAndCoplanarPoint(forwardOf(camera), point);
-}
-
-/**
- * 画面の点（NDC、-1〜1）の視線が、カメラから distance 先のカメラに正対する面と交わる位置。
- * 新しい家具を置く場所に使う。視線が面と交わらないことは無い（面は視線の正面にある）
- */
-export function pointOnViewPlane(camera: THREE.Camera, x: number, y: number, distance: number): THREE.Vector3 | null {
-  const forward = forwardOf(camera);
-  const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(forward, camera.position.clone().addScaledVector(forward, distance));
-  raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-  const hit = new THREE.Vector3();
-  return raycaster.ray.intersectPlane(plane, hit) ? hit : null;
-}
-
 /**
  * 高さ height の物が足元 position に立つとき、画面の高さのどれだけを占めるか（0〜1）。
- * 置いたときに大きすぎないよう縮めるのに使う。写らない（カメラの後ろ）なら null
+ * 置いたときに大きすぎないよう縮めるのと、動かしても写る大きさを変えないため（core/apparentSize.ts）に使う。
+ * 写らない（カメラの後ろ）なら null
  */
 export function screenHeightShare(camera: THREE.Camera, position: [number, number, number], height: number): number | null {
   camera.updateMatrixWorld(true);
@@ -72,4 +43,28 @@ export function screenHeightShare(camera: THREE.Camera, position: [number, numbe
   const top = new THREE.Vector3(position[0], position[1] + height, position[2]).project(camera);
   if (foot.z > 1 || top.z > 1) return null;
   return Math.abs(top.y - foot.y) / 2;
+}
+
+/** 床の平面（y = 0）。写真モードの家具はすべてこの上に立つ */
+const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const raycaster = new THREE.Raycaster();
+
+/**
+ * 画面のある点（NDC、-1〜1）に見えている床の位置。床より上を向いていれば null。
+ *
+ * 見下ろし角と画角が写真に合っていれば、この点までの距離は
+ * 「カメラの高さ ÷ tan(地平線からの角度)」で決まる実際の距離になる。
+ * カメラの高さ（1.4 m）だけが仮定。室内の寸法を計算したあとは、この床ではなく奥行きに置く
+ */
+export function floorPointOnScreen(
+  camera: THREE.Camera,
+  x: number,
+  y: number
+): THREE.Vector3 | null {
+  // 回したばかりのカメラは、まだ行列に反映されていないことがある。更新せずに視線を出すと
+  // 1 つ前の向きで位置を決めてしまう
+  camera.updateMatrixWorld(true);
+  raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+  const hit = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(FLOOR, hit) ? hit : null;
 }

@@ -2,8 +2,9 @@
  * 手前にある物の指定（マスク）を作る道具の中身。
  *
  * なぞる・囲む・消しゴムはどれも**同じマスクに形を描くだけ**で、出口は1つ。
- * 描いた形を画像にして状態（photoState.maskUrl）へ渡す。表示側（main.ts）がその画像で写真を切り抜いて
- * 家具の上に重ねるので、重なる家具は写真の下に隠れる。描いている間は、同じ層に色を被せて見せる。
+ * 描いた形を画像にして状態（photoState.maskUrl）へ渡す。描き終えた画像は物ごとの塊に分けられ、
+ * 塊ごとの見えない板が、その物より奥にある家具を隠す（core/maskRegions.ts）。
+ * 描いている間は、表示側（main.ts）が同じ画像で写真を切り抜き、色を被せて重ねる。
  *
  * 指の動きをどの道具に渡すかは interaction/maskPaint.ts、
  * ボタン（囲みを閉じる・戻す）は ui/maskPanel.ts。どちらもここを呼ぶ。
@@ -198,7 +199,7 @@ function createMaskEditor(): MaskEditor {
     previewRequest = requestAnimationFrame(() => {
       previewRequest = 0;
       producedUrl = renderPreview().toDataURL();
-      setMaskUrl(producedUrl);
+      setMaskUrl(producedUrl, true);
     });
   }
 

@@ -17,7 +17,7 @@ import { withCurrentSampleAssets } from '@/config/samples';
 import { appState, type AppState } from '@/core/appState';
 import { editSession } from '@/core/editHistory';
 import { DEFAULT_INTERIOR, DEFAULT_MATS, roomSizeFor } from '@/config/interior';
-import { photoState, resetPhotoState, restoreDepth, setMaskUrl, settledView, showBackground, type FittedScale, type PhotoState } from '@/core/photoState';
+import { photoState, resetPhotoState, restoreDepth, setMaskUrl, settledView, showBackground, startAnalysis, type FittedScale, type PhotoState } from '@/core/photoState';
 import { readBackground, readDepth, readMask } from '@/platform/backgroundStore';
 import { normalizeFloorFit } from '@/core/floorFit';
 import { normalizeScaleLine, normalizeScaleLines } from '@/core/scaleLine';
@@ -159,10 +159,11 @@ function applyPhoto(saved: Partial<SavedPhoto> | null, load: number): void {
       if (load !== photoLoad) return;
       if (mask) setMaskUrl(URL.createObjectURL(mask));
       // 室内の寸法を計算した奥行きも、写真に付いているものなので同じく戻す
-      // 奥行きは家具の置き方には使わないが、以前の版で計算したものがあれば捨てずに戻す
       const depthMap = await readDepth();
       if (load !== photoLoad) return;
       if (depthMap) restoreDepth(depthMap);
+      // 奥行きが残っていなければ（以前の版で選んだ写真など）、裏で解析する
+      else startAnalysis();
     })
     .catch(() => {
       // 読めなくても起動は続ける。写真を選び直せばよい

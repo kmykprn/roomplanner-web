@@ -37,15 +37,20 @@ import {
   estimateCameraHeight,
   findFloorPlane,
   fitDepthScale,
+  levelPointAt,
   photoPointOf,
-  pointAtDistance,
   worldPointAt,
   type DepthScale,
   type Lens,
   type PhotoPose,
 } from '@/core/depthPlacement';
 import { EYE_DISTANCE } from '@/interaction/photoCamera';
+import { createHiddenShare } from '@/core/placementVisibility';
+import { loadMaskRegions, regionDepthMap, type MaskRegions } from '@/core/maskRegions';
+import type { OccluderSource } from '@/scene/depthOccluder';
 import { clearHistory } from '@/core/editHistory';
+import { keepApparentSize, type HeightShare } from '@/core/apparentSize';
+import type { PlacedFurniture } from '@/config/furniture';
 
 /**
  * 背景写真の読み込み具合。
@@ -143,9 +148,14 @@ export interface PhotoState extends FurnitureSceneState {
 
   /**
    * 家具を隠す範囲（手前にある物）のマスク画像の URL。無ければ null。
-   * 塗った形をそのまま画像で持ち、写真のその部分を家具の上に重ねて隠す（core/viewer.ts の maskLayer）
+   * 塗った形をそのまま画像で持つ。家具を隠すのは、この画像から作った maskRegions
    */
   maskUrl: string | null;
+  /**
+   * マスクを物ごとの塊に分けたもの（core/maskRegions.ts）。塊ごとに見えない板を立て、
+   * 家具がその物より奥にあるときだけ隠す。マスクが無い・まだ読み込み中なら null。保存しない（マスクから作り直せる）
+   */
+  maskRegions: MaskRegions | null;
   /** 手前にある物を指定している最中か。この間は 1 本指が道具になる */
   isMasking: boolean;
   maskTool: MaskTool;
@@ -173,6 +183,7 @@ export const photoState = createStore<PhotoState>({
   isScaling: false,
   isFramingPhoto: false,
   maskUrl: null,
+  maskRegions: null,
   isMasking: false,
   // 太い筆を既定にする（広い面を手早く塗る用途が多い）
   maskTool: { kind: 'brush', thick: true },
@@ -183,16 +194,20 @@ export const photoState = createStore<PhotoState>({
 });
 
 /**
- * 新しい家具を置く位置と、置いたときの大きさを決めるための、いまのカメラの写し方。main.ts が入れる。
+ * 新しい家具を置く位置と、画面に写る大きさを出すための、いまのカメラの写し方。main.ts が入れる。
  *
  * 位置を決め打ちにしない理由: 写真の画角と傾きは写真ごとに違うので、
- * 同じ座標でも「画面のどこに、どの大きさで出るか」が写真ごとに変わる
+ * 同じ座標でも「画面のどこに、どの大きさで出るか」が写真ごとに変わる。
+ * 広角の写真では 4 m 先が画面の真ん中に小さく出ていた
  */
 export interface PhotoProjection {
-  /** 画面の点（3D を描いている範囲の NDC、-1〜1）に見えている、家具を置く面（カメラに正対する面）の上の位置 */
-  placementAt(screenX: number, screenY: number): [number, number, number] | null;
+  /**
+   * 画面の縦の位置（3D を描いている範囲の NDC、-1〜1）を渡すと、画面の横の真ん中のその高さに見えている床
+   * （寸法を合わせていれば、その点の奥行き）の位置を返す
+   */
+  placementAt(screenY: number): [number, number, number] | null;
   /** 高さ height の物が足元 position に立つとき、画面の高さに占める割合（0〜1）。写らなければ null */
-  screenHeightShare(position: [number, number, number], height: number): number | null;
+  screenHeightShare: HeightShare;
 }
 
 let projection: PhotoProjection | null = null;
@@ -201,11 +216,8 @@ export function setPhotoProjection(next: PhotoProjection): void {
   projection = next;
 }
 
-/** 新しい家具の足元を置く、画面の縦の位置。下から 3 割。横は真ん中 */
-const PLACEMENT_SCREEN_Y = -0.4;
-
-/** カメラで決められないとき（まだ入っていないなど）の置き場。カメラの 4 m 先 */
-const FALLBACK_PLACEMENT: [number, number, number] = [0, 0, 0];
+/** 画面に占める高さ。写し方がまだ無ければ（起動の直後など）出せない */
+const heightShare: HeightShare = (position, height) => projection?.screenHeightShare(position, height) ?? null;
 
 /**
  * 置いた瞬間に家具が画面の高さに占める割合の上限と下限。
@@ -215,26 +227,79 @@ const FALLBACK_PLACEMENT: [number, number, number] = [0, 0, 0];
 const MAX_SCREEN_SHARE = 0.35;
 const MIN_SCREEN_SHARE = 0.15;
 
+/**
+ * 置くときの大きさ。置く場所に立てたときに画面に占める高さが上限と下限の間に入るよう、3 辺を同じ割合で変える。
+ * 割合が出せないときはそのまま
+ */
+function fitToScreen(size: [number, number, number]): [number, number, number] {
+  const share = heightShare(placementInFront(size), size[1]);
+  if (!share || share <= 0) return size;
+  const factor = Math.min(MAX_SCREEN_SHARE, Math.max(MIN_SCREEN_SHARE, share)) / share;
+  return [size[0] * factor, size[1] * factor, size[2] * factor];
+}
+
+/** 新しい家具の足元をまず置く、画面の縦の位置。下から 3 割 */
+const PLACEMENT_SCREEN_Y = -0.4;
+/** 写真の物に隠れるとき、足元を手前（画面の下）へずらす幅（NDC） */
+const PLACEMENT_STEP = 0.05;
+
+/** カメラで決められないとき（床より上を向いているなど）の置き場。カメラの 2 m 先 */
+const FALLBACK_PLACEMENT: [number, number, number] = [0, 0, 2];
+
 /** 写真モードの置き場。UI とドラッグ操作はこの形で受け取る */
 export const photoScene = createFurnitureScene(photoState, {
-  // 画面の真ん中・下から 3 割に見えている、カメラに正対する面の上に置く。
-  // 空きを探して端に置くと画面の外に出て見失う。重なっても、置いた直後は選択されているので動かせばよい
-  placementFor: () => projection?.placementAt(0, PLACEMENT_SCREEN_Y) ?? FALLBACK_PLACEMENT,
+  // 画面の下寄りに見えている床に置く。空きを探して端に置くと画面の外に出て見失う。
+  // 重なっても、置いた直後は選択されているので動かせばよい
+  placementFor: (size) => placementInFront(size),
   sizeForPlacement: (size) => fitToScreen(size),
+  // 手前へずらしても隠れる場合や、置いたあとに中身の形が読めて大きさが変わり隠れる場合があるので、
+  // 新しい家具は動かすまで必ず手前に描く（隠れる所が無ければ、見た目は変わらない）
+  newInFront: true,
 
   // 写真に壁は無いので丸めない。画面の外まで動かせてよい
   constrain: (position) => position,
 });
 
 /**
- * 置くときの大きさ。置く場所に立てたときに画面に占める高さが上限と下限の間に入るよう、3 辺を同じ割合で変える。
- * 写し方がまだ無ければ（起動の直後など）そのまま
+ * 家具が写真の物に隠れる割合を見積もる関数。家具を隠す範囲が無い（隠す面が無い）なら null
  */
-function fitToScreen(size: [number, number, number]): [number, number, number] {
-  const share = projection?.screenHeightShare(photoScene.placementFor(size), size[1]);
-  if (!share || share <= 0) return size;
-  const factor = Math.min(MAX_SCREEN_SHARE, Math.max(MIN_SCREEN_SHARE, share)) / share;
-  return [size[0] * factor, size[1] * factor, size[2] * factor];
+function hiddenShareChecker(): ((position: [number, number, number], size: [number, number, number], rotationY: number) => number) | null {
+  const source = occluderSource();
+  return source ? createHiddenShare(source, currentPose()) : null;
+}
+
+/**
+ * 新しい家具を置く場所。画面の真ん中・下から 3 割に見えている床から始め、写真の物の奥に入って隠れるなら、
+ * 隠れなくなるまで足元を手前（画面の下）へずらす。家具の手前の下の角が画面の下から出る所までで止め、
+ * それでも隠れるなら、試した中でいちばん隠れない場所にする（隠れが残っても、動かすまでは手前に描く。newInFront）
+ */
+function placementInFront(size: [number, number, number]): [number, number, number] {
+  const first = projection?.placementAt(PLACEMENT_SCREEN_Y) ?? FALLBACK_PLACEMENT;
+  const hiddenShare = hiddenShareChecker();
+  if (!hiddenShare || !projection) return first;
+  const lens = depthLens() ?? lensSource?.();
+  const pose = currentPose();
+  const region = visibleRegion();
+  const bottom = region.y + region.height;
+  /** 家具の手前の下の 2 つの角が、写真の見えている範囲の下の端より上に写るか */
+  const aboveBottom = (position: [number, number, number]): boolean =>
+    !lens ||
+    [-1, 1].every((side) => {
+      const point = photoPointOf([position[0] + (side * size[0]) / 2, position[1], position[2] + size[2] / 2], lens, pose);
+      return point !== null && point.y <= bottom;
+    });
+  let best = first;
+  let bestShare = hiddenShare(first, size, 0);
+  for (let y = PLACEMENT_SCREEN_Y - PLACEMENT_STEP; bestShare > 0 && y > -1; y -= PLACEMENT_STEP) {
+    const position = projection.placementAt(y);
+    if (!position || !aboveBottom(position)) break;
+    const share = hiddenShare(position, size, 0);
+    if (share < bestShare) {
+      best = position;
+      bestShare = share;
+    }
+  }
+  return best;
 }
 
 /**
@@ -289,9 +354,10 @@ export async function setBackground(file: File): Promise<void> {
   // 隠す場所も前の写真のものなので消す
   photoState.set({ view: { ...DEFAULT_PHOTO_VIEW } });
   clearMask();
-  // 選んだ直後に、表示する範囲を決めてもらう。
-  // 写真の解析（奥行き・傾き）は始めない。家具は写真の奥行きに合わせず、カメラに正対する面に置くので要らない
+  // 選んだ直後に、表示する範囲を決めてもらう。その間に、裏で写真の解析を始める。
+  // 寸法の画面は開かない（解析した奥行きから撮った高さを出すので、寸法を合わせなくても大きさはほぼ合う）
   setFramingPhoto(true);
+  startAnalysis();
 }
 
 /**
@@ -340,6 +406,7 @@ export function resetPhotoState(): void {
     isScaling: false,
     isFramingPhoto: false,
     maskUrl: null,
+    maskRegions: null,
     isMasking: false,
     maskPolygon: [],
     maskUndoDepth: 0,
@@ -502,10 +569,10 @@ function currentPose(): PhotoPose {
 }
 
 /**
- * 写真の点に写っている物の 3D の位置。室内の寸法を計算していない・写真の外・奥行きが分からない所なら null。
- * 寸法を合わせ直したあとに家具を置き直すときだけ使う（placeFurnitureOnDepth）
+ * 写真の点に写っている物の 3D の位置。家具をそこに立たせると、足元の奥行きに合った大きさで写る。
+ * 室内の寸法を計算していない・写真の外・奥行きが分からない所なら null
  */
-function depthPointAt(point: PhotoPoint): [number, number, number] | null {
+export function depthPointAt(point: PhotoPoint): [number, number, number] | null {
   const { depthMap, depthScale } = photoState.get();
   const lens = depthLens();
   if (!depthMap || !depthScale || !lens) return null;
@@ -513,13 +580,43 @@ function depthPointAt(point: PhotoPoint): [number, number, number] | null {
   return worldPointAt(point, depthMap, depthScale, lens, currentPose());
 }
 
-/** 家具の足元が写っている写真の点と、カメラからの距離。写真やカメラを替えたあとに同じ見え方で置き直すために控える */
-interface FootOnPhoto {
-  point: PhotoPoint;
-  distance: number;
+/**
+ * 写真の点に写っている床の 3D の位置。家具を置くときと同じやり方（寸法を計算してあればその点の奥行き、
+ * まだなら立って撮った前提の床）で出す。地平線より上の点（床が写らない）なら null
+ */
+function floorPointAt(point: PhotoPoint, lens: Lens, pose: PhotoPose): [number, number, number] | null {
+  const level = levelPointAt(point, 0, lens, pose);
+  if (!level) return null;
+  return depthPointAt(point) ?? level;
 }
 
-/** 置いてある家具の足元が、いま写真のどこに写っているか。家具ごと */
+/** 隠す面の材料の控え。カメラやマスクが変わらない間は同じものを返し、面を作り直させない */
+let occluderCache: { key: unknown[]; source: OccluderSource } | null = null;
+
+/**
+ * 家具より手前にある物の面（scene/depthOccluder.ts）を作る材料。家具を隠す範囲が無いなら null。
+ * 範囲の塊ごとの板までの奥行き（core/maskRegions.ts）を、写真の奥行きと同じ形の地図にして渡す
+ */
+export function occluderSource(): OccluderSource | null {
+  const { maskRegions, depthMap, depthScale, floorFit, cameraHeight } = photoState.get();
+  const lens = depthLens() ?? lensSource?.();
+  if (!maskRegions || !lens) return null;
+  // 板の位置は、マスク・カメラ・寸法の合わせ方（家具を置く位置の出し方）で決まる
+  const key = [maskRegions, depthMap, depthScale, floorFit, cameraHeight, lens.vfovDeg, lens.aspect];
+  if (occluderCache && occluderCache.key.every((value, i) => value === key[i])) return occluderCache.source;
+  const pose = currentPose();
+  const map = regionDepthMap(maskRegions, lens, pose, (point) => floorPointAt(point, lens, pose));
+  occluderCache = { key, source: { map, lens } };
+  return occluderCache.source;
+}
+
+/** 家具の足元が写っている写真の点と、そのとき画面に占めていた高さ。置き直したあとも同じ大きさに写るように控える */
+interface FootOnPhoto {
+  point: PhotoPoint;
+  heightShare: number | null;
+}
+
+/** 置いてある家具の足元が、いま写真のどこに、どの大きさで写っているか。家具ごと */
 function furnitureOnPhoto(): Map<string, FootOnPhoto> {
   const feet = new Map<string, FootOnPhoto>();
   if (!lensSource) return feet;
@@ -527,26 +624,35 @@ function furnitureOnPhoto(): Map<string, FootOnPhoto> {
   const pose = currentPose();
   for (const item of photoState.get().furniture) {
     const point = photoPointOf(item.position, lens, pose);
-    if (!point) continue;
-    const [x, y, z] = pose.position;
-    feet.set(item.id, { point, distance: Math.hypot(item.position[0] - x, item.position[1] - y, item.position[2] - z) });
+    if (point) feet.set(item.id, { point, heightShare: heightShare(item.position, item.size[1]) });
   }
   return feet;
 }
 
-/** 家具を、写真の同じ場所に写ったまま、足元の奥行きの位置へ置き直す。奥行きが分からない家具はそのまま */
+/**
+ * 家具を position へ置き直したときに、控えた大きさ（foot.heightShare）と同じ大きさに写るための size と baseSize。
+ * 控えがどちらかの時点で無ければ、大きさは変えない
+ */
+function sizeKeptFrom(item: PlacedFurniture, foot: FootOnPhoto, position: [number, number, number]): Pick<PlacedFurniture, 'size' | 'baseSize'> {
+  return keepApparentSize(item, position, heightShare, foot.heightShare);
+}
+
+/** 家具を、写真の同じ場所に同じ大きさで写ったまま、足元の奥行きの位置へ置き直す。奥行きが分からない家具はそのまま */
 function placeFurnitureOnDepth(feet: Map<string, FootOnPhoto>): void {
   const furniture = photoState.get().furniture.map((item) => {
     const foot = feet.get(item.id);
     const position = foot ? depthPointAt(foot.point) : null;
-    return position ? { ...item, position } : item;
+    return position && foot ? { ...item, position, ...sizeKeptFrom(item, foot, position) } : item;
   });
   photoState.set({ furniture });
 }
 
 /**
  * カメラが変わっても（画角・傾き・撮った高さ）、家具が写真の同じ場所に写ったままになるよう置き直す。
- * 変える前に写真のどこに写っていたかとカメラからの距離を控え、変えたあと、同じ点を通る視線の上の同じ距離に置き直す
+ *
+ * 写真の解析は裏で進むので、終わる前に置いた家具がある。解析の結果でカメラが変わると、
+ * そのままでは家具が画面の上で動いてしまう。変える前に写真のどこに写っていたかを控え、
+ * 変えたあと、同じ点を通る視線と、その家具の足元の高さの水平な面との交点へ置き直す
  */
 export function keepOnPhoto(change: () => void): void {
   const feet = furnitureOnPhoto();
@@ -555,15 +661,30 @@ export function keepOnPhoto(change: () => void): void {
 }
 
 /**
- * 家具を、控えた写真の点に写るよう、いまのカメラで置き直す。カメラからの距離は変えない（写る大きさを保つ）
+ * 写真の点に写るように置き直すとき、カメラからこれより遠くなるなら、新しく置くときの場所に置く（m）。
+ * 写真の点が地平線のすぐ下だと、その点を通る視線は床とずっと遠くで交わり、家具が豆粒になって見失う
+ */
+const MAX_KEEP_DISTANCE = 12;
+
+/**
+ * 家具を、控えた写真の点に写るよう、いまのカメラで置き直す（足元の高さは変えない）。
+ * 写真の点を通る視線が足元の高さの面と交わらない（地平線より上）か、交わっても遠すぎる家具は、
+ * 新しく家具を置くときと同じ場所（画面の中央・下から 3 割）に置く。どちらでも画面の外には行かない
  */
 function placeOnPhoto(feet: Map<string, FootOnPhoto>): void {
   const lens = depthLens() ?? lensSource?.();
   if (!lens || feet.size === 0) return;
   const pose = currentPose();
+  const fallback = (): [number, number, number] => projection?.placementAt(PLACEMENT_SCREEN_Y) ?? FALLBACK_PLACEMENT;
   const furniture = photoState.get().furniture.map((item) => {
     const foot = feet.get(item.id);
-    return foot ? { ...item, position: pointAtDistance(foot.point, foot.distance, lens, pose) } : item;
+    if (!foot) return item;
+    const kept = levelPointAt(foot.point, item.position[1], lens, pose);
+    const near = kept && Math.hypot(kept[0] - pose.position[0], kept[2] - pose.position[2]) <= MAX_KEEP_DISTANCE;
+    const [x, , z] = fallback();
+    const position: [number, number, number] = kept && near ? kept : [x, item.position[1], z];
+    // 置き直しても写る大きさを変えない（core/apparentSize.ts）
+    return { ...item, position, ...sizeKeptFrom(item, foot, position) };
   });
   photoState.set({ furniture });
 }
@@ -604,6 +725,17 @@ function analyze(retry: boolean): Promise<boolean> {
     });
   analysis = current;
   return current.promise;
+}
+
+/**
+ * 背景の写真の解析を裏で始める。写真を選んだとき・起動時に写真を読み戻したとき（奥行きが残っていなければ）に呼ぶ。
+ * 解析が終わると、傾きと画角がすぐ家具に効き、寸法の画面の保存は線に合わせ直すだけで済む。
+ * 進み具合は画面に出さない（出すのは、保存を押して解析の終わりを待つときだけ）
+ */
+export function startAnalysis(): void {
+  const { backgroundStatus, depthMap } = photoState.get();
+  if (backgroundStatus !== 'ready' || depthMap) return;
+  void analyze(false);
 }
 
 /**
@@ -704,8 +836,24 @@ export function setMaskUndoDepth(maskUndoDepth: number): void {
  * **前の URL はここでは解放しない。** 表示側（main.ts）が新しい画像を読み込んでから
  * 差し替えるので、その間は前の画像がまだ画面に出ている。解放は差し替えたあとに向こうでやる
  */
-export function setMaskUrl(url: string | null): void {
+export function setMaskUrl(url: string | null, drawing = false): void {
   photoState.set({ maskUrl: url });
+  // 描いている途中の見た目（囲う途中の線や角の印も入る）からは板を作らない。描き終えたときに作る
+  if (!drawing) loadRegions(url);
+}
+
+/**
+ * マスクを塊に分けて maskRegions に入れる。画像の読み込みを待つ間にまた差し替わったら、古いほうは入れない。
+ * 読み込むまでは前の塊のまま（塗っている間に、隠れ方がちらつかないように）
+ */
+function loadRegions(url: string | null): void {
+  if (!url) {
+    photoState.set({ maskRegions: null });
+    return;
+  }
+  loadMaskRegions(url).then((maskRegions) => {
+    if (photoState.get().maskUrl === url) photoState.set({ maskRegions });
+  });
 }
 
 /** 隠す場所をすべて消す。端末に残した分も捨てる */

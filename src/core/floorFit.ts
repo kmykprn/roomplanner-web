@@ -27,13 +27,10 @@ export interface FloorFit {
 }
 
 /**
- * 既定値。カメラを水平にする。
- *
- * 写真モードの家具はカメラに正対する面の上を動かし、写る大きさを変えない（interaction/photoCamera.ts）。
- * カメラが傾いていると、縦に立つ物の写る高さが画面の上下の位置で少し変わる（10° で 4% ほど）ので、
- * 解析で傾きを決めない今は水平にしておく。以前は「立って部屋を撮ると少し見下ろす」として 10° だった
+ * 既定値。立って部屋を撮ると、たいてい少し見下ろしている。
+ * 手で合わせるときの出発点なので、ありそうな真ん中あたりに置く
  */
-export const DEFAULT_FLOOR_FIT: FloorFit = { pitchDeg: 0, rollDeg: 0 };
+export const DEFAULT_FLOOR_FIT: FloorFit = { pitchDeg: 10, rollDeg: 0 };
 
 /** カメラから床までの高さ（m）。立って撮った前提。室内の寸法を計算するまでは、この高さの床に家具を置く */
 export const CAMERA_HEIGHT = 1.4;

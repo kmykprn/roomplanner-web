@@ -263,10 +263,13 @@ export function createModelPanel({ onPlaced }: ModelPanelOptions): ModelPanel {
       ...item,
       id,
       size,
-      // 底面基準なので y = 0 が床置き
+      // 底面基準なので y = 0 が床置き。写真では、背景の物に隠れない場所を手前へ探す
       position: scene.placementFor(size),
+      // 写真では、動かすまでは背景の物に隠さずに手前に描く（新しい家具は必ず見えるように）
+      ...(scene.newInFront ? { inFront: true } : {}),
       rotationY: 0,
       // 「100%」で戻す先は置いたときの大きさ。あとから大きさを変えても、ここは書き替えない
+      // （写真で奥へ動かしたときは、見た目を保つために size と一緒に変わる。core/apparentSize.ts）
       baseSize: [...size],
     });
     scene.select(id);
