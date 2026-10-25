@@ -253,17 +253,6 @@ export function worldRayOf(point: PhotoPoint, lens: Lens, fit: FloorFit): Vec {
   return toWorld(rayOf(point, lens), fit);
 }
 
-/** 写真の点を通る視線の上で、カメラから distance（m）離れた 3D の位置。写真を替えたとき、家具を同じ点に写るよう置き直すのに使う */
-export function pointAtDistance(point: PhotoPoint, distance: number, lens: Lens, pose: PhotoPose): Vec {
-  const direction = toWorld(rayOf(point, lens), pose.fit);
-  const length = Math.hypot(direction[0], direction[1], direction[2]);
-  return [
-    pose.position[0] + (direction[0] / length) * distance,
-    pose.position[1] + (direction[1] / length) * distance,
-    pose.position[2] + (direction[2] / length) * distance,
-  ];
-}
-
 /** 写真の点を通る視線が、高さ y の水平な面と交わる 3D の位置。交わらなければ（面の向こうを向いている）null */
 export function levelPointAt(point: PhotoPoint, y: number, lens: Lens, pose: PhotoPose): Vec | null {
   const direction = toWorld(rayOf(point, lens), pose.fit);

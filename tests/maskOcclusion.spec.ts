@@ -2,9 +2,11 @@ import { enterEditor } from './helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * 家具を隠す範囲で囲った所は、写真のその部分を家具の上に重ねる。家具は写真の奥行きに合わせて置かないので、
- * 家具がどこにあっても（カメラの近くでも遠くでも）、囲った所に重なる部分だけがいつも隠れる。
- * 隠すのは 3D ではなく、キャンバスの上の層（core/viewer.ts の maskLayer）。範囲を指定している間だけでなく、いつも出す
+ * 家具を隠す範囲で囲った物は、家具がその物より奥にあるときだけ家具を隠す（core/maskRegions.ts）。
+ *
+ * 高さ 1.3 m から水平に撮った写真（灰色一色）に、写真の右寄り（横 0.5〜0.75）の範囲を指定する。
+ * 範囲のいちばん下は、カメラから 3 m 先の床に写る高さにしてあるので、その物は 3 m 先に立っている。
+ * カメラは z = 4 にいるので、その物の板は z = 1 にある
  */
 async function setUp(page: Page, maskTop: number, maskBottom: number): Promise<void> {
   await page.goto('/');
@@ -13,7 +15,7 @@ async function setUp(page: Page, maskTop: number, maskBottom: number): Promise<v
   await page.evaluate(
     async ({ maskTop, maskBottom }) => {
       const { photoState, setMaskUrl } = await import('/src/core/photoState.ts');
-      // 写真は灰色一色。範囲で写真を家具の上に重ねるので、家具の赤が灰色に隠れる
+      // 写真は灰色一色（範囲で写真を家具の上に重ねる作りだと、家具の赤が灰色に隠れる）
       const photo = document.createElement('canvas');
       photo.width = 4;
       photo.height = 3;
@@ -28,7 +30,6 @@ async function setUp(page: Page, maskTop: number, maskBottom: number): Promise<v
         floorFit: { pitchDeg: 0, rollDeg: 0 },
         cameraHeight: 1.3,
       });
-      // 写真の右寄り（横 0.5〜0.75）を囲う
       const mask = document.createElement('canvas');
       mask.width = 400;
       mask.height = 300;
@@ -39,7 +40,7 @@ async function setUp(page: Page, maskTop: number, maskBottom: number): Promise<v
     },
     { maskTop, maskBottom }
   );
-  await expect(page.locator('.viewport__mask')).toBeVisible();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().maskRegions !== null)).toBe(true);
 }
 
 /** 赤い箱を置く。z はカメラ（z = 4）からの前後の位置 */
@@ -81,29 +82,33 @@ async function redAt(page: Page, points: Array<[number, number]>): Promise<boole
   );
 }
 
-test('囲った所に重なる家具は、カメラから遠くても近くても、重なる所だけ隠れる', async ({ page }) => {
-  await setUp(page, 0.3, 0.7);
+/** 3 m 先の床が写る高さ（写真の縦の割合）。水平に撮っているので、真ん中から 1.3 / 3 ÷ tan 30° だけ下 */
+const FOOT_AT_3M = (1 + 1.3 / 3 / Math.tan(Math.PI / 6)) / 2;
+
+test('囲った物より奥にある家具は、囲った所だけ隠れる', async ({ page }) => {
+  await setUp(page, 0.4, FOOT_AT_3M);
   // 5 m 先（z = −1）。箱は横 −0.26〜0.26 に写る。右側だけが範囲（横 0〜0.5）に重なる
   await placeBox(page, -1);
-  expect(await redAt(page, [[-0.15, -0.15], [0.15, -0.15]])).toEqual([true, false]);
-  // 2 m 先（z = 2）に動かしても同じ
-  await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoScene.update('box', { position: [0, 0, 2] }));
-  expect(await redAt(page, [[-0.3, -0.3], [0.2, -0.3]])).toEqual([true, false]);
+  expect(await redAt(page, [[-0.15, -0.3], [0.15, -0.3]])).toEqual([true, false]);
 });
 
-test('範囲を指定し終えたあとも、隠す層は出たまま', async ({ page }) => {
-  await setUp(page, 0.3, 0.7);
-  await page.evaluate(async () => {
-    const { setMasking } = await import('/src/core/photoState.ts');
-    setMasking(true);
-    setMasking(false);
-  });
-  await expect(page.locator('.viewport__mask')).toBeVisible();
-  await expect(page.locator('.viewport__mask')).not.toHaveClass(/is-editing/);
+test('囲った物より手前にある家具は、範囲に重なっても隠れない', async ({ page }) => {
+  await setUp(page, 0.4, FOOT_AT_3M);
+  // 2 m 先（z = 2）。範囲の物（3 m 先）より手前
+  await placeBox(page, 2);
+  expect(await redAt(page, [[-0.25, -0.5], [0.25, -0.5]])).toEqual([true, true]);
+});
+
+test('いちばん下が床に接していない範囲（窓など）は、家具がどこにあってもいつも手前に出る', async ({ page }) => {
+  // 範囲は写真の上のほう（縦 0.1〜0.4）。いちばん下が地平線（縦 0.5）より上
+  await setUp(page, 0.1, 0.4);
+  // 2 m 先の高い箱（高さ 3 m）。上のほうが範囲に重なる
+  await placeBox(page, 2, 3);
+  expect(await redAt(page, [[-0.15, 0.4], [0.15, 0.4]])).toEqual([true, false]);
 });
 
 test('家具を隠す範囲の画面に、自動で見つける切り替えは出さない', async ({ page }) => {
-  await setUp(page, 0.3, 0.7);
+  await setUp(page, 0.4, FOOT_AT_3M);
   await page.locator('.photo-menu__button').click();
   await page.getByRole('button', { name: '家具を隠す範囲' }).click();
   await expect(page.locator('.mask')).toBeVisible();
@@ -111,7 +116,7 @@ test('家具を隠す範囲の画面に、自動で見つける切り替えは�
 });
 
 test('家具を隠す範囲の画面の見出しと案内は短く、道具と進み具合に合わせて変わる', async ({ page }) => {
-  await setUp(page, 0.3, 0.7);
+  await setUp(page, 0.4, FOOT_AT_3M);
   await page.locator('.photo-menu__button').click();
   await page.getByRole('button', { name: '家具を隠す範囲' }).click();
   await expect(page.locator('.mask .edit__title')).toHaveText('家具を隠す範囲');

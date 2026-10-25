@@ -19,17 +19,20 @@ import type { RoomSize } from '@/config/room';
 import type { Interior } from '@/core/appState';
 import { createLighting } from '@/scene/lighting';
 import { createPhotoShadow, groundsOf } from '@/scene/photoShadow';
+import { createDepthOccluder, type FrontBox } from '@/scene/depthOccluder';
+import { isBillboard } from '@/config/furniture';
 import { createFurnitureLayer } from '@/scene/furniture';
 import { learnShape } from '@/core/furnitureHeight';
 import { createCameraControls } from '@/interaction/cameraControls';
 import { createWallVisibility } from '@/interaction/wallVisibility';
 import { createFurnitureDrag } from '@/interaction/furnitureDrag';
-import { applyPhotoCamera, PLACEMENT_DISTANCE, pointOnViewPlane, screenHeightShare } from '@/interaction/photoCamera';
+import { applyPhotoCamera, floorPointOnScreen, screenHeightShare } from '@/interaction/photoCamera';
 import { createPhotoZoom } from '@/interaction/photoZoom';
 import { createScaleLineDrag } from '@/interaction/scaleLineDrag';
 import { createPhotoPan } from '@/interaction/photoPan';
 import { createLiftHandle } from '@/interaction/liftHandle';
 import { drawScaleLines } from '@/ui/scaleLineOverlay';
+import { photoPointAt, type PhotoPoint } from '@/core/photoView';
 import { createMaskPaint } from '@/interaction/maskPaint';
 import { createBottomSheet } from '@/ui/bottomSheet';
 import { createSceneHeader } from '@/ui/sceneHeader';
@@ -38,7 +41,15 @@ import { createPhotoEmpty } from '@/ui/photoEmpty';
 import { createPhotoMenu } from '@/ui/photoMenu';
 import { createFullscreenButton } from '@/ui/fullscreenButton';
 import { appState, roomScene } from '@/core/appState';
-import { photoCameraHeight, photoState, photoScene, setLensSource, setPhotoProjection } from '@/core/photoState';
+import {
+  depthPointAt,
+  photoCameraHeight,
+  occluderSource,
+  photoState,
+  photoScene,
+  setLensSource,
+  setPhotoProjection,
+} from '@/core/photoState';
 import { activeScene, isPhotoMode, modeState, setMode } from '@/core/mode';
 import {
   connectSceneLibrary,
@@ -108,11 +119,20 @@ const roomObjects = createRoom(room);
 // 中身が読めたら、箱を中身の形に締める（実際の高さが決まっていればそれに合わせる）
 const roomFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(roomScene, id, bounds) });
 const photoFurniture = createFurnitureLayer({ onMeasured: (id, bounds) => learnShape(photoScene, id, bounds) });
-// 写真の上に落ちる影。写真モードのときだけ出す。
-// 家具を隠す範囲（写真の物）は 3D では扱わず、写真のその部分をキャンバスの上に重ねて隠す（viewer の maskLayer）
+// 写真の上に落ちる影。写真モードのときだけ出す
 const photoShadow = createPhotoShadow();
+// 写真の中で家具より手前にある物の、見えない面。写真モードのときだけ出す
+const depthOccluder = createDepthOccluder();
 const lighting = createLighting(room);
-viewer.scene.add(roomObjects.group, lighting.group, roomFurniture.group, photoFurniture.group, photoShadow.group);
+viewer.scene.add(
+  roomObjects.group,
+  lighting.group,
+  roomFurniture.group,
+  photoFurniture.group,
+  photoShadow.group,
+  depthOccluder.group,
+  depthOccluder.frontGroup
+);
 
 // --- 操作を繋ぐ ---
 const cameraControls = createCameraControls(viewer.canvas, viewer.camera);
@@ -122,22 +142,30 @@ const furnitureDrag = createFurnitureDrag(
   // 掴んだ時点のモードで対象を決める
   () =>
     isPhotoMode()
-      ? // 写真モードでは、カメラに正対する面の上を滑らせる。奥へは行かず、写る大きさは変わらない
-        { scene: photoScene, layer: photoFurniture, surface: 'screen' }
+      ? // 写真モードでは、寸法を計算する前も後も、足元の高さの水平な面を滑らせる。高さを変えるのは ↕ の取っ手だけ
+        { scene: photoScene, layer: photoFurniture, surface: 'level' }
       : { scene: roomScene, layer: roomFurniture, surface: 'floor' },
   cameraControls,
   // 隠す場所を塗っている間と床を合わせている間は、1 本指の動きをそちらへ渡す。全画面の間は家具を動かさない
   () => !photoState.get().isMasking && !photoState.get().isScaling && !photoState.get().isFramingPhoto && !fullscreen.isFullscreen()
 );
 
-// 選んだ家具の真上のつまみ（上下の三角）。ドラッグすると家具がその場で上下に動く。家具そのものを動かしている間は隠す。
-// 部屋モードだけ。写真モードは家具を画面に沿って動かすので、上へ動かすのと同じになる
+// 選んだ家具の真上のつまみ（上下の三角）。ドラッグすると家具がその場で上下に動く。家具そのものを動かしている間は隠す
 createLiftHandle({
   container: viewer.canvas.parentElement as HTMLElement,
   canvas: viewer.canvas,
   camera: viewer.camera,
-  scene: () => roomScene,
-  isEnabled: () => !isPhotoMode() && !furnitureDrag.isMoving() && !fullscreen.isFullscreen(),
+  scene: () => (isPhotoMode() ? photoScene : roomScene),
+  isEnabled: () =>
+    !furnitureDrag.isMoving() &&
+    !photoState.get().isMasking &&
+    !photoState.get().isScaling &&
+    !photoState.get().isFramingPhoto &&
+    !fullscreen.isFullscreen(),
+  // 部屋は床より下へは行かない。写真には床の面が無い（奥行きで置いた家具の足元は 0 とは限らない）
+  lowest: () => (isPhotoMode() ? -Infinity : 0),
+  // 写真では、上下に動かしても写る大きさを変えない
+  keepsApparentSize: () => isPhotoMode(),
   onFrame: (callback) => viewer.onFrame(callback),
 });
 
@@ -192,6 +220,8 @@ function applyMode(): void {
   // 影を受ける面は写真モードだけ。部屋モードには本物の床があり、そちらが影を受ける。
   // 部屋の主光源は写真モードでは影を落とさない（向きの違う影が 2 つ重なるため）
   photoShadow.group.visible = photo;
+  depthOccluder.group.visible = photo;
+  depthOccluder.frontGroup.visible = photo;
   lighting.setCastShadow(!photo);
   applyScaling();
 
@@ -219,7 +249,8 @@ function applyBackground(): void {
   const image = backgroundUrl ? `url("${backgroundUrl}")` : '';
   viewer.photoLayer.style.backgroundImage = image;
 
-  // 同じ写真を塗った形で切り抜いて家具の上に重ねる（これが家具を隠す）。塗っている間は色を被せて見せる
+  // 指定している間だけ、同じ写真を塗った形で切り抜いて重ね、色を被せて見せる
+  // （家具を隠すのは、物ごとの見えない板。core/maskRegions.ts）
   const { maskLayer } = viewer;
   maskLayer.style.backgroundImage = image;
   applyMaskImage(maskUrl);
@@ -291,14 +322,43 @@ function applyPhotoView(): void {
   viewer.setPhotoFov(vfovDeg);
   applyPhotoCamera(viewer.camera, floorFit, photoCameraHeight());
   viewer.setPhotoView(view);
+  // 手前の物の面は、写真を描いているカメラと同じ所から、手前に表示する範囲の板の奥行きを広げる
+  depthOccluder.followCamera(viewer.camera);
+  depthOccluder.setSource(occluderSource());
+  depthOccluder.setFrontBoxes(frontBoxes());
 }
 
-// 家具が写真のどこに写っているかを出すときの画角。いま写真を描いているカメラのものを使う
+/**
+ * 写真の物に隠さず手前に描く家具（新しく置いて、まだ動かしていないもの）の箱。
+ * 切り抜きの板はカメラの方を向き、傾けることもあるので、どの向きでも板が収まる大きさにする
+ */
+function frontBoxes(): FrontBox[] {
+  return photoState.get().furniture.filter((item) => item.inFront).map((item) => {
+    const [w, h, d] = item.size;
+    const reach = Math.hypot(w, h);
+    const size: [number, number, number] = isBillboard(item) ? [reach, reach, reach] : [w, h, d];
+    return { position: item.position, size, rotationY: item.rotationY };
+  });
+}
+
+/** 新しい家具を置く場所の、画面の横の位置（NDC）。真ん中。縦の位置は photoState が決める（隠れなければ下から 3 割） */
+const PLACEMENT_SCREEN_X = 0;
+
+/** 画面の点（3D を描いている範囲の NDC、-1〜1）に写っている、写真の点 */
+function photoPointOfNdc(x: number, y: number): PhotoPoint {
+  return photoPointAt(photoState.get().view, { u: (x + 1) / 2, v: (1 - y) / 2 });
+}
+
+// 奥行きから家具の位置を出すときの画角。いま写真を描いているカメラのものを使う
 setLensSource(() => ({ vfovDeg: viewer.camera.fov, aspect: viewer.camera.aspect }));
-// 新しい家具は、カメラから一定の距離にある、カメラに正対する面の上に置く。置くときの大きさもこのカメラで決める
+// 室内の寸法を計算してあれば、その点の奥行きに置く。まだなら、立って撮った前提の床に置く。
+// 置くときの大きさと、動かしたときに写る大きさを保つ計算も、このカメラで行う
 setPhotoProjection({
-  placementAt: (x, y) => {
-    const hit = pointOnViewPlane(viewer.camera, x, y, PLACEMENT_DISTANCE);
+  placementAt: (y) => {
+    const x = PLACEMENT_SCREEN_X;
+    const onDepth = depthPointAt(photoPointOfNdc(x, y));
+    if (onDepth) return onDepth;
+    const hit = floorPointOnScreen(viewer.camera, x, y);
     return hit ? [hit.x, hit.y, hit.z] : null;
   },
   screenHeightShare: (position, height) => screenHeightShare(viewer.camera, position, height),

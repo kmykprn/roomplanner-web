@@ -3,10 +3,8 @@
  *
  *   背景の画像を変更                  … 画像を選び直す
  *   拡大・縮小                        … ui/framePanel.ts（下のパネルに出す。ui/photoPanel.ts）
+ *   寸法                              … ui/scalePanel.ts
  *   家具を隠す範囲                    … ui/maskPanel.ts
- *
- * 寸法の画面（ui/scalePanel.ts）は出さない。家具は写真の奥行きに合わせず、カメラに正対する面に置き、
- * 大きさは操作タブのボタンで決めるので、寸法を合わせても家具には効かない
  *   背景の画像を外す                  … 赤い文字（取り消せない）
  *
  * **背景の操作はタブにせず、写真の上に置く。** 前は下のパネルに「背景」タブがあり、そこに［背景の画像を変更］と［✎ 編集］を並べていた。
@@ -25,6 +23,7 @@ import {
   setBackground,
   setFramingPhoto,
   setMasking,
+  setScaling,
 } from '@/core/photoState';
 import { pickImage } from '@/platform/picker';
 import { createIcon, type IconName } from '@/ui/icons';
@@ -57,6 +56,7 @@ export function createPhotoMenu(): HTMLElement {
       },
     },
     { icon: 'frame', label: '拡大・縮小', run: () => setFramingPhoto(true) },
+    { icon: 'ruler', label: '寸法', run: () => setScaling(true) },
     { icon: 'layers', label: '家具を隠す範囲', run: () => setMasking(true) },
     { icon: 'trash', label: '背景の画像を外す', run: clearBackground, danger: true },
   ]);

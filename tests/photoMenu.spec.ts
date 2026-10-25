@@ -51,11 +51,10 @@ test('写真モードの下のパネルにはタブが無く、置いた家具�
 test('［⋯］を押すとメニューが出て、選んだ調整の画面が下のパネルに出る。終えると一覧に戻る', async ({ page }) => {
   await open(page, true);
   await more(page).click();
-  // 寸法は出さない（家具は写真の奥行きに合わせないので、合わせても効かない）
-  await expect(menu(page).getByRole('button')).toHaveText(['背景の画像を変更', '拡大・縮小', '家具を隠す範囲', '背景の画像を外す']);
-  await menu(page).getByRole('button', { name: '家具を隠す範囲' }).click();
+  await expect(menu(page).getByRole('button')).toHaveText(['背景の画像を変更', '拡大・縮小', '寸法', '家具を隠す範囲', '背景の画像を外す']);
+  await menu(page).getByRole('button', { name: '寸法' }).click();
   await expect(menu(page)).toBeHidden();
-  expect(await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().isMasking)).toBe(true);
+  expect(await page.evaluate(async () => (await import('/src/core/photoState.ts')).photoState.get().isScaling)).toBe(true);
   // 調整の画面に入っている間は、［⋯］と一覧を出さない
   await expect(more(page)).toBeHidden();
   await expect(page.locator('.manage__title')).toHaveCount(0);

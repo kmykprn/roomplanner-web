@@ -25,6 +25,10 @@ export interface SceneRules {
   /** 新しい家具を置く床の座標を決める */
   placementFor(size: [number, number, number]): [number, number, number];
   /**
+   * 新しく置いた家具を、動かすまで背景（写真の物）に隠さず手前に描くか。隠す仕組みのある写真モードだけ true
+   */
+  newInFront?: boolean;
+  /**
    * 新しい家具を置くときの大きさ。無ければ実寸のまま置く。
    * 写真モードは、置いた瞬間に画面に占める高さが大きすぎず小さすぎないよう、3 辺を同じ割合で縮める・広げる
    */
